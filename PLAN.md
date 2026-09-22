@@ -29,7 +29,7 @@ src/
   main.js         routes and pages (home, play, help), HUD wiring
   game.js         owns world + view, fixed-timestep loop
   sim/            world state and tick logic (headless, tested)
-  render/         three.js scene, camera, meshes
+  render/         three.js scene, camera, meshes, input controls
   theme.js, fullscreen.js, style.css   copied from game-test
 test/             node:test specs for sim/
 ```
@@ -46,9 +46,11 @@ App shell, empty 64×64 grid, fixed tick loop, pause, theme, fullscreen.
 - [ ] Switching apps pauses the game. ☀/☾ switches theme and the scene recolours.
 - [ ] `npm test` passes.
 
-### Phase 1: Map and camera
+### Phase 1: Map and camera ✅ (done)
 Seeded procedural terrain with ore patches (iron, copper, coal, stone). Camera
 panning, zooming and bounds. Debug overlay showing FPS/UPS and the tile under your finger.
+The map grew to 128×128 so there's room for more than a starter base; one patch of
+each ore is guaranteed within ~20 tiles of the centre.
 - [ ] Drag with one finger or the mouse to pan. Pinch or the scroll wheel zooms. You can't lose the map.
 - [ ] Ore patches are easy to tell apart in both themes.
 - [ ] Tapping a tile shows its coordinates and resource.

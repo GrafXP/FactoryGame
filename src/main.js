@@ -1,6 +1,7 @@
 import "./style.css";
 import { createGame } from "./game.js";
 import { TICK_RATE } from "./sim/world.js";
+import { parseSeed } from "./sim/rng.js";
 import { getTheme, getThemePref, setThemePref, onThemeChange } from "./theme.js";
 import { fullscreenSupported, isFullscreen, toggleFullscreen, onFullscreenChange } from "./fullscreen.js";
 
@@ -122,14 +123,46 @@ function play(el) {
           <svg viewBox="0 0 24 24" class="fs-exit"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
         </button>
       </div>
+      <div class="debug" id="debug">
+        <div id="dbg-perf">– fps · – ups</div>
+        <div id="dbg-seed"></div>
+        <div id="dbg-tile">Tap a tile</div>
+      </div>
       <div class="overlay" id="overlay" hidden></div>
     </div>`,
   );
+
+  // ?seed=42 (or any text) picks the map; without it every visit gets a new one.
+  const seedParam = new URLSearchParams(location.search).get("seed");
+  const seed = seedParam ? parseSeed(seedParam) : 1 + Math.floor(Math.random() * 999999);
+  $("#dbg-seed").textContent = `seed ${seedParam ?? seed}`;
+
+  // Debug overlay: the hovered tile (mouse) wins over the tapped one while it's there.
+  let tapped = null;
+  let hovered = null;
+  const showTile = () => {
+    const t = hovered || tapped;
+    $("#dbg-tile").textContent = !t
+      ? "Tap a tile"
+      : `${t.x}, ${t.y} · ${t.oreName}${t.amount ? ` ×${t.amount}` : ""}`;
+  };
 
   // Game clock in the HUD: ticks → m:ss.
   let shownSeconds = -1;
   const game = createGame($("#game"), {
     theme: getTheme(),
+    seed,
+    onStats: ({ fps, ups }) => {
+      $("#dbg-perf").textContent = `${Math.round(fps)} fps · ${Math.round(ups)} ups`;
+    },
+    onTileTap: (t) => {
+      tapped = t;
+      showTile();
+    },
+    onTileHover: (t) => {
+      hovered = t;
+      showTile();
+    },
     onTick: (world) => {
       const s = Math.floor(world.tick / TICK_RATE);
       if (s === shownSeconds) return;
@@ -173,6 +206,7 @@ function play(el) {
     if (k === "p" || k === "escape") game.running ? pause() : resume();
     else if (k === "f") toggleFullscreen();
     else if (k === "t") setThemePref(getTheme() === "dark" ? "light" : "dark");
+    else if (k === "`") $("#debug").hidden = !$("#debug").hidden;
     else return;
     e.preventDefault();
   };
@@ -196,9 +230,13 @@ function help(el) {
     `<h1>Help</h1>
     <h2>Controls</h2>
     <dl>
-      <dt>Keyboard</dt><dd>P / Esc pause, F fullscreen, T light/dark.</dd>
+      <dt>Touch</dt><dd>Drag to move the map, pinch to zoom, tap a tile to inspect it.</dd>
+      <dt>Mouse</dt><dd>Drag to move the map, scroll to zoom, click a tile to inspect it.</dd>
+      <dt>Keyboard</dt><dd>Arrows / WASD move, + / − zoom, P / Esc pause, F fullscreen, T light/dark, \` debug overlay.</dd>
     </dl>
-    <p class="hint">More controls arrive as the game grows. See PLAN.md.</p>
+    <h2>The map</h2>
+    <p class="hint">Ore patches: iron is blue, copper orange, coal black and stone pale sand. There's one of each near the start.
+    Add <code>?seed=42</code> (any number or word) to the /play address to get the same map every time.</p>
     <h2>Fullscreen</h2>
     <p class="hint" id="fs-note"></p>
     <button id="fs" class="wide"></button>

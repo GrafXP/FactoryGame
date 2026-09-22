@@ -260,6 +260,25 @@ body.playing nav {
   display: block;
 }
 
+/* Debug readout: FPS/UPS, seed, inspected tile. Doesn't catch touches meant for the map. */
+.debug {
+  position: absolute;
+  left: calc(12px + env(safe-area-inset-left, 0px));
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  padding: 6px 10px;
+  font: 0.8rem/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  pointer-events: none;
+}
+
+.debug #dbg-seed {
+  color: var(--muted);
+}
+
 .overlay {
   position: absolute;
   inset: 0;
