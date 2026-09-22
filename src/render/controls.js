@@ -1,33 +1,47 @@
 // Pointer, wheel and keyboard input for the camera: one finger or any mouse button
 // drags the map, two fingers pinch-zoom, the wheel zooms at the cursor. A press that
-// barely moves is a tap. Works through the view's `cam`, never touches the sim.
+// barely moves is a tap.
+//
+// When `canPaint()` says so, a drag lays things down instead of panning: straight
+// away with the left mouse button, or after a long press on touch (so a quick drag
+// still pans). Works through the view's `cam`, never touches the sim. All callbacks
+// get ground points { x, y } in tile units (floats).
 const TAP_SLOP = 10; // px a press may move and still count as a tap
-const KEY_PAN = 4; // tiles per arrow/WASD press
+const LONG_PRESS_MS = 350;
+const KEY_PAN = 4; // tiles per arrow/WASD press at the default zoom
 
-export function createControls(canvas, cam, { onTap, onHover } = {}) {
+export function createControls(canvas, cam, { onPoint, onTap, canPaint = () => false, onPaint = {} } = {}) {
   const pointers = new Map(); // pointerId → { x, y }
   let anchor = null; // ground point kept under the finger while dragging
   let pinch = null; // { dist, mid } from the last two-finger move
   let press = null; // { id, x, y } of a press that may still become a tap
+  let painting = false;
+  let longPress = 0;
 
-  const tileAt = (x, y) => {
-    const p = cam.groundAt(x, y);
-    return p && { x: Math.floor(p.x), y: Math.floor(p.y) };
-  };
+  const ground = (e) => cam.groundAt(e.clientX, e.clientY);
 
   const twoFingers = () => {
     const [a, b] = [...pointers.values()];
     return { dist: Math.hypot(a.x - b.x, a.y - b.y), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
   };
 
+  const stopPainting = (commit) => {
+    if (!painting) return;
+    painting = false;
+    commit ? onPaint.end?.() : onPaint.cancel?.();
+  };
+
   const startGesture = () => {
+    clearTimeout(longPress);
     if (pointers.size === 1) {
       const [p] = pointers.values();
       anchor = cam.groundAt(p.x, p.y);
       pinch = null;
     } else if (pointers.size === 2) {
+      stopPainting(false);
       anchor = null;
       pinch = twoFingers();
+      onPoint?.(null);
     }
   };
 
@@ -36,19 +50,49 @@ export function createControls(canvas, cam, { onTap, onHover } = {}) {
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     press = pointers.size === 1 ? { id: e.pointerId, x: e.clientX, y: e.clientY } : null;
     startGesture();
+    if (pointers.size !== 1) return;
+
+    const p = ground(e);
+    if (e.pointerType !== "mouse") onPoint?.(p);
+    if (!p || !canPaint()) return;
+    const beginPaint = () => {
+      painting = true;
+      anchor = null;
+      onPaint.start?.(p);
+    };
+    if (e.pointerType === "mouse") {
+      if (e.button === 0) beginPaint();
+    } else {
+      longPress = setTimeout(() => {
+        if (!press || pointers.size !== 1) return;
+        navigator.vibrate?.(15);
+        beginPaint();
+      }, LONG_PRESS_MS);
+    }
   };
 
   const onMove = (e) => {
     if (!pointers.has(e.pointerId)) {
-      if (e.pointerType === "mouse") onHover?.(tileAt(e.clientX, e.clientY));
+      if (e.pointerType === "mouse") onPoint?.(ground(e));
       return;
     }
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > TAP_SLOP) press = null;
+    if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > TAP_SLOP) {
+      press = null;
+      if (!painting) {
+        // It's a pan, not a tap: drop the pending long press and the finger's ghost.
+        clearTimeout(longPress);
+        if (e.pointerType !== "mouse") onPoint?.(null);
+      }
+    }
 
-    if (pointers.size === 1 && anchor) {
+    if (painting) {
+      const p = ground(e);
+      if (p) onPaint.move?.(p);
+      if (e.pointerType === "mouse") onPoint?.(p);
+    } else if (pointers.size === 1 && anchor) {
       // Pan so the ground point grabbed at pointerdown stays under the pointer.
-      const now = cam.groundAt(e.clientX, e.clientY);
+      const now = ground(e);
       if (now) cam.panBy(anchor.x - now.x, anchor.y - now.y);
     } else if (pointers.size === 2 && pinch) {
       const next = twoFingers();
@@ -62,8 +106,14 @@ export function createControls(canvas, cam, { onTap, onHover } = {}) {
 
   const onUp = (e) => {
     if (!pointers.delete(e.pointerId)) return;
-    if (press?.id === e.pointerId && e.type === "pointerup") onTap?.(tileAt(e.clientX, e.clientY));
+    const up = e.type === "pointerup";
+    if (painting) stopPainting(up);
+    else if (press?.id === e.pointerId && up) {
+      const p = ground(e);
+      if (p) onTap?.(p);
+    }
     press = null;
+    if (e.pointerType !== "mouse") onPoint?.(null);
     startGesture(); // lifting one finger of a pinch carries on as a drag
   };
 
@@ -90,7 +140,7 @@ export function createControls(canvas, cam, { onTap, onHover } = {}) {
     e.preventDefault();
   };
 
-  const onLeave = (e) => e.pointerType === "mouse" && onHover?.(null);
+  const onLeave = (e) => e.pointerType === "mouse" && !painting && onPoint?.(null);
 
   canvas.addEventListener("pointerdown", onDown);
   canvas.addEventListener("pointermove", onMove);
@@ -102,6 +152,7 @@ export function createControls(canvas, cam, { onTap, onHover } = {}) {
   window.addEventListener("keydown", onKey);
 
   return () => {
+    clearTimeout(longPress);
     window.removeEventListener("keydown", onKey);
     // The canvas is removed with the view, taking its listeners with it.
   };

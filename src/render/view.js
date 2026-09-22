@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { ORE } from "../sim/map.js";
+import { createBuildingLayer } from "./buildings.js";
 
 // Ore colours are picked so the four ores differ in hue *and* lightness in both
 // themes: iron blue, copper orange, coal black, stone pale sand.
@@ -12,6 +13,14 @@ const PALETTES = {
     hemiSky: 0xbfd4ff,
     hemiGround: 0x20242e,
     ore: { [ORE.IRON]: 0x8fb3dd, [ORE.COPPER]: 0xe8834f, [ORE.COAL]: 0x0c0d10, [ORE.STONE]: 0xd8c49a },
+    belt: 0x3b3f4a,
+    beltArrow: 0xf2c94c,
+    miner: 0x6d7a8c,
+    minerTop: 0xf2c94c,
+    chest: 0x9a6a3c,
+    chestBand: 0x4a4f5c,
+    ok: 0x5be38a,
+    bad: 0xff5a5a,
   },
   light: {
     bg: 0xdfeaf2,
@@ -21,6 +30,14 @@ const PALETTES = {
     hemiSky: 0xffffff,
     hemiGround: 0x8a8f99,
     ore: { [ORE.IRON]: 0x3f6fa8, [ORE.COPPER]: 0xc4561f, [ORE.COAL]: 0x2a2a2e, [ORE.STONE]: 0xf0e6cc },
+    belt: 0x55596a,
+    beltArrow: 0xffd23f,
+    miner: 0x7d8899,
+    minerTop: 0xe0a800,
+    chest: 0xa8743f,
+    chestBand: 0x3a3f4c,
+    ok: 0x10a84f,
+    bad: 0xe0282e,
   },
 };
 const ORE_TINT = 0.55; // how strongly an ore colours its ground tile
@@ -98,7 +115,11 @@ export function createView(container, world, { theme = "dark" } = {}) {
   }
   scene.add(rocks);
 
-  // Highlight for the selected tile: a translucent fill plus an outline.
+  const buildings = createBuildingLayer(scene);
+  const ghosts = createBuildingLayer(scene, { ghost: true });
+  let drawnVersion = -1;
+
+  // Highlight for a tile or footprint: a translucent fill plus an outline.
   const selection = new THREE.Group();
   const selFill = new THREE.Mesh(
     new THREE.PlaneGeometry(1, 1),
@@ -115,16 +136,29 @@ export function createView(container, world, { theme = "dark" } = {}) {
     new THREE.LineBasicMaterial(),
   );
   selection.add(selFill, selLine);
+  // Drawn over everything, so it still shows on top of a building marked for removal.
+  for (const obj of [selFill, selLine]) {
+    obj.material.depthTest = false;
+    obj.renderOrder = 2;
+  }
   selection.visible = false;
   scene.add(selection);
+
+  let highlightKind = "select";
+  const paintHighlight = () => {
+    const color = highlightKind === "remove" ? COLORS.bad : COLORS.accent;
+    selFill.material.color.set(color);
+    selLine.material.color.set(color);
+  };
 
   const applyTheme = () => {
     scene.background = new THREE.Color(COLORS.bg);
     hemi.color.set(COLORS.hemiSky);
     hemi.groundColor.set(COLORS.hemiGround);
     grid.material.color.set(COLORS.grid);
-    selFill.material.color.set(COLORS.accent);
-    selLine.material.color.set(COLORS.accent);
+    paintHighlight();
+    buildings.setTheme(COLORS);
+    ghosts.setTheme(COLORS);
 
     const base = new THREE.Color(COLORS.ground);
     const oreColors = {};
@@ -220,11 +254,24 @@ export function createView(container, world, { theme = "dark" } = {}) {
     canvas: renderer.domElement,
     cam,
     render() {
+      if (drawnVersion !== world.version) {
+        drawnVersion = world.version;
+        buildings.set([...world.entities.values()]);
+      }
       renderer.render(scene, camera);
     },
-    setSelected(tile) {
-      selection.visible = !!tile;
-      if (tile) selection.position.set(tile.x + 0.5, 0.03, tile.y + 0.5);
+    // Outlines rect { x, y, w, h } in tiles; kind "select" (accent) or "remove" (red).
+    setHighlight(rect, kind = "select") {
+      selection.visible = !!rect;
+      if (!rect) return;
+      selection.position.set(rect.x + rect.w / 2, 0.03, rect.y + rect.h / 2);
+      selection.scale.set(rect.w, 1, rect.h);
+      highlightKind = kind;
+      paintHighlight();
+    },
+    // Ghost previews: [{ type, x, y, rot, ok }], green where ok, red where not.
+    setGhosts(list) {
+      ghosts.set(list);
     },
     setTheme(name) {
       COLORS = PALETTES[name] || PALETTES.dark;

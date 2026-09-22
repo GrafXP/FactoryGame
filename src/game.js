@@ -1,6 +1,7 @@
 import { createWorld, step, tileAt, TICK_RATE } from "./sim/world.js";
 import { createView } from "./render/view.js";
 import { createControls } from "./render/controls.js";
+import { createBuilder } from "./build.js";
 
 const TICK_MS = 1000 / TICK_RATE;
 const MAX_TICKS_PER_FRAME = 10; // after a long stall, drop time instead of freezing to catch up
@@ -8,18 +9,22 @@ const STATS_MS = 500; // how often FPS/UPS are reported
 
 // Owns the world and the view and runs the sim at a fixed tick rate,
 // independent of the display's frame rate.
-export function createGame(container, { theme = "dark", seed, onTick, onStats, onTileTap, onTileHover } = {}) {
+export function createGame(
+  container,
+  { theme = "dark", seed, onTick, onStats, onInspect, onTileHover, onBuildChange, onMessage } = {},
+) {
   const world = createWorld({ seed });
   const view = createView(container, world, { theme });
+  const builder = createBuilder(world, view, { onChange: onBuildChange, onMessage, onInspect });
 
-  let selected = null;
   const disposeControls = createControls(view.canvas, view.cam, {
-    onTap(t) {
-      selected = t && tileAt(world, t.x, t.y);
-      view.setSelected(selected);
-      onTileTap?.(selected);
+    onPoint(p) {
+      builder.point(p);
+      onTileHover?.(p && tileAt(world, Math.floor(p.x), Math.floor(p.y)));
     },
-    onHover: (t) => onTileHover?.(t && tileAt(world, t.x, t.y)),
+    onTap: builder.tap,
+    canPaint: builder.canPaint,
+    onPaint: { start: builder.paintStart, move: builder.paintMove, end: builder.paintEnd, cancel: builder.paintCancel },
   });
 
   let running = true;
@@ -59,6 +64,7 @@ export function createGame(container, { theme = "dark", seed, onTick, onStats, o
 
   return {
     world,
+    builder,
     canvas: view.canvas,
     get running() {
       return running;

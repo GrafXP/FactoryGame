@@ -2,6 +2,7 @@ import "./style.css";
 import { createGame } from "./game.js";
 import { TICK_RATE } from "./sim/world.js";
 import { parseSeed } from "./sim/rng.js";
+import { BUILDINGS } from "./sim/buildings.js";
 import { getTheme, getThemePref, setThemePref, onThemeChange } from "./theme.js";
 import { fullscreenSupported, isFullscreen, toggleFullscreen, onFullscreenChange } from "./fullscreen.js";
 
@@ -102,6 +103,8 @@ function home(el) {
   };
 }
 
+const TOOL_KEYS = { 1: "belt", 2: "miner", 3: "chest", x: "remove", q: null };
+
 function play(el) {
   const $ = html(
     el,
@@ -123,6 +126,24 @@ function play(el) {
           <svg viewBox="0 0 24 24" class="fs-exit"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
         </button>
       </div>
+      <div class="toolbar" id="toolbar">
+        <button class="tool" data-tool="belt" aria-pressed="false">
+          <svg viewBox="0 0 24 24"><path d="M3 7h18v10H3zM8 12h7M12 9l3 3-3 3"/></svg><span>Belt</span>
+        </button>
+        <button class="tool" data-tool="miner" aria-pressed="false">
+          <svg viewBox="0 0 24 24"><path d="M5 10h14v10H5zM9 10V5h6v5M12 14v3"/></svg><span>Miner</span>
+        </button>
+        <button class="tool" data-tool="chest" aria-pressed="false">
+          <svg viewBox="0 0 24 24"><path d="M4 10h16v9H4zM4 10l2-4h12l2 4M10 14h4"/></svg><span>Chest</span>
+        </button>
+        <button class="tool danger" data-tool="remove" aria-pressed="false">
+          <svg viewBox="0 0 24 24"><path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13"/></svg><span>Remove</span>
+        </button>
+        <button class="tool" id="rotate" disabled>
+          <svg viewBox="0 0 24 24"><path d="M19 12a7 7 0 1 1-2-4.9M19 4v4h-4"/></svg><span>Rotate</span>
+        </button>
+      </div>
+      <div class="toast" id="toast" hidden></div>
       <div class="debug" id="debug">
         <div id="dbg-perf">– fps · – ups</div>
         <div id="dbg-seed"></div>
@@ -144,7 +165,22 @@ function play(el) {
     const t = hovered || tapped;
     $("#dbg-tile").textContent = !t
       ? "Tap a tile"
-      : `${t.x}, ${t.y} · ${t.oreName}${t.amount ? ` ×${t.amount}` : ""}`;
+      : `${t.x}, ${t.y} · ${t.oreName}${t.amount ? ` ×${t.amount}` : ""}${t.entity ? ` · ${BUILDINGS[t.entity.type].name}` : ""}`;
+  };
+
+  let toastTimer = 0;
+  const toast = (text) => {
+    const el = $("#toast");
+    el.textContent = text;
+    el.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => (el.hidden = true), 1800);
+  };
+
+  // Toolbar mirrors the builder: the active tool is pressed, rotate only works for buildings.
+  const syncTools = ({ tool }) => {
+    for (const b of $("#toolbar").querySelectorAll("[data-tool]")) b.setAttribute("aria-pressed", b.dataset.tool === tool);
+    $("#rotate").disabled = !BUILDINGS[tool];
   };
 
   // Game clock in the HUD: ticks → m:ss.
@@ -155,10 +191,12 @@ function play(el) {
     onStats: ({ fps, ups }) => {
       $("#dbg-perf").textContent = `${Math.round(fps)} fps · ${Math.round(ups)} ups`;
     },
-    onTileTap: (t) => {
+    onInspect: (t) => {
       tapped = t;
       showTile();
     },
+    onBuildChange: syncTools,
+    onMessage: toast,
     onTileHover: (t) => {
       hovered = t;
       showTile();
@@ -169,6 +207,13 @@ function play(el) {
       shownSeconds = s;
       $("#clock").textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
     },
+  });
+
+  $("#toolbar").addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    if (btn.id === "rotate") game.builder.rotate();
+    else game.builder.setTool(btn.dataset.tool);
   });
 
   const overlay = $("#overlay");
@@ -203,7 +248,11 @@ function play(el) {
 
   const onKey = (e) => {
     const k = e.key.toLowerCase();
-    if (k === "p" || k === "escape") game.running ? pause() : resume();
+    if (k === "escape" && game.builder.tool && game.running) game.builder.setTool(null);
+    else if (k === "p" || k === "escape") game.running ? pause() : resume();
+    else if (!game.running) return;
+    else if (TOOL_KEYS[k] !== undefined) game.builder.setTool(TOOL_KEYS[k]);
+    else if (k === "r") BUILDINGS[game.builder.tool] && game.builder.rotate();
     else if (k === "f") toggleFullscreen();
     else if (k === "t") setThemePref(getTheme() === "dark" ? "light" : "dark");
     else if (k === "`") $("#debug").hidden = !$("#debug").hidden;
@@ -216,6 +265,7 @@ function play(el) {
   document.addEventListener("visibilitychange", onHidden);
 
   return () => {
+    clearTimeout(toastTimer);
     window.removeEventListener("keydown", onKey);
     document.removeEventListener("visibilitychange", onHidden);
     unbindFs();
@@ -233,6 +283,15 @@ function help(el) {
       <dt>Touch</dt><dd>Drag to move the map, pinch to zoom, tap a tile to inspect it.</dd>
       <dt>Mouse</dt><dd>Drag to move the map, scroll to zoom, click a tile to inspect it.</dd>
       <dt>Keyboard</dt><dd>Arrows / WASD move, + / − zoom, P / Esc pause, F fullscreen, T light/dark, \` debug overlay.</dd>
+    </dl>
+    <h2>Building</h2>
+    <dl>
+      <dt>Place</dt><dd>Pick a building in the toolbar, then tap the map. The ghost is green where it fits and red where it doesn't. Tap the tool again to put it away.</dd>
+      <dt>Rotate</dt><dd>The Rotate button or R turns the next building.</dd>
+      <dt>Belt lines</dt><dd>Touch: press and hold, then drag. Mouse: drag with the left button. The belts face the way you drag.</dd>
+      <dt>Remove</dt><dd>Pick Remove, then tap a building.</dd>
+      <dt>Moving around</dt><dd>A quick drag always moves the map, even with a tool picked. With a mouse, drag with the right button while laying belts.</dd>
+      <dt>Keys</dt><dd>1 belt, 2 miner, 3 chest, X remove, R rotate, Q or Esc put the tool away.</dd>
     </dl>
     <h2>The map</h2>
     <p class="hint">Ore patches: iron is blue, copper orange, coal black and stone pale sand. There's one of each near the start.

@@ -28,6 +28,7 @@ SPA routes, light/dark theme, fullscreen PWA.
 src/
   main.js         routes and pages (home, play, help), HUD wiring
   game.js         owns world + view, fixed-timestep loop
+  build.js        build mode: tool, rotation, ghosts, taps/drags → sim calls
   sim/            world state and tick logic (headless, tested)
   render/         three.js scene, camera, meshes, input controls
   theme.js, fullscreen.js, style.css   copied from game-test
@@ -56,10 +57,12 @@ each ore is guaranteed within ~20 tiles of the centre.
 - [ ] Tapping a tile shows its coordinates and resource.
 - [ ] `?seed=42` gives the same map every reload. A different seed gives a different map.
 
-### Phase 2: Build mode
+### Phase 2: Build mode ✅ (done)
 Build toolbar, a ghost preview that follows your finger, rotate, place, and a
 remove mode. Buildings have footprints (1×1 belt, 2×2 miner, 1×1 chest) and can't
 overlap. They don't do anything yet.
+Touch: a quick drag always pans, so belt lines start with a press-and-hold (a short
+buzz) and then a drag. Mouse: left-drag lays belts, right/middle-drag pans.
 - [ ] Pick a building, see a green ghost (red where it isn't allowed), tap to place.
 - [ ] The rotate button (or R) turns the ghost, and placed buildings keep their facing.
 - [ ] Remove mode deletes a tapped building.

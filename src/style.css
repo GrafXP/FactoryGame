@@ -264,7 +264,7 @@ body.playing nav {
 .debug {
   position: absolute;
   left: calc(12px + env(safe-area-inset-left, 0px));
-  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  top: calc(64px + env(safe-area-inset-top, 0px));
   padding: 6px 10px;
   font: 0.8rem/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-variant-numeric: tabular-nums;
@@ -277,6 +277,88 @@ body.playing nav {
 
 .debug #dbg-seed {
   color: var(--muted);
+}
+
+/* Build toolbar along the bottom edge; big targets for thumbs. */
+.toolbar {
+  position: absolute;
+  left: 50%;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  max-width: calc(100% - 16px);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+.tool {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 64px;
+  height: 58px;
+  padding: 0;
+  font-size: 0.72rem;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 12px;
+}
+
+.tool svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tool[aria-pressed="true"] {
+  color: var(--on-accent);
+  background: var(--accent);
+}
+
+.tool.danger[aria-pressed="true"] {
+  color: #fff;
+  background: #d63a3f;
+}
+
+.tool:disabled {
+  opacity: 0.35;
+}
+
+#rotate {
+  margin-left: 6px;
+  border-left: 1px solid var(--line);
+  border-radius: 0 12px 12px 0;
+}
+
+@media (max-width: 380px) {
+  .tool {
+    width: 56px;
+  }
+}
+
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: calc(86px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  padding: 8px 14px;
+  font-size: 0.9rem;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  pointer-events: none;
 }
 
 .overlay {
