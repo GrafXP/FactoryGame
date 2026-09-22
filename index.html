@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#12141a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>Factory</title>
+    <script>
+      // Apply the saved theme before first paint (src/theme.js takes over after).
+      try {
+        const pref = localStorage.getItem("factory:theme");
+        const dark = pref === "dark" || (pref !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+      } catch {}
+    </script>
+  </head>
+  <body>
+    <main id="view"></main>
+    <nav id="nav">
+      <a href="/" data-link>Home</a>
+      <a href="/play" data-link>Play</a>
+      <a href="/help" data-link>Help</a>
+    </nav>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
