@@ -8,12 +8,13 @@ const MAX_TICKS_PER_FRAME = 10; // after a long stall, drop time instead of free
 const STATS_MS = 500; // how often FPS/UPS are reported
 
 // Owns the world and the view and runs the sim at a fixed tick rate,
-// independent of the display's frame rate.
+// independent of the display's frame rate. Plays `world` (a loaded save) if given,
+// otherwise a new world from `seed`.
 export function createGame(
   container,
-  { theme = "dark", seed, onTick, onStats, onInspect, onTileHover, onBuildChange, onMessage } = {},
+  { theme = "dark", world = null, seed, onTick, onStats, onInspect, onTileHover, onBuildChange, onMessage } = {},
 ) {
-  const world = createWorld({ seed });
+  world ||= createWorld({ seed });
   const view = createView(container, world, { theme });
   const builder = createBuilder(world, view, { onChange: onBuildChange, onMessage, onInspect });
 

@@ -13,12 +13,13 @@ export const TICK_RATE = 60;
 export const MAP_SIZE = 128;
 export const MINE_TICKS = 30; // hand-mining yields one item every half second
 
-export function createWorld({ seed = 1, size = MAP_SIZE, kit = START_KIT } = {}) {
+// A new world. `map` skips generating one, for loading a save (see save.js).
+export function createWorld({ seed = 1, size = MAP_SIZE, kit = START_KIT, map } = {}) {
   return {
     tick: 0,
     seed,
     size,
-    map: generateMap(seed, size),
+    map: map || generateMap(seed, size),
     mapVersion: 0, // bumped when an ore tile runs out, so the view repaints the ground
     entities: new Map(), // id → { id, type, x, y, rot, ...state }; x, y is the top-left tile
     grid: new Int32Array(size * size), // entity id on each tile, 0 = empty
@@ -69,7 +70,12 @@ export function canPlace(world, type, x, y, rot) {
 export function place(world, type, x, y, rot = 0) {
   if (canPlace(world, type, x, y, rot)) return null;
   take(world.inventory, BUILDINGS[type].cost);
-  const entity = { id: world.nextId++, type, x, y, rot: rot & 3, ...initialState(type) };
+  return addEntity(world, { id: world.nextId++, type, x, y, rot: rot & 3, ...initialState(type) });
+}
+
+// Puts a finished entity into the world without paying for it. Loading a save uses
+// this too; the caller has checked that it fits.
+export function addEntity(world, entity) {
   world.entities.set(entity.id, entity);
   fill(world, entity, entity.id);
   world.version++;
@@ -105,7 +111,7 @@ export function takeAll(world, chest) {
 
 // State a new building starts with. Miners track their dig and why they're stopped,
 // chests hold items, belts carry them (see transport.js).
-function initialState(type) {
+export function initialState(type) {
   if (type === "miner") return { progress: 0, status: "working", item: null };
   if (type === "chest") return { inventory: createInventory() };
   if (type === "belt") return { items: [] };

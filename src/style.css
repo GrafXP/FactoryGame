@@ -35,6 +35,11 @@
   box-sizing: border-box;
 }
 
+/* The hidden attribute always wins over a display set below. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -87,6 +92,32 @@ a {
 
 .card:active {
   border-color: var(--accent);
+}
+
+button.card {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+}
+
+.confirm {
+  border-color: #d63a3f;
+}
+
+.confirm .row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.confirm .row button {
+  flex: 1;
+}
+
+.confirm button.danger {
+  color: #fff;
+  background: #d63a3f;
+  border-color: #d63a3f;
 }
 
 button {
@@ -589,12 +620,20 @@ body.playing nav {
 }
 
 .overlay p {
+  max-width: 360px;
   color: var(--muted);
   margin: 0 0 12px;
 }
 
 .overlay .big {
   width: min(280px, 100%);
+}
+
+button.big.secondary {
+  padding: 16px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
 }
 
 

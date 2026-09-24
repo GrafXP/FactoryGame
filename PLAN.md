@@ -29,6 +29,7 @@ src/
   main.js         routes and pages (home, play, help), HUD wiring
   game.js         owns world + view, fixed-timestep loop
   build.js        build mode: tool, rotation, ghosts, taps/drags → sim calls
+  storage.js      the saved game in IndexedDB
   sim/            world state and tick logic (headless, tested)
   render/         three.js scene, camera, meshes, input controls
   theme.js, fullscreen.js, style.css   copied from game-test
@@ -111,9 +112,17 @@ isn't saved. The sim handles ~5,000 belt items in well under 1 ms per tick.
 - [ ] Two belts merging into one works and the throughput is capped.
 - [ ] Still 60 FPS with ~2,000 items on belts (check the debug overlay).
 
-### Phase 6: Save and load
+### Phase 6: Save and load ✅ (done)
 Autosave to IndexedDB every 30 s, when leaving the page and when the app is
 hidden. A versioned save format, plus New game / Continue on the home page.
+`sim/save.js` turns a world into plain data (the map's typed arrays go into IndexedDB
+as they are) and back, checking everything on the way in. Derived state (tile grid,
+belt network) is rebuilt on load, and buildings keep their order so a loaded world
+runs tick-for-tick like the saved one. Bump `SAVE_VERSION` and add a step to
+`MIGRATIONS` whenever the format changes (phase 7's plate costs, for one). There's one
+save slot. /play continues it; New game asks first and saves straight away, and
+`?seed=` with a save asks which to play. Pause has Save and quit; *Saved* flashes
+under the clock.
 - [ ] Build something, close the tab, reopen it: everything is exactly where it was, items mid-belt included.
 - [ ] New game asks for confirmation and starts a fresh map.
 - [ ] Loading a save from an older version either migrates or fails with a clear message.

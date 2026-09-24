@@ -6,6 +6,8 @@ import { BUILDINGS } from "./sim/buildings.js";
 import { ITEMS, describe } from "./sim/items.js";
 import { count, affordable, total } from "./sim/inventory.js";
 import { takeAll, oreLeftUnder } from "./sim/world.js";
+import { serialize, deserialize } from "./sim/save.js";
+import { readSave, writeSave } from "./storage.js";
 import { getTheme, getThemePref, setThemePref, onThemeChange } from "./theme.js";
 import { fullscreenSupported, isFullscreen, toggleFullscreen, onFullscreenChange } from "./fullscreen.js";
 
@@ -89,9 +91,16 @@ function home(el) {
     `<h1>Factory</h1>
     <p>Mine, smelt, build and automate. A factory game running in the browser.</p>
     <div class="cards">
-      <a class="card" href="/play" data-link><b>Play</b><span>Open the factory</span></a>
+      <a class="card" id="continue" href="/play" data-link hidden><b>Continue</b><span id="save-info"></span></a>
+      <button class="card" id="new-game"><b>New game</b><span>A fresh map and a starter kit</span></button>
+      <div class="card confirm" id="confirm" hidden>
+        <b>Start a new game?</b>
+        <span>Your saved factory will be replaced. This can't be undone.</span>
+        <div class="row"><button class="danger" id="confirm-yes">Start new game</button><button id="confirm-no">Cancel</button></div>
+      </div>
       <a class="card" href="/help" data-link><b>Help</b><span>Controls and tips</span></a>
     </div>
+    <p class="hint" id="save-note" hidden></p>
     <h2>Theme</h2>
     ${THEME_PICKER}
     <p class="hint">Light mode is easier to see outdoors in bright sun.</p>
@@ -100,9 +109,115 @@ function home(el) {
   );
   const unbindTheme = bindThemePicker($("#theme"));
   const unbindFs = bindFullscreenButton($("#fs"));
+
+  // Continue shows once we know there's a save; with one, New game asks first.
+  let hasSave = false;
+  let gone = false;
+  readSave().then(
+    (record) => {
+      if (gone || !record) return;
+      hasSave = true;
+      $("#continue").hidden = false;
+      $("#save-info").textContent = `Played ${clock(record.tick)} · ${plural(record.buildings, "building")} · saved ${ago(record.savedAt)}`;
+    },
+    (err) => {
+      if (gone) return;
+      $("#save-note").hidden = false;
+      $("#save-note").textContent = `Saving isn't available here (${err.message}), so a game won't be kept after you close it.`;
+    },
+  );
+  const askNew = (on) => {
+    $("#confirm").hidden = !on;
+    $("#new-game").hidden = on;
+  };
+  $("#new-game").addEventListener("click", () => (hasSave ? askNew(true) : navigate("/play?new")));
+  $("#confirm-no").addEventListener("click", () => askNew(false));
+  $("#confirm-yes").addEventListener("click", () => navigate("/play?new"));
+
   return () => {
+    gone = true;
     unbindTheme();
     unbindFs();
+  };
+}
+
+// Ticks → "m:ss", or "h:mm:ss" past an hour.
+function clock(ticks) {
+  const s = Math.floor(ticks / TICK_RATE);
+  const mmss = `${Math.floor(s / 60) % 60}:${String(s % 60).padStart(2, "0")}`;
+  return s < 3600 ? mmss : `${Math.floor(s / 3600)}:${mmss.padStart(5, "0")}`;
+}
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+// A past timestamp → "just now", "5 min ago", "3 h ago", "2 days ago".
+function ago(time) {
+  const min = Math.floor((Date.now() - time) / 60000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min} min ago`;
+  if (min < 60 * 24) return `${Math.floor(min / 60)} h ago`;
+  return `${plural(Math.floor(min / (60 * 24)), "day")} ago`;
+}
+
+const AUTOSAVE_MS = 30000;
+
+// /play continues the saved game, or starts one if there's none. /play?new starts a
+// new game (home asks first), and ?seed=… picks its map; /play?seed=… with a save
+// asks which to play. Once a game is running the address goes back to plain /play,
+// so reloading continues it.
+function play(el) {
+  const params = new URLSearchParams(location.search);
+  const seedParam = params.get("seed");
+  const $ = html(el, `<div class="game"><div class="overlay" id="loader"><p>Loading…</p></div></div>`);
+  let stop = null;
+  let gone = false;
+
+  const start = (opts) => {
+    history.replaceState(null, "", "/play");
+    stop = playWorld(el, opts);
+  };
+  const startNew = () =>
+    start({ seed: seedParam ? parseSeed(seedParam) : 1 + Math.floor(Math.random() * 999999), isNew: true });
+  const load = (record) => {
+    try {
+      start({ world: deserialize(record.data) });
+    } catch (err) {
+      console.warn(err);
+      ask("Couldn't load your game", `${err.message} Starting a new game replaces the save.`, [
+        ["Start a new game", startNew],
+        ["Back", () => navigate("/")],
+      ]);
+    }
+  };
+  // Replaces the loader with a question and a button for each answer.
+  const ask = (title, text, answers) => {
+    const box = $("#loader");
+    box.innerHTML = `<h2></h2><p></p>${answers.map((_, i) => `<button class="big${i ? " secondary" : ""}" data-i="${i}"></button>`).join("")}`;
+    box.querySelector("h2").textContent = title;
+    box.querySelector("p").textContent = text;
+    answers.forEach(([label, action], i) => {
+      const btn = box.querySelector(`[data-i="${i}"]`);
+      btn.textContent = label;
+      btn.addEventListener("click", action);
+    });
+  };
+
+  readSave()
+    .catch(() => null) // no storage: play anyway, and the first save says it failed
+    .then((record) => {
+      if (gone) return;
+      if (params.has("new") || !record) startNew();
+      else if (seedParam) {
+        ask("Start a new game?", `Seed ${seedParam} makes a new map, and your saved factory will be replaced.`, [
+          ["Start new game", startNew],
+          ["Continue saved game", () => load(record)],
+        ]);
+      } else load(record);
+    });
+
+  return () => {
+    gone = true;
+    stop?.();
   };
 }
 
@@ -110,7 +225,8 @@ const TOOL_KEYS = { 1: "belt", 2: "miner", 3: "chest", x: "remove", q: null };
 
 const itemSwatch = (id) => `<i class="swatch" style="background: var(--item-${id})"></i>`;
 
-function play(el) {
+// The game page itself, playing a loaded `world` or a new one from `seed`.
+function playWorld(el, { world, seed, isNew = false }) {
   const $ = html(
     el,
     `<div class="game" id="game">
@@ -170,11 +286,6 @@ function play(el) {
       <div class="overlay" id="overlay" hidden></div>
     </div>`,
   );
-
-  // ?seed=42 (or any text) picks the map; without it every visit gets a new one.
-  const seedParam = new URLSearchParams(location.search).get("seed");
-  const seed = seedParam ? parseSeed(seedParam) : 1 + Math.floor(Math.random() * 999999);
-  $("#dbg-seed").textContent = `seed ${seedParam ?? seed}`;
 
   // Debug overlay: the hovered tile (mouse) wins over the tapped one while it's there.
   let tapped = null;
@@ -298,6 +409,7 @@ function play(el) {
   let shownSeconds = -1;
   const game = createGame($("#game"), {
     theme: getTheme(),
+    world,
     seed,
     onStats: ({ fps, ups }) => {
       $("#dbg-perf").textContent = `${Math.round(fps)} fps · ${Math.round(ups)} ups`;
@@ -320,11 +432,12 @@ function play(el) {
       const s = Math.floor(world.tick / TICK_RATE);
       if (s === shownSeconds) return;
       shownSeconds = s;
-      $("#clock").textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+      $("#clock").textContent = clock(world.tick);
     },
   });
 
   syncInventory(game.world);
+  $("#dbg-seed").textContent = `seed ${game.world.seed}`;
 
   $("#toolbar").addEventListener("click", (e) => {
     const btn = e.target.closest("button");
@@ -333,22 +446,61 @@ function play(el) {
     else game.builder.setTool(btn.dataset.tool);
   });
 
+  // The line under the clock: Running or Paused, or briefly "Saved".
+  let statusTimer = 0;
+  const showStatus = (flash) => {
+    clearTimeout(statusTimer);
+    $("#status").textContent = flash || (game.running ? "Running" : "Paused");
+    if (flash) statusTimer = setTimeout(() => showStatus(), 1500);
+  };
+
   const overlay = $("#overlay");
   const pause = () => {
     if (!game.running) return;
     game.pause();
-    $("#status").textContent = "Paused";
-    overlay.innerHTML = `<h2>Paused</h2><button class="big" data-action="resume">Resume</button>`;
+    showStatus();
+    overlay.innerHTML = `<h2>Paused</h2>
+      <button class="big" data-action="resume">Resume</button>
+      <button class="big secondary" data-action="quit">Save and quit</button>`;
     overlay.hidden = false;
   };
   const resume = () => {
     overlay.hidden = true;
-    $("#status").textContent = "Running";
     game.resume();
+    showStatus();
   };
   overlay.addEventListener("click", (e) => {
-    if (e.target.closest("[data-action]")?.dataset.action === "resume") resume();
+    const action = e.target.closest("[data-action]")?.dataset.action;
+    if (action === "resume") resume();
+    if (action === "quit") navigate("/"); // leaving the page saves
   });
+
+  // Autosave every AUTOSAVE_MS, when the app is hidden or the page closes, and on
+  // leaving /play. Skipped when nothing has changed since the last save. A new game
+  // is saved straight away, since it replaces the old save. A write can finish after
+  // the page has gone, and then there's nothing left to tell.
+  let savedKey = "";
+  let saveFailed = false;
+  let left = false;
+  const save = () => {
+    const w = game.world;
+    const key = `${w.tick} ${w.version} ${w.inventory.version}`;
+    if (key === savedKey) return;
+    writeSave(serialize(w)).then(
+      () => {
+        savedKey = key;
+        saveFailed = false;
+        if (!left) showStatus("Saved");
+      },
+      (err) => {
+        if (!saveFailed && !left) toast(`Couldn't save the game: ${err?.message || err}`);
+        saveFailed = true;
+      },
+    );
+  };
+  if (isNew) save();
+  const autosave = setInterval(save, AUTOSAVE_MS);
+  window.addEventListener("pagehide", save);
   $("#pause").addEventListener("click", pause);
   const unbindFs = bindFullscreenButton($("#fs"));
 
@@ -379,11 +531,20 @@ function play(el) {
   };
   window.addEventListener("keydown", onKey);
 
-  const onHidden = () => document.hidden && pause();
+  const onHidden = () => {
+    if (!document.hidden) return;
+    pause();
+    save();
+  };
   document.addEventListener("visibilitychange", onHidden);
 
   return () => {
+    save();
+    left = true;
+    clearInterval(autosave);
     clearTimeout(toastTimer);
+    clearTimeout(statusTimer);
+    window.removeEventListener("pagehide", save);
     window.removeEventListener("keydown", onKey);
     document.removeEventListener("visibilitychange", onHidden);
     unbindFs();
@@ -419,9 +580,14 @@ function help(el) {
       <dt>Belts</dt><dd>Belts carry items the way their arrows point, round corners, and into a chest at the end. A belt that runs into the side of another adds its items to that line; a line only carries so much, and the rest waits. Removing a belt gives you what was on it.</dd>
       <dt>Inventory</dt><dd>The bag button (or I) shows what you carry and what each building costs. You start with a small kit.</dd>
     </dl>
+    <h2>Saving</h2>
+    <dl>
+      <dt>Autosave</dt><dd>The game saves itself every 30 seconds, when you switch apps and when you close the page. <i>Saved</i> flashes under the clock when it does. Pause → Save and quit goes back to the menu.</dd>
+      <dt>Continue</dt><dd>The home page's Continue carries on where you left off. New game starts a fresh map and replaces the save, so it asks first. There's one save per browser.</dd>
+    </dl>
     <h2>The map</h2>
     <p class="hint">Ore patches: iron is blue, copper orange, coal black and stone pale sand. There's one of each near the start.
-    Add <code>?seed=42</code> (any number or word) to the /play address to get the same map every time.</p>
+    Add <code>?seed=42</code> (any number or word) to the /play address to start a new game on that map; the same seed always gives the same map.</p>
     <h2>Fullscreen</h2>
     <p class="hint" id="fs-note"></p>
     <button id="fs" class="wide"></button>
