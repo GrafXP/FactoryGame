@@ -230,34 +230,49 @@ body.playing nav {
   touch-action: none;
 }
 
-.hud {
+/* Top: the HUD row (Back, clock, Pause) and the resource bar under it. */
+.top {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: calc(10px + env(safe-area-inset-top, 0px)) calc(12px + env(safe-area-inset-right, 0px)) 10px
+  gap: 6px;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) calc(12px + env(safe-area-inset-right, 0px)) 0
     calc(12px + env(safe-area-inset-left, 0px));
   pointer-events: none;
 }
 
-.hud > * {
+.hud {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hud > *,
+.top > .resources {
   pointer-events: auto;
 }
 
+/* The clock, centred between Back and Pause, on a pill so it reads over any ground. */
 .score {
-  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
+  margin: 0 auto;
+  padding: 2px 14px 3px;
   line-height: 1.1;
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 12px;
   pointer-events: none;
 }
 
 .score > b {
-  font-size: 1.8rem;
+  font-size: 1.5rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -278,39 +293,120 @@ body.playing nav {
   border-radius: 12px;
 }
 
-.icon-btn svg {
-  width: 22px;
-  height: 22px;
+/* Line icons (ui/icons.js) follow the text colour. */
+.icon {
+  flex: none;
+  width: 24px;
+  height: 24px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 2.2;
+  stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
-.icon-btn .theme-dark,
-.icon-btn[data-theme="dark"] .theme-light {
+/* Item icons are filled with the item's colour, lighter on top and darker on the sides. */
+.item-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+
+.item-icon path {
+  fill: var(--c);
+  stroke: color-mix(in srgb, var(--text) 45%, transparent);
+  stroke-width: 1.1;
+  stroke-linejoin: round;
+}
+
+.item-icon .lit {
+  fill: color-mix(in srgb, var(--c) 72%, #fff);
+}
+
+.item-icon .shade {
+  fill: color-mix(in srgb, var(--c) 68%, #000);
+}
+
+/* Everything the player carries; tap for the inventory. Scrolls sideways when long. */
+.resources {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 100%;
+  min-height: 34px;
+  padding: 4px 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.resources::-webkit-scrollbar {
   display: none;
 }
 
-.icon-btn[data-theme="dark"] .theme-dark {
-  display: block;
+.resources[aria-expanded="true"] {
+  border-color: var(--accent);
 }
 
-.icon-btn .fs-exit,
-.icon-btn[data-on="true"] .fs-enter {
-  display: none;
+.res {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
-.icon-btn[data-on="true"] .fs-exit {
-  display: block;
+.res .item-icon {
+  width: 20px;
+  height: 20px;
 }
 
-/* Debug readout: FPS/UPS, seed, inspected tile. Doesn't catch touches meant for the map. */
+.res-empty {
+  font-weight: 400;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* A count that just changed flashes green (up) or red (down). */
+.res[data-flash] .item-icon {
+  animation: res-pop 0.35s ease-out;
+}
+
+.res[data-flash="up"] b {
+  animation: res-up 0.8s ease-out;
+}
+
+.res[data-flash="down"] b {
+  animation: res-down 0.8s ease-out;
+}
+
+@keyframes res-pop {
+  50% {
+    transform: scale(1.25);
+  }
+}
+
+@keyframes res-up {
+  from {
+    color: var(--accent);
+  }
+}
+
+@keyframes res-down {
+  from {
+    color: #d63a3f;
+  }
+}
+
+/* Debug readout (pause menu or `): FPS/UPS, seed, inspected tile. Doesn't catch touches meant for the map. */
 .debug {
   position: absolute;
   left: calc(12px + env(safe-area-inset-left, 0px));
-  top: calc(64px + env(safe-area-inset-top, 0px));
+  top: calc(104px + env(safe-area-inset-top, 0px));
   padding: 6px 10px;
   font: 0.8rem/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-variant-numeric: tabular-nums;
@@ -325,9 +421,8 @@ body.playing nav {
   color: var(--muted);
 }
 
-/* Build toolbar along the bottom edge; big targets for thumbs. On a narrow phone
-   it scrolls sideways, with Rotate pinned at the right end. */
-.toolbar {
+/* Bottom bar: Build, the quick slots, Remove. Big targets for thumbs. */
+.buildbar {
   position: absolute;
   left: 50%;
   bottom: calc(12px + env(safe-area-inset-bottom, 0px));
@@ -335,16 +430,17 @@ body.playing nav {
   display: flex;
   gap: 4px;
   padding: 4px;
-  max-width: calc(100% - 16px);
-  overflow-x: auto;
-  scrollbar-width: none;
-  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
   border: 1px solid var(--line);
   border-radius: 16px;
 }
 
-.toolbar::-webkit-scrollbar {
-  display: none;
+.buildbar .quick {
+  display: flex;
+  gap: 4px;
+  padding: 0 4px;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
 }
 
 .tool {
@@ -355,7 +451,7 @@ body.playing nav {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  width: 64px;
+  width: 62px;
   height: 58px;
   padding: 0;
   font-size: 0.72rem;
@@ -365,17 +461,13 @@ body.playing nav {
   border-radius: 12px;
 }
 
-.tool svg {
-  width: 24px;
-  height: 24px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.tool[data-action="sheet"] {
+  color: var(--accent);
+  font-weight: 600;
 }
 
-.tool[aria-pressed="true"] {
+.tool[aria-pressed="true"],
+.tool[aria-expanded="true"] {
   color: var(--on-accent);
   background: var(--accent);
 }
@@ -385,24 +477,25 @@ body.playing nav {
   background: #d63a3f;
 }
 
-.tool:disabled {
-  opacity: 0.35;
-}
-
 /* How many of this building the inventory can pay for. */
 .badge {
-  position: absolute;
-  top: 3px;
-  right: 5px;
   min-width: 18px;
   padding: 0 4px;
   font-size: 0.65rem;
+  font-weight: 600;
   line-height: 16px;
+  text-align: center;
   font-variant-numeric: tabular-nums;
   color: var(--text);
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 9px;
+}
+
+.tool .badge {
+  position: absolute;
+  top: 3px;
+  right: 4px;
 }
 
 .badge[data-zero="true"] {
@@ -411,28 +504,24 @@ body.playing nav {
   border-color: #d63a3f;
 }
 
-#rotate {
-  position: sticky;
-  right: 0;
-  margin-left: 6px;
-  background: var(--panel);
-  border-left: 1px solid var(--line);
-  border-radius: 0 12px 12px 0;
-}
-
-/* Pinned over the tools scrolling under it, so only its content fades. */
-#rotate:disabled {
-  opacity: 1;
-  color: color-mix(in srgb, var(--text) 35%, transparent);
-}
-
-@media (max-width: 380px) {
+@media (max-width: 420px) {
   .tool {
-    width: 56px;
+    width: 54px;
+  }
+
+  .toolinfo > .icon {
+    display: none;
   }
 }
 
-/* Messages and readouts stacked just above the toolbar, newest need nearest it. */
+@media (max-width: 360px) {
+  .tool {
+    width: 50px;
+    font-size: 0.68rem;
+  }
+}
+
+/* Messages and readouts stacked just above the bottom bar. */
 .bottom-stack {
   position: absolute;
   left: 50%;
@@ -474,33 +563,192 @@ body.playing nav {
   pointer-events: none;
 }
 
-.mining .bar,
-.panel .bar {
-  display: block;
-  height: 5px;
-  background: var(--line);
-  border-radius: 3px;
-  overflow: hidden;
+/* The picked tool: what it is and what it costs, stacked, then Rotate and Done. */
+.toolinfo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 6px 6px 6px 12px;
+  font-size: 0.85rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  pointer-events: auto;
 }
 
-.mining .bar i,
-.panel .bar i {
-  display: block;
-  height: 100%;
+.ti-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ti-main .chips {
+  justify-content: flex-start;
+}
+
+.ti-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+  line-height: 1.2;
+}
+
+.ti-text small {
+  color: var(--muted);
+}
+
+.ti-text small[data-zero="true"] {
+  color: #d63a3f;
+  font-weight: 600;
+}
+
+.toolinfo .ti-btn {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 10px;
+}
+
+.toolinfo .done {
+  padding: 9px 14px;
+  font-weight: 600;
+  color: var(--on-accent);
+  background: var(--accent);
+  border: 0;
+  border-radius: 10px;
+}
+
+/* The build sheet: category tabs over a grid of building cards. */
+.sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--bg) 40%, transparent);
+}
+
+.sheet-panel {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  width: min(640px, 100%);
+  max-height: 72%;
+  padding: 10px 12px calc(14px + env(safe-area-inset-bottom, 0px));
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -8px 30px rgb(0 0 0 / 0.25);
+  animation: sheet-up 0.18s ease-out;
+}
+
+@keyframes sheet-up {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 40px);
+  }
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tabs {
+  flex: 1;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs button {
+  flex: none;
+  padding: 9px 14px;
+  font-weight: 600;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-radius: 10px;
+}
+
+.tabs button[aria-selected="true"] {
+  color: var(--on-accent);
   background: var(--accent);
 }
 
-/* Inventory panel, under the HUD on the right. */
-/* Panels (the tapped building, the inventory) stack in a column under the HUD on the right. */
+.sheet-close {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  color: var(--muted);
+  background: none;
+  border: 0;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+  padding-top: 10px;
+  overflow-y: auto;
+}
+
+.bcard {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 10px;
+  text-align: left;
+  background: color-mix(in srgb, var(--bg) 50%, var(--panel));
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.bcard[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.bcard-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bcard-top b {
+  flex: 1;
+}
+
+.bcard-about {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.bcard .chips {
+  justify-content: flex-start;
+}
+
+/* Panels (the tapped building, the inventory) stack in a column on the right, under the resource bar. */
 .side {
   position: absolute;
-  top: calc(64px + env(safe-area-inset-top, 0px));
+  top: calc(104px + env(safe-area-inset-top, 0px));
   right: calc(12px + env(safe-area-inset-right, 0px));
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: min(260px, calc(100% - 24px));
-  max-height: calc(100% - 170px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  width: min(270px, calc(100% - 24px));
+  max-height: calc(100% - 210px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
   pointer-events: none;
 }
 
@@ -515,25 +763,28 @@ body.playing nav {
 }
 
 .panel h3 {
-  margin: 4px 0 6px;
+  display: flex;
+  align-items: center;
+  margin: 2px 0 6px;
   font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
 }
 
-.panel h3:not(:first-child) {
-  margin-top: 14px;
-}
-
 .panel h3 .close {
-  float: right;
-  margin: -6px -8px 0 0;
-  padding: 2px 8px;
-  font-size: 0.9rem;
+  display: grid;
+  place-items: center;
+  margin: -6px -8px -6px auto;
+  padding: 6px;
   color: var(--muted);
   background: none;
   border: 0;
+}
+
+.panel h3 .close .icon {
+  width: 18px;
+  height: 18px;
 }
 
 .panel p {
@@ -552,6 +803,22 @@ body.playing nav {
 .panel .status[data-status="full"] {
   color: #e08a00;
   font-weight: 600;
+}
+
+.mining .bar,
+.panel .bar {
+  display: block;
+  height: 5px;
+  background: var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.mining .bar i,
+.panel .bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
 }
 
 .panel button.wide {
@@ -588,6 +855,11 @@ body.playing nav {
   font-variant-numeric: tabular-nums;
 }
 
+.items .empty {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 /* A machine's slots: a label, then what's in it. */
 .slots em {
   width: 3.4em;
@@ -609,33 +881,14 @@ body.playing nav {
 }
 
 .panel .actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 8px 10px;
   font-size: 0.85rem;
 }
 
-/* The picked building's cost. */
-.cost-strip {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  font-size: 0.85rem;
-  text-align: center;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-}
-
-.cost-strip .can {
-  color: var(--muted);
-}
-
-.cost-strip .can[data-zero="true"] {
-  color: #d63a3f;
-  font-weight: 600;
-}
-
+/* Costs: a chip per item, red when you're short. */
 .chips {
   display: flex;
   flex-wrap: wrap;
@@ -646,8 +899,8 @@ body.playing nav {
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 2px 8px;
+  gap: 4px;
+  padding: 2px 8px 2px 5px;
   font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -655,10 +908,9 @@ body.playing nav {
   border-radius: 999px;
 }
 
-.chip .swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
+.chip .item-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .chip[data-short="true"] {
@@ -672,29 +924,6 @@ body.playing nav {
   opacity: 0.85;
 }
 
-.costs .chips {
-  justify-content: flex-end;
-}
-
-.items .empty {
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.swatch {
-  width: 14px;
-  height: 14px;
-  border-radius: 4px;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 25%, transparent);
-}
-
-.icon-btn[aria-expanded="true"] {
-  color: var(--on-accent);
-  background: var(--accent);
-  border-color: var(--accent);
-}
-
-/* Six HUD buttons plus the clock need to squeeze onto small phones. */
 @media (max-width: 400px) {
   .hud {
     gap: 5px;
@@ -706,8 +935,21 @@ body.playing nav {
   }
 
   .score > b {
-    font-size: 1.5rem;
+    font-size: 1.3rem;
   }
+}
+
+/* Pause menu settings. */
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(280px, 100%);
+  margin: 4px 0;
+}
+
+.settings button {
+  padding: 12px;
 }
 
 .overlay {

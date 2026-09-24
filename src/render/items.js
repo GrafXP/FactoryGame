@@ -1,9 +1,10 @@
 import * as THREE from "three";
+import { ITEMS } from "../sim/items.js";
 
 // Draws loose items (on belts, in inserter hands) as instanced meshes, one per
-// shape: ore is a rough rock, plates are flat, bricks are blocks. Each shape sits
-// with its bottom at the same height, so they all rest on a belt the same way.
-const SHAPE_OF = { "iron-plate": "plate", "copper-plate": "plate", "stone-brick": "brick" };
+// shape (ITEMS[id].shape): ore is a rough rock, plates are flat, bricks are
+// blocks. Each shape sits with its bottom at the same height, so they all rest on
+// a belt the same way.
 
 // y is where the item's centre would be for a rock; flatter shapes are moved down.
 function makeShapes() {
@@ -53,7 +54,7 @@ export function createItemLayer(parent) {
     // One item centred at (x, y, z), turned `angle` radians about the vertical.
     // Rocks get `spin` on top, so a row of ore doesn't look like one repeated rock.
     add(item, x, y, z, angle, spin = 0) {
-      const s = byShape[SHAPE_OF[item] || "rock"];
+      const s = byShape[ITEMS[item]?.shape || "rock"];
       q.setFromAxisAngle(up, s.shape === "rock" ? angle + spin : angle);
       s.mesh.setMatrixAt(s.n, m.compose(pos.set(x, y, z), q, one));
       s.mesh.setColorAt(s.n, colors[item] || fallback);

@@ -32,6 +32,7 @@ src/
   storage.js      the saved game in IndexedDB
   sim/            world state and tick logic (headless, tested)
   render/         three.js scene, camera, meshes, input controls
+  ui/             the game page's DOM UI: build menu, resource bar, building panels, icons
   theme.js, fullscreen.js, style.css   copied from game-test
 test/             node:test specs for sim/
 ```
@@ -145,6 +146,22 @@ the toolbar scrolls on narrow phones with Rotate pinned at the end.
 - [ ] Ore belt → inserter → furnace → inserter → belt → chest ends with plates in the chest.
 - [ ] A furnace without coal stops and shows a "no fuel" icon.
 - [ ] Inserters visibly swing, and only pick up items the target can accept.
+
+### Interface redesign ✅ (done, between phases 7 and 8)
+The flat toolbar couldn't hold many more buildings, and you couldn't see what you
+carried without opening the bag. Now the top bar has Back, the clock and Pause, and
+under it the resource bar shows an icon and a count for every item you carry (counts
+flash when they change; tap it for the inventory). The bottom bar has Build, four
+quick slots and Remove. Build opens a sheet with a tab per category (`ui/catalog.js`,
+where every new building must be listed) and a card per building: what it's for, its
+cost, how many you can afford. A building picked there takes over the quick slot
+used longest ago (kept in localStorage). While a tool is picked, a bar above shows
+its cost (short items in red), Rotate and Done. Theme, fullscreen and debug info
+(now off by default) moved into the pause menu. Items have icons in their belt
+shape and colour (rock, plate, brick; `ITEMS[id].shape`).
+- [ ] You can always see what you carry, and a count changing is noticeable.
+- [ ] Any building is at most two taps away, and the bar at the bottom fits a small phone.
+- [ ] You can tell what a building costs, and what you're missing, before placing it.
 
 ### Phase 8: Assemblers and recipes
 Assemblers with a recipe picker. The first recipe chain: gear, copper cable,

@@ -1,15 +1,16 @@
 import { ORE } from "./map.js";
 
 // Item types, in the order the inventory lists them. Countable items have a
-// `plural`; ore, coal and stone read the same for any amount.
+// `plural`; ore, coal and stone read the same for any amount. `shape` is how the
+// item is drawn, on belts and in icons: a rock unless it says otherwise.
 export const ITEMS = {
   "iron-ore": { name: "Iron ore" },
   "copper-ore": { name: "Copper ore" },
   coal: { name: "Coal" },
   stone: { name: "Stone" },
-  "iron-plate": { name: "Iron plate", plural: "Iron plates" },
-  "copper-plate": { name: "Copper plate", plural: "Copper plates" },
-  "stone-brick": { name: "Stone brick", plural: "Stone bricks" },
+  "iron-plate": { name: "Iron plate", plural: "Iron plates", shape: "plate" },
+  "copper-plate": { name: "Copper plate", plural: "Copper plates", shape: "plate" },
+  "stone-brick": { name: "Stone brick", plural: "Stone bricks", shape: "brick" },
 };
 
 // The item you get from mining each kind of ore tile.
