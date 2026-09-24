@@ -199,7 +199,7 @@ buildings and recipes. There's a starting goal and a "you've automated circuits"
 - [ ] Delivering the required items unlocks the next buildings, with a clear notification.
 - [ ] A new player can get from an empty map to automated circuits without reading the code.
 
-## After the MVP (not planned yet)
-Two-lane belts and splitters, underground belts, blueprints and copy-paste, fluids
-and pipes, trains, research labs, enemies/combat, a larger or infinite chunked map,
-sound, and a tutorial.
+## After the MVP
+Planned in [PLAN-2.md](PLAN-2.md): underground belts, splitters and sorters first,
+then copy-paste and blueprints, faster belts, a bigger map, performance, stats,
+fluids and oil, sound and a tutorial.
