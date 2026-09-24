@@ -1,8 +1,11 @@
 // Building types. Sizes are for rotation 0; odd rotations swap w and h.
+// Costs are paid from the player's inventory and refunded in full on removal.
+// They're raw ore for now: plates and gears only exist once furnaces and
+// assemblers do (phases 7 and 8), and costs should move to them then.
 export const BUILDINGS = {
-  belt: { name: "Belt", w: 1, h: 1 },
-  miner: { name: "Miner", w: 2, h: 2 },
-  chest: { name: "Chest", w: 1, h: 1 },
+  belt: { name: "Belt", w: 1, h: 1, cost: { "iron-ore": 1 } },
+  miner: { name: "Miner", w: 2, h: 2, cost: { "iron-ore": 8, "copper-ore": 4, stone: 6 } },
+  chest: { name: "Chest", w: 1, h: 1, cost: { "iron-ore": 4 } },
 };
 
 // Rotation r faces DIRS[r]: 0 north (-y), 1 east, 2 south, 3 west.

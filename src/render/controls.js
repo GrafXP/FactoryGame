@@ -2,10 +2,12 @@
 // drags the map, two fingers pinch-zoom, the wheel zooms at the cursor. A press that
 // barely moves is a tap.
 //
-// When `canPaint()` says so, a drag lays things down instead of panning: straight
-// away with the left mouse button, or after a long press on touch (so a quick drag
-// still pans). Works through the view's `cam`, never touches the sim. All callbacks
-// get ground points { x, y } in tile units (floats).
+// `canPaint(p)` decides what a press at ground point p may turn into. "drag" lays
+// things down instead of panning: straight away with the left mouse button, or after
+// a long press on touch (so a quick drag still pans). "hold" always waits for a long
+// press, with a finger or the left button, so a click or quick drag works as normal.
+// Works through the view's `cam`, never touches the sim. All callbacks get ground
+// points { x, y } in tile units (floats).
 const TAP_SLOP = 10; // px a press may move and still count as a tap
 const LONG_PRESS_MS = 350;
 const KEY_PAN = 4; // tiles per arrow/WASD press at the default zoom
@@ -53,16 +55,17 @@ export function createControls(canvas, cam, { onPoint, onTap, canPaint = () => f
     if (pointers.size !== 1) return;
 
     const p = ground(e);
-    if (e.pointerType !== "mouse") onPoint?.(p);
-    if (!p || !canPaint()) return;
+    const mouse = e.pointerType === "mouse";
+    if (!mouse) onPoint?.(p);
+    const mode = p && canPaint(p);
+    if (!mode || (mouse && e.button !== 0)) return;
     const beginPaint = () => {
       painting = true;
       anchor = null;
       onPaint.start?.(p);
     };
-    if (e.pointerType === "mouse") {
-      if (e.button === 0) beginPaint();
-    } else {
+    if (mouse && mode === "drag") beginPaint();
+    else {
       longPress = setTimeout(() => {
         if (!press || pointers.size !== 1) return;
         navigator.vibrate?.(15);

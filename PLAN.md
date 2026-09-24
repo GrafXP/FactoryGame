@@ -69,9 +69,13 @@ buzz) and then a drag. Mouse: left-drag lays belts, right/middle-drag pans.
 - [ ] Dragging a belt lays a straight line of belts.
 - [ ] Panning while in build mode still works and doesn't place anything by accident.
 
-### Phase 3: Items and inventory
+### Phase 3: Items and inventory ✅ (done)
 Item types, a player inventory panel, and hand-mining (hold on an ore tile).
 Buildings cost items, and you start with a small kit.
+With no tool picked, press and hold on ore to mine it (one item every half second,
+and the tile runs out). The bag button (or I) opens the inventory, and toolbar badges
+show how many of each building you can afford. Costs are raw ore for now, since
+plates and gears don't exist yet; move them over in phases 7 and 8.
 - [ ] Holding on iron ore adds iron ore to the inventory at a steady rate.
 - [ ] Placing a building takes its cost out of the inventory. With too few items you can't place it and you're told why.
 - [ ] Removing a building gives its items back.

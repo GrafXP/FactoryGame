@@ -1,8 +1,10 @@
 import "./style.css";
 import { createGame } from "./game.js";
-import { TICK_RATE } from "./sim/world.js";
+import { TICK_RATE, MINE_TICKS } from "./sim/world.js";
 import { parseSeed } from "./sim/rng.js";
 import { BUILDINGS } from "./sim/buildings.js";
+import { ITEMS, describe } from "./sim/items.js";
+import { count, affordable } from "./sim/inventory.js";
 import { getTheme, getThemePref, setThemePref, onThemeChange } from "./theme.js";
 import { fullscreenSupported, isFullscreen, toggleFullscreen, onFullscreenChange } from "./fullscreen.js";
 
@@ -105,6 +107,8 @@ function home(el) {
 
 const TOOL_KEYS = { 1: "belt", 2: "miner", 3: "chest", x: "remove", q: null };
 
+const itemSwatch = (id) => `<i class="swatch" style="background: var(--item-${id})"></i>`;
+
 function play(el) {
   const $ = html(
     el,
@@ -114,6 +118,9 @@ function play(el) {
           <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
         </a>
         <div class="score"><b id="clock">0:00</b><span id="status">Running</span></div>
+        <button class="icon-btn" id="inv-toggle" aria-label="Inventory" aria-expanded="false">
+          <svg viewBox="0 0 24 24"><path d="M5 8h14l-1.2 12H6.2zM9 8V6.5a3 3 0 0 1 6 0V8"/></svg>
+        </button>
         <button class="icon-btn" id="theme-toggle">
           <svg viewBox="0 0 24 24" class="theme-light"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
           <svg viewBox="0 0 24 24" class="theme-dark"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg>
@@ -128,13 +135,13 @@ function play(el) {
       </div>
       <div class="toolbar" id="toolbar">
         <button class="tool" data-tool="belt" aria-pressed="false">
-          <svg viewBox="0 0 24 24"><path d="M3 7h18v10H3zM8 12h7M12 9l3 3-3 3"/></svg><span>Belt</span>
+          <svg viewBox="0 0 24 24"><path d="M3 7h18v10H3zM8 12h7M12 9l3 3-3 3"/></svg><span>Belt</span><b class="badge" data-badge="belt"></b>
         </button>
         <button class="tool" data-tool="miner" aria-pressed="false">
-          <svg viewBox="0 0 24 24"><path d="M5 10h14v10H5zM9 10V5h6v5M12 14v3"/></svg><span>Miner</span>
+          <svg viewBox="0 0 24 24"><path d="M5 10h14v10H5zM9 10V5h6v5M12 14v3"/></svg><span>Miner</span><b class="badge" data-badge="miner"></b>
         </button>
         <button class="tool" data-tool="chest" aria-pressed="false">
-          <svg viewBox="0 0 24 24"><path d="M4 10h16v9H4zM4 10l2-4h12l2 4M10 14h4"/></svg><span>Chest</span>
+          <svg viewBox="0 0 24 24"><path d="M4 10h16v9H4zM4 10l2-4h12l2 4M10 14h4"/></svg><span>Chest</span><b class="badge" data-badge="chest"></b>
         </button>
         <button class="tool danger" data-tool="remove" aria-pressed="false">
           <svg viewBox="0 0 24 24"><path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13"/></svg><span>Remove</span>
@@ -144,6 +151,13 @@ function play(el) {
         </button>
       </div>
       <div class="toast" id="toast" hidden></div>
+      <div class="mining" id="mining" hidden><span id="mining-label"></span><span class="bar"><i id="mining-bar"></i></span></div>
+      <div class="panel" id="inventory" hidden>
+        <h3>Inventory</h3>
+        <ul class="items" id="inv-items"></ul>
+        <h3>Costs</h3>
+        <ul class="items costs" id="inv-costs"></ul>
+      </div>
       <div class="debug" id="debug">
         <div id="dbg-perf">– fps · – ups</div>
         <div id="dbg-seed"></div>
@@ -183,6 +197,42 @@ function play(el) {
     $("#rotate").disabled = !BUILDINGS[tool];
   };
 
+  // Inventory panel, toolbar badges (how many of each building you can afford) and
+  // the mining readout. Redrawn only when the inventory changes.
+  let shownInventory = -1;
+  const syncInventory = (world) => {
+    const inv = world.inventory;
+    if (inv.version === shownInventory) return;
+    shownInventory = inv.version;
+    const rows = Object.keys(ITEMS)
+      .filter((id) => count(inv, id) > 0)
+      .map((id) => `<li>${itemSwatch(id)}<span>${ITEMS[id].name}</span><b>${count(inv, id)}</b></li>`);
+    $("#inv-items").innerHTML = rows.join("") || `<li class="empty">Empty. Hold on an ore patch to mine it.</li>`;
+    for (const badge of $("#toolbar").querySelectorAll("[data-badge]")) {
+      const n = affordable(inv, BUILDINGS[badge.dataset.badge].cost);
+      badge.textContent = n > 99 ? "99+" : n;
+      badge.dataset.zero = n === 0;
+    }
+  };
+  $("#inv-costs").innerHTML = Object.values(BUILDINGS)
+    .map((b) => `<li><span>${b.name}</span><span class="cost">${describe(b.cost)}</span></li>`)
+    .join("");
+
+  const syncMining = (world) => {
+    const m = world.mining;
+    $("#mining").hidden = !m;
+    if (!m) return;
+    $("#mining-label").textContent = `Mining ${ITEMS[m.item].name.toLowerCase()} · ${count(world.inventory, m.item)}`;
+    $("#mining-bar").style.width = `${(m.progress / MINE_TICKS) * 100}%`;
+  };
+
+  const invPanel = $("#inventory");
+  const toggleInventory = () => {
+    invPanel.hidden = !invPanel.hidden;
+    $("#inv-toggle").setAttribute("aria-expanded", !invPanel.hidden);
+  };
+  $("#inv-toggle").addEventListener("click", toggleInventory);
+
   // Game clock in the HUD: ticks → m:ss.
   let shownSeconds = -1;
   const game = createGame($("#game"), {
@@ -202,12 +252,16 @@ function play(el) {
       showTile();
     },
     onTick: (world) => {
+      syncInventory(world);
+      syncMining(world);
       const s = Math.floor(world.tick / TICK_RATE);
       if (s === shownSeconds) return;
       shownSeconds = s;
       $("#clock").textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
     },
   });
+
+  syncInventory(game.world);
 
   $("#toolbar").addEventListener("click", (e) => {
     const btn = e.target.closest("button");
@@ -253,6 +307,7 @@ function play(el) {
     else if (!game.running) return;
     else if (TOOL_KEYS[k] !== undefined) game.builder.setTool(TOOL_KEYS[k]);
     else if (k === "r") BUILDINGS[game.builder.tool] && game.builder.rotate();
+    else if (k === "i") toggleInventory();
     else if (k === "f") toggleFullscreen();
     else if (k === "t") setThemePref(getTheme() === "dark" ? "light" : "dark");
     else if (k === "`") $("#debug").hidden = !$("#debug").hidden;
@@ -292,6 +347,12 @@ function help(el) {
       <dt>Remove</dt><dd>Pick Remove, then tap a building.</dd>
       <dt>Moving around</dt><dd>A quick drag always moves the map, even with a tool picked. With a mouse, drag with the right button while laying belts.</dd>
       <dt>Keys</dt><dd>1 belt, 2 miner, 3 chest, X remove, R rotate, Q or Esc put the tool away.</dd>
+    </dl>
+    <h2>Items</h2>
+    <dl>
+      <dt>Mining</dt><dd>With no tool picked, press and hold on an ore patch (mouse: hold the left button still). Keep holding to keep mining, and slide to the next tile when one runs out.</dd>
+      <dt>Costs</dt><dd>Buildings cost items. The number on each toolbar button is how many you can afford. Removing a building gives everything back.</dd>
+      <dt>Inventory</dt><dd>The bag button (or I) shows what you carry and what each building costs. You start with a small kit.</dd>
     </dl>
     <h2>The map</h2>
     <p class="hint">Ore patches: iron is blue, copper orange, coal black and stone pale sand. There's one of each near the start.

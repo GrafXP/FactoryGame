@@ -1,13 +1,17 @@
 import { BUILDINGS, footprint, beltLine } from "./sim/buildings.js";
-import { canPlace, place, removeAt, entityAt, tileAt } from "./sim/world.js";
+import { canFit, place, removeAt, entityAt, tileAt, startMining, stopMining } from "./sim/world.js";
+import { affordable, missing } from "./sim/inventory.js";
+import { describe } from "./sim/items.js";
 
 // Build mode: the current tool and facing, the ghost preview, and turning taps and
 // drags into sim calls. Tools are a building type, "remove", or null (inspect).
+// With no tool, pressing and holding on ore hand-mines it.
 export function createBuilder(world, view, { onChange, onMessage, onInspect } = {}) {
   let tool = null;
   let rot = 0;
   let pointer = null; // ground point the ghost follows
   let paint = null; // { start: tile, end: tile } while dragging a belt line
+  let gesture = null; // "belt" or "mine" while a press-and-hold is under way
   let inspected = null; // tile shown with the inspect tool
 
   const tileOf = (p) => ({ x: Math.floor(p.x), y: Math.floor(p.y) });
@@ -28,11 +32,20 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
   };
 
   const refresh = () => {
-    view.setGhosts(planned().map((p) => ({ ...p, ok: !canPlace(world, p.type, p.x, p.y, p.rot) })));
+    // Ghosts are green where they fit, for as many as the inventory can pay for.
+    const list = planned();
+    let budget = list.length ? affordable(world.inventory, BUILDINGS[list[0].type].cost) : 0;
+    view.setGhosts(
+      list.map((p) => {
+        const ok = !canFit(world, p.type, p.x, p.y, p.rot) && budget > 0;
+        if (ok) budget--;
+        return { ...p, ok };
+      }),
+    );
     if (tool === "remove") {
       const e = pointer && entityAt(world, Math.floor(pointer.x), Math.floor(pointer.y));
       view.setHighlight(e && rectOf(e), "remove");
-    } else if (tool === null && inspected) {
+    } else if (tool === null && inspected && !gesture) {
       const e = entityAt(world, inspected.x, inspected.y);
       view.setHighlight(e ? rectOf(e) : { ...inspected, w: 1, h: 1 });
     } else {
@@ -43,6 +56,12 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
   const changed = () => {
     onChange?.({ tool, rot });
     refresh();
+  };
+
+  // Mines the tile under p, or stops if there's nothing there to mine.
+  const mineAt = (p) => {
+    const t = tileOf(p);
+    if (startMining(world, t.x, t.y)) stopMining(world);
   };
 
   return {
@@ -61,7 +80,13 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
       rot = (rot + 1) % 4;
       changed();
     },
-    canPaint: () => tool === "belt",
+    // Belts are dragged out in lines; with no tool, holding on bare ore mines it.
+    canPaint(p) {
+      if (tool === "belt") return "drag";
+      if (tool !== null) return false;
+      const t = tileAt(world, Math.floor(p.x), Math.floor(p.y));
+      return t && t.ore && !t.entity ? "hold" : false;
+    },
 
     point(p) {
       pointer = p;
@@ -71,11 +96,15 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
     tap(p) {
       const t = tileOf(p);
       if (tool === "remove") {
-        if (!removeAt(world, t.x, t.y)) onMessage?.("Nothing to remove here");
+        const removed = removeAt(world, t.x, t.y);
+        if (removed) onMessage?.(`Got back ${describe(BUILDINGS[removed.type].cost)}`);
+        else onMessage?.("Nothing to remove here");
       } else if (BUILDINGS[tool]) {
         const { x, y } = anchorAt(tool, p);
-        const why = canPlace(world, tool, x, y, rot);
-        if (why) onMessage?.(`Can't build here: ${why.toLowerCase()}`);
+        const short = missing(world.inventory, BUILDINGS[tool].cost);
+        const why = canFit(world, tool, x, y, rot);
+        if (short) onMessage?.(`Can't build: missing ${describe(short)}`);
+        else if (why) onMessage?.(`Can't build here: ${why.toLowerCase()}`);
         else place(world, tool, x, y, rot);
       } else {
         inspected = tileAt(world, t.x, t.y);
@@ -85,26 +114,50 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
     },
 
     paintStart(p) {
-      paint = { start: tileOf(p), end: tileOf(p) };
+      if (tool === "belt") {
+        gesture = "belt";
+        paint = { start: tileOf(p), end: tileOf(p) };
+      } else {
+        gesture = "mine";
+        mineAt(p);
+      }
       refresh();
     },
     paintMove(p) {
+      if (gesture === "mine") return mineAt(p);
       const end = tileOf(p);
-      if (end.x === paint.end.x && end.y === paint.end.y) return;
+      if (!paint || (end.x === paint.end.x && end.y === paint.end.y)) return;
       paint.end = end;
       refresh();
     },
-    // Lays every belt of the line that fits, skipping blocked tiles.
+    // Lays every belt of the line that fits and can be paid for, skipping blocked tiles.
     paintEnd() {
+      const was = gesture;
+      gesture = null;
+      if (was === "mine") {
+        stopMining(world);
+        return refresh();
+      }
+      if (!paint) return refresh();
       const line = planned();
       paint = null;
+      let placed = 0;
       let blocked = 0;
-      for (const b of line) if (!place(world, b.type, b.x, b.y, b.rot)) blocked++;
+      for (const b of line) {
+        if (canFit(world, b.type, b.x, b.y, b.rot)) blocked++;
+        else if (place(world, b.type, b.x, b.y, b.rot)) placed++;
+      }
+      const unpaid = line.length - placed - blocked;
+      const short = unpaid && describe(missing(world.inventory, BUILDINGS.belt.cost, unpaid));
       if (line.length > 1) rot = line[0].rot; // keep facing the way you dragged
-      if (blocked === line.length) onMessage?.("Can't build here: something is in the way");
+      if (unpaid && placed) onMessage?.(`Built ${placed} of ${placed + unpaid} belts: missing ${short}`);
+      else if (unpaid) onMessage?.(`Can't build: missing ${short}`);
+      else if (blocked === line.length) onMessage?.("Can't build here: something is in the way");
       changed();
     },
     paintCancel() {
+      if (gesture === "mine") stopMining(world);
+      gesture = null;
       paint = null;
       refresh();
     },

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { ORE } from "../sim/map.js";
+import { MINE_TICKS } from "../sim/world.js";
 import { createBuildingLayer } from "./buildings.js";
 
 // Ore colours are picked so the four ores differ in hue *and* lightness in both
@@ -144,22 +145,36 @@ export function createView(container, world, { theme = "dark" } = {}) {
   selection.visible = false;
   scene.add(selection);
 
+  // The tile being hand-mined: an outline and a bar that fills up to the next item.
+  const mineMark = new THREE.Group();
+  const mineFill = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2).translate(0.5, 0, 0.5),
+    new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.45, depthWrite: false }),
+  );
+  const mineLine = new THREE.LineLoop(selLine.geometry.clone().translate(0.5, 0, 0.5), new THREE.LineBasicMaterial());
+  mineMark.add(mineFill, mineLine);
+  for (const obj of [mineFill, mineLine]) {
+    obj.material.depthTest = false;
+    obj.renderOrder = 2;
+  }
+  mineMark.visible = false;
+  scene.add(mineMark);
+
   let highlightKind = "select";
   const paintHighlight = () => {
     const color = highlightKind === "remove" ? COLORS.bad : COLORS.accent;
     selFill.material.color.set(color);
     selLine.material.color.set(color);
+    mineFill.material.color.set(COLORS.accent);
+    mineLine.material.color.set(COLORS.accent);
   };
 
-  const applyTheme = () => {
-    scene.background = new THREE.Color(COLORS.bg);
-    hemi.color.set(COLORS.hemiSky);
-    hemi.groundColor.set(COLORS.hemiGround);
-    grid.material.color.set(COLORS.grid);
-    paintHighlight();
-    buildings.setTheme(COLORS);
-    ghosts.setTheme(COLORS);
-
+  // Ground colours and rocks for the current ore layer. Runs again whenever a
+  // tile is mined out (world.mapVersion), which is rare, so it just redoes the lot.
+  let drawnOre = -1;
+  const noRock = new THREE.Matrix4().makeScale(0, 0, 0);
+  const paintOre = () => {
+    drawnOre = world.mapVersion;
     const base = new THREE.Color(COLORS.ground);
     const oreColors = {};
     for (const k in COLORS.ore) oreColors[k] = new THREE.Color(COLORS.ore[k]);
@@ -181,8 +196,23 @@ export function createView(container, world, { theme = "dark" } = {}) {
     }
     groundTex.needsUpdate = true;
 
-    oreTiles.forEach((i, n) => rocks.setColorAt(n, c.copy(oreColors[ore[i]]).multiplyScalar(0.9 + jitter(i, 0, 6) * 0.2)));
+    oreTiles.forEach((i, n) => {
+      if (ore[i]) rocks.setColorAt(n, c.copy(oreColors[ore[i]]).multiplyScalar(0.9 + jitter(i, 0, 6) * 0.2));
+      else rocks.setMatrixAt(n, noRock); // mined out
+    });
+    rocks.instanceMatrix.needsUpdate = true;
     if (rocks.instanceColor) rocks.instanceColor.needsUpdate = true;
+  };
+
+  const applyTheme = () => {
+    scene.background = new THREE.Color(COLORS.bg);
+    hemi.color.set(COLORS.hemiSky);
+    hemi.groundColor.set(COLORS.hemiGround);
+    grid.material.color.set(COLORS.grid);
+    paintHighlight();
+    buildings.setTheme(COLORS);
+    ghosts.setTheme(COLORS);
+    paintOre();
   };
   applyTheme();
 
@@ -257,6 +287,13 @@ export function createView(container, world, { theme = "dark" } = {}) {
       if (drawnVersion !== world.version) {
         drawnVersion = world.version;
         buildings.set([...world.entities.values()]);
+      }
+      if (drawnOre !== world.mapVersion) paintOre();
+      const m = world.mining;
+      mineMark.visible = !!m;
+      if (m) {
+        mineMark.position.set(m.x, 0.04, m.y);
+        mineFill.scale.x = Math.max(0.001, m.progress / MINE_TICKS);
       }
       renderer.render(scene, camera);
     },

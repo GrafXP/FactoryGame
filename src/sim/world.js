@@ -1,26 +1,33 @@
 // Simulation state. Pure data + logic: no three.js, no DOM, so it can be saved,
 // loaded and run headless.
-import { generateMap, ORE_NAMES } from "./map.js";
+import { generateMap, ORE, ORE_NAMES } from "./map.js";
 import { BUILDINGS, footprint } from "./buildings.js";
+import { ORE_ITEM, START_KIT, describe } from "./items.js";
+import { createInventory, add, give, missing, take } from "./inventory.js";
 
 export const TICK_RATE = 60;
 export const MAP_SIZE = 128;
+export const MINE_TICKS = 30; // hand-mining yields one item every half second
 
-export function createWorld({ seed = 1, size = MAP_SIZE } = {}) {
+export function createWorld({ seed = 1, size = MAP_SIZE, kit = START_KIT } = {}) {
   return {
     tick: 0,
     seed,
     size,
     map: generateMap(seed, size),
+    mapVersion: 0, // bumped when an ore tile runs out, so the view repaints the ground
     entities: new Map(), // id → { id, type, x, y, rot }; x, y is the top-left tile
     grid: new Int32Array(size * size), // entity id on each tile, 0 = empty
     nextId: 1,
     version: 0, // bumped whenever entities change, so the view knows to redraw them
+    inventory: createInventory(kit), // the player's
+    mining: null, // { x, y, item, progress } while the player is hand-mining a tile
   };
 }
 
 export function step(world) {
   world.tick++;
+  stepMining(world);
 }
 
 const inMap = (world, x, y) => Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0 && x < world.size && y < world.size;
@@ -38,8 +45,8 @@ export function entityAt(world, x, y) {
   return world.entities.get(world.grid[y * world.size + x]) || null;
 }
 
-// Why a building can't go at (x, y), or null if it can.
-export function canPlace(world, type, x, y, rot) {
+// Why a building's footprint doesn't fit at (x, y), or null if it does.
+export function canFit(world, type, x, y, rot) {
   if (!BUILDINGS[type]) return "Unknown building";
   const { w, h } = footprint(type, rot);
   for (let ty = y; ty < y + h; ty++) {
@@ -51,9 +58,18 @@ export function canPlace(world, type, x, y, rot) {
   return null;
 }
 
-// Places a building and returns it, or returns null if it doesn't fit.
+// Why a building can't be placed at (x, y): it doesn't fit or the player can't pay for it.
+export function canPlace(world, type, x, y, rot) {
+  const why = canFit(world, type, x, y, rot);
+  if (why) return why;
+  const short = missing(world.inventory, BUILDINGS[type].cost);
+  return short ? `Missing ${describe(short)}` : null;
+}
+
+// Places a building, paying its cost, and returns it. Returns null if it can't be placed.
 export function place(world, type, x, y, rot = 0) {
   if (canPlace(world, type, x, y, rot)) return null;
+  take(world.inventory, BUILDINGS[type].cost);
   const entity = { id: world.nextId++, type, x, y, rot: rot & 3 };
   world.entities.set(entity.id, entity);
   fill(world, entity, entity.id);
@@ -61,14 +77,49 @@ export function place(world, type, x, y, rot = 0) {
   return entity;
 }
 
-// Removes whatever building covers (x, y) and returns it, or null if there was none.
+// Removes whatever building covers (x, y), refunds its cost and returns it, or null if there was none.
 export function removeAt(world, x, y) {
   const entity = entityAt(world, x, y);
   if (!entity) return null;
   world.entities.delete(entity.id);
   fill(world, entity, 0);
+  give(world.inventory, BUILDINGS[entity.type].cost);
   world.version++;
   return entity;
+}
+
+// Starts (or keeps) hand-mining tile (x, y). Returns why it can't, or null.
+export function startMining(world, x, y) {
+  const tile = tileAt(world, x, y);
+  if (!tile) return "Off the map";
+  if (tile.entity) return "There's a building in the way";
+  if (!tile.ore) return "Nothing to mine here";
+  const m = world.mining;
+  if (!m || m.x !== x || m.y !== y) world.mining = { x, y, item: ORE_ITEM[tile.ore], progress: 0 };
+  return null;
+}
+
+export function stopMining(world) {
+  world.mining = null;
+}
+
+// Every MINE_TICKS the mined tile gives up one item. An empty tile turns to plain ground.
+function stepMining(world) {
+  const m = world.mining;
+  if (!m || ++m.progress < MINE_TICKS) return;
+  m.progress = 0;
+  const i = m.y * world.size + m.x;
+  const { ore, amount } = world.map;
+  if (!ore[i] || world.grid[i]) {
+    world.mining = null; // the tile changed under us
+    return;
+  }
+  add(world.inventory, m.item);
+  if (--amount[i] === 0) {
+    ore[i] = ORE.NONE;
+    world.mapVersion++;
+    world.mining = null;
+  }
 }
 
 function fill(world, entity, id) {
