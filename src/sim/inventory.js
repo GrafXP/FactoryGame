@@ -44,3 +44,18 @@ export function give(inv, items) {
   for (const id in items) inv.items[id] = count(inv, id) + items[id];
   inv.version++;
 }
+
+export function total(inv) {
+  let n = 0;
+  for (const id in inv.items) n += inv.items[id];
+  return n;
+}
+
+// Moves everything from one inventory into another and returns what moved.
+export function moveAll(from, to) {
+  const moved = from.items;
+  from.items = {};
+  from.version++;
+  give(to, moved);
+  return moved;
+}

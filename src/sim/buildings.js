@@ -2,10 +2,11 @@
 // Costs are paid from the player's inventory and refunded in full on removal.
 // They're raw ore for now: plates and gears only exist once furnaces and
 // assemblers do (phases 7 and 8), and costs should move to them then.
+// A miner digs one item every `period` ticks; a chest holds up to `capacity` items.
 export const BUILDINGS = {
   belt: { name: "Belt", w: 1, h: 1, cost: { "iron-ore": 1 } },
-  miner: { name: "Miner", w: 2, h: 2, cost: { "iron-ore": 8, "copper-ore": 4, stone: 6 } },
-  chest: { name: "Chest", w: 1, h: 1, cost: { "iron-ore": 4 } },
+  miner: { name: "Miner", w: 2, h: 2, cost: { "iron-ore": 8, "copper-ore": 4, stone: 6 }, period: 60 },
+  chest: { name: "Chest", w: 1, h: 1, cost: { "iron-ore": 4 }, capacity: 50 },
 };
 
 // Rotation r faces DIRS[r]: 0 north (-y), 1 east, 2 south, 3 west.
@@ -35,4 +36,15 @@ export function beltLine(sx, sy, ex, ey, rot) {
   const tiles = [];
   for (let i = 0; i <= len; i++) tiles.push({ x: sx + stepX * i, y: sy + stepY * i, rot: dir });
   return tiles;
+}
+
+// The tile just in front of a miner's chute, where its ore goes. Facing north the
+// chute sits over the left column (the model in render/buildings.js matches), and
+// it turns with the miner like everything else.
+export function outputTile(entity) {
+  const { w, h } = footprint(entity.type, entity.rot);
+  let dx = -0.5; // offset from the footprint's centre, facing north
+  let dy = -BUILDINGS[entity.type].h / 2 - 0.5;
+  for (let r = 0; r < entity.rot; r++) [dx, dy] = [-dy, dx]; // a quarter turn clockwise
+  return { x: Math.floor(entity.x + w / 2 + dx), y: Math.floor(entity.y + h / 2 + dy) };
 }

@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { ORE } from "../sim/map.js";
 import { MINE_TICKS } from "../sim/world.js";
 import { createBuildingLayer } from "./buildings.js";
+import { createStatusIcons } from "./status.js";
 
 // Ore colours are picked so the four ores differ in hue *and* lightness in both
 // themes: iron blue, copper orange, coal black, stone pale sand.
@@ -117,6 +118,7 @@ export function createView(container, world, { theme = "dark" } = {}) {
   scene.add(rocks);
 
   const buildings = createBuildingLayer(scene);
+  const statusIcons = createStatusIcons(scene);
   const ghosts = createBuildingLayer(scene, { ghost: true });
   let drawnVersion = -1;
 
@@ -289,6 +291,7 @@ export function createView(container, world, { theme = "dark" } = {}) {
         buildings.set([...world.entities.values()]);
       }
       if (drawnOre !== world.mapVersion) paintOre();
+      statusIcons.update(world.entities.values());
       const m = world.mining;
       mineMark.visible = !!m;
       if (m) {
@@ -317,6 +320,7 @@ export function createView(container, world, { theme = "dark" } = {}) {
     dispose() {
       ro.disconnect();
       groundTex.dispose();
+      statusIcons.dispose();
       scene.traverse((obj) => {
         obj.geometry?.dispose();
         obj.material?.dispose();

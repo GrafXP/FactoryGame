@@ -413,7 +413,8 @@ body.playing nav {
   pointer-events: none;
 }
 
-.mining .bar {
+.mining .bar,
+.panel .bar {
   display: block;
   height: 5px;
   background: var(--line);
@@ -421,20 +422,31 @@ body.playing nav {
   overflow: hidden;
 }
 
-.mining .bar i {
+.mining .bar i,
+.panel .bar i {
   display: block;
   height: 100%;
   background: var(--accent);
 }
 
 /* Inventory panel, under the HUD on the right. */
-.panel {
+/* Panels (the tapped building, the inventory) stack in a column under the HUD on the right. */
+.side {
   position: absolute;
   top: calc(64px + env(safe-area-inset-top, 0px));
   right: calc(12px + env(safe-area-inset-right, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   width: min(260px, calc(100% - 24px));
   max-height: calc(100% - 170px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+}
+
+.panel {
+  min-height: 0;
   overflow-y: auto;
+  pointer-events: auto;
   padding: 10px 14px;
   background: color-mix(in srgb, var(--panel) 94%, transparent);
   border: 1px solid var(--line);
@@ -451,6 +463,46 @@ body.playing nav {
 
 .panel h3:not(:first-child) {
   margin-top: 14px;
+}
+
+.panel h3 .close {
+  float: right;
+  margin: -6px -8px 0 0;
+  padding: 2px 8px;
+  font-size: 0.9rem;
+  color: var(--muted);
+  background: none;
+  border: 0;
+}
+
+.panel p {
+  margin: 4px 0 8px;
+  font-size: 0.9rem;
+}
+
+.panel .meta {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.panel .status[data-status="no-resource"],
+.panel .status[data-status="no-output"],
+.panel .status[data-status="full"] {
+  color: #e08a00;
+  font-weight: 600;
+}
+
+.panel button.wide {
+  margin-top: 10px;
+  padding: 10px;
+  font-weight: 600;
+  color: var(--on-accent);
+  background: var(--accent);
+  border: 0;
+}
+
+.panel button.wide:disabled {
+  opacity: 0.4;
 }
 
 .items {

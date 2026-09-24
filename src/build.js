@@ -1,5 +1,5 @@
 import { BUILDINGS, footprint, beltLine } from "./sim/buildings.js";
-import { canFit, place, removeAt, entityAt, tileAt, startMining, stopMining } from "./sim/world.js";
+import { canFit, place, removeAt, refundOf, entityAt, tileAt, startMining, stopMining } from "./sim/world.js";
 import { affordable, missing } from "./sim/inventory.js";
 import { describe } from "./sim/items.js";
 
@@ -101,6 +101,12 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
       onInspect?.(null);
       changed();
     },
+    // Drops the inspected tile, e.g. when its panel is closed.
+    closeInspect() {
+      inspected = null;
+      onInspect?.(null);
+      refresh();
+    },
     rotate() {
       rot = (rot + 1) % 4;
       changed();
@@ -130,9 +136,10 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
           marked = e;
           hint("Tap it again to remove it");
         } else {
+          const back = refundOf(e);
           removeAt(world, t.x, t.y);
           marked = null;
-          onMessage?.(`Got back ${describe(BUILDINGS[e.type].cost)}`);
+          onMessage?.(`Got back ${describe(back)}`);
         }
       } else if (BUILDINGS[tool] && twoTap && !onPending(p)) {
         pending = p;

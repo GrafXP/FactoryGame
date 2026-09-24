@@ -4,7 +4,8 @@ import { TICK_RATE, MINE_TICKS } from "./sim/world.js";
 import { parseSeed } from "./sim/rng.js";
 import { BUILDINGS } from "./sim/buildings.js";
 import { ITEMS, describe } from "./sim/items.js";
-import { count, affordable } from "./sim/inventory.js";
+import { count, affordable, total } from "./sim/inventory.js";
+import { takeAll, oreLeftUnder } from "./sim/world.js";
 import { getTheme, getThemePref, setThemePref, onThemeChange } from "./theme.js";
 import { fullscreenSupported, isFullscreen, toggleFullscreen, onFullscreenChange } from "./fullscreen.js";
 
@@ -152,11 +153,14 @@ function play(el) {
       </div>
       <div class="toast" id="toast" hidden></div>
       <div class="mining" id="mining" hidden><span id="mining-label"></span><span class="bar"><i id="mining-bar"></i></span></div>
-      <div class="panel" id="inventory" hidden>
-        <h3>Inventory</h3>
-        <ul class="items" id="inv-items"></ul>
-        <h3>Costs</h3>
-        <ul class="items costs" id="inv-costs"></ul>
+      <div class="side">
+        <div class="panel" id="entity" hidden></div>
+        <div class="panel" id="inventory" hidden>
+          <h3>Inventory</h3>
+          <ul class="items" id="inv-items"></ul>
+          <h3>Costs</h3>
+          <ul class="items costs" id="inv-costs"></ul>
+        </div>
       </div>
       <div class="debug" id="debug">
         <div id="dbg-perf">– fps · – ups</div>
@@ -226,6 +230,63 @@ function play(el) {
     $("#mining-bar").style.width = `${(m.progress / MINE_TICKS) * 100}%`;
   };
 
+  // Panel for the building tapped with no tool: a chest's contents, a miner's status.
+  // Redrawn when what it shows changes; a miner's progress bar moves every tick.
+  const entityPanel = $("#entity");
+  let shown = null;
+  let shownKey = "";
+  const MINER_STATUS = {
+    working: (m) => `Mining ${ITEMS[m.item].name.toLowerCase()}`,
+    "no-resource": () => "Stopped: no ore under it. Miners have to sit on an ore patch.",
+    "no-output": () => "Stopped: nothing in front of the chute takes the ore. Put a chest there.",
+    full: () => "Stopped: the chest in front is full. Empty it to carry on.",
+  };
+  const closeButton = `<button class="close" data-action="close" aria-label="Close">✕</button>`;
+  const syncEntity = (world) => {
+    if (!shown) return;
+    if (!world.entities.has(shown.id)) return game.builder.closeInspect();
+    if (shown.type === "chest") {
+      const inv = shown.inventory;
+      const key = `chest ${inv.version}`;
+      if (key === shownKey) return;
+      shownKey = key;
+      const n = total(inv);
+      const rows = Object.keys(ITEMS)
+        .filter((id) => count(inv, id) > 0)
+        .map((id) => `<li>${itemSwatch(id)}<span>${ITEMS[id].name}</span><b>${count(inv, id)}</b></li>`);
+      entityPanel.innerHTML = `<h3>Chest ${closeButton}</h3>
+        <p class="meta">${n} / ${BUILDINGS.chest.capacity} items</p>
+        <ul class="items">${rows.join("") || `<li class="empty">Empty</li>`}</ul>
+        <button class="wide" data-action="take"${n ? "" : " disabled"}>Take all</button>`;
+    } else {
+      const key = `miner ${shown.status} ${shown.item} ${oreLeftUnder(world, shown)}`;
+      if (key !== shownKey) {
+        shownKey = key;
+        entityPanel.innerHTML = `<h3>Miner ${closeButton}</h3>
+          <p class="status" data-status="${shown.status}">${MINER_STATUS[shown.status](shown)}</p>
+          <p class="meta">Ore left under it: ${oreLeftUnder(world, shown)}</p>
+          <span class="bar"><i id="entity-bar"></i></span>`;
+      }
+      $("#entity-bar").style.width = `${(shown.progress / BUILDINGS.miner.period) * 100}%`;
+    }
+  };
+  const showEntity = (e) => {
+    shown = e?.type === "chest" || e?.type === "miner" ? e : null;
+    shownKey = "";
+    entityPanel.hidden = !shown;
+    if (shown) syncEntity(game.world);
+  };
+  entityPanel.addEventListener("click", (e) => {
+    const action = e.target.closest("[data-action]")?.dataset.action;
+    if (action === "close") game.builder.closeInspect();
+    if (action === "take" && shown?.inventory) {
+      const moved = takeAll(game.world, shown);
+      if (Object.keys(moved).length) toast(`Took ${describe(moved)}`);
+      syncEntity(game.world);
+      syncInventory(game.world);
+    }
+  });
+
   const invPanel = $("#inventory");
   const toggleInventory = () => {
     invPanel.hidden = !invPanel.hidden;
@@ -244,6 +305,7 @@ function play(el) {
     onInspect: (t) => {
       tapped = t;
       showTile();
+      showEntity(t?.entity);
     },
     onBuildChange: syncTools,
     onMessage: toast,
@@ -254,6 +316,7 @@ function play(el) {
     onTick: (world) => {
       syncInventory(world);
       syncMining(world);
+      syncEntity(world);
       const s = Math.floor(world.tick / TICK_RATE);
       if (s === shownSeconds) return;
       shownSeconds = s;
@@ -352,6 +415,7 @@ function help(el) {
     <dl>
       <dt>Mining</dt><dd>With no tool picked, press and hold on an ore patch (mouse: hold the left button still). Keep holding to keep mining, and slide to the next tile when one runs out.</dd>
       <dt>Costs</dt><dd>Buildings cost items. The number on each toolbar button is how many you can afford. Removing a building gives everything back.</dd>
+      <dt>Machines</dt><dd>A miner on ore digs one item a second and drops it out of its chute (the yellow block on its front). Put a chest there to catch it. A crossed-out rock means there's no ore under it; an amber sign means its output is blocked. Tap a chest or miner (no tool picked) to see inside; a chest's Take all moves everything into your inventory.</dd>
       <dt>Inventory</dt><dd>The bag button (or I) shows what you carry and what each building costs. You start with a small kit.</dd>
     </dl>
     <h2>The map</h2>

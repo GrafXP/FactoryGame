@@ -23,8 +23,9 @@ function makeParts() {
     miner: [
       { geometry: box(1.7, 0.7, 1.7, 0, 0.35, 0), color: "miner" },
       { geometry: new THREE.CylinderGeometry(0.35, 0.45, 0.35, 8).translate(0, 0.87, 0.15), color: "minerTop" },
-      // Output chute on the facing side, so the direction is obvious.
-      { geometry: box(0.55, 0.3, 0.3, 0, 0.2, -0.95), color: "minerTop" },
+      // Output chute on the facing side, over the column whose front tile gets the ore
+      // (see outputTile in sim/buildings.js).
+      { geometry: box(0.55, 0.3, 0.3, -0.5, 0.2, -0.95), color: "minerTop" },
     ],
     chest: [
       { geometry: box(0.76, 0.56, 0.76, 0, 0.28, 0), color: "chest" },

@@ -83,9 +83,14 @@ plates and gears don't exist yet; move them over in phases 7 and 8.
 - [ ] Placing a building takes its cost out of the inventory. With too few items you can't place it and you're told why.
 - [ ] Removing a building gives its items back.
 
-### Phase 4: Miners and chests
+### Phase 4: Miners and chests ✅ (done)
 Miners placed on ore produce an item every N ticks into whatever sits on their
 output tile. Chests store items. Tap a chest to see its contents and take them.
+A miner digs the ore under its 2×2 footprint once a second and only while its
+output has room, so a stopped miner loses nothing. The output tile is in front of
+the chute (the yellow block on the miner's front). Chests hold 50 items. Tap a
+miner or chest with no tool picked for its panel; removing a chest also gives back
+what's in it.
 - [ ] A miner on iron with a chest in front fills the chest over time.
 - [ ] A miner not on ore shows a "no resource" icon and does nothing.
 - [ ] When the chest is full the miner stops and shows a "blocked" icon.
