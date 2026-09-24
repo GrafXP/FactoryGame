@@ -6,6 +6,8 @@ import { ORE_ITEM, START_KIT, describe } from "./items.js";
 import { createInventory, add, give, missing, take, moveAll } from "./inventory.js";
 import { inMap, entityAt } from "./grid.js";
 import { stepBelts, takesItems, canTake, put } from "./transport.js";
+import { furnaceState, furnaceContents, stepFurnace } from "./furnace.js";
+import { inserterState, stepInserter } from "./inserter.js";
 
 export { entityAt };
 
@@ -33,7 +35,11 @@ export function createWorld({ seed = 1, size = MAP_SIZE, kit = START_KIT, map } 
 export function step(world) {
   world.tick++;
   stepMining(world);
-  for (const e of world.entities.values()) if (e.type === "miner") stepMiner(world, e);
+  for (const e of world.entities.values()) {
+    if (e.type === "miner") stepMiner(world, e);
+    else if (e.type === "furnace") stepFurnace(e);
+    else if (e.type === "inserter") stepInserter(world, e);
+  }
   stepBelts(world);
 }
 
@@ -90,8 +96,11 @@ export function removeAt(world, x, y) {
   world.entities.delete(entity.id);
   fill(world, entity, 0);
   give(world.inventory, refundOf(entity));
+  // Emptied, so a panel still showing it can't hand out its contents twice.
   if (entity.inventory) entity.inventory.items = {};
   if (entity.items) entity.items = [];
+  if (entity.type === "furnace") Object.assign(entity, furnaceState());
+  if (entity.hand) entity.hand = null;
   world.version++;
   return entity;
 }
@@ -99,8 +108,11 @@ export function removeAt(world, x, y) {
 // What removing a building gives back: its cost plus whatever it holds or carries.
 export function refundOf(entity) {
   const items = { ...BUILDINGS[entity.type].cost };
-  for (const id in entity.inventory?.items) items[id] = (items[id] || 0) + entity.inventory.items[id];
-  for (const it of entity.items || []) items[it.item] = (items[it.item] || 0) + 1;
+  const add = (id, n = 1) => (items[id] = (items[id] || 0) + n);
+  for (const id in entity.inventory?.items) add(id, entity.inventory.items[id]);
+  for (const it of entity.items || []) add(it.item);
+  if (entity.type === "furnace") for (const [id, n] of Object.entries(furnaceContents(entity))) add(id, n);
+  if (entity.hand) add(entity.hand);
   return items;
 }
 
@@ -110,11 +122,14 @@ export function takeAll(world, chest) {
 }
 
 // State a new building starts with. Miners track their dig and why they're stopped,
-// chests hold items, belts carry them (see transport.js).
+// chests hold items, belts carry them (see transport.js), furnaces and inserters
+// are in furnace.js and inserter.js.
 export function initialState(type) {
   if (type === "miner") return { progress: 0, status: "working", item: null };
   if (type === "chest") return { inventory: createInventory() };
   if (type === "belt") return { items: [] };
+  if (type === "furnace") return furnaceState();
+  if (type === "inserter") return inserterState();
   return {};
 }
 

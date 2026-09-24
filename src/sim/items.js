@@ -1,11 +1,15 @@
 import { ORE } from "./map.js";
 
-// Item types, in the order the inventory lists them.
+// Item types, in the order the inventory lists them. Countable items have a
+// `plural`; ore, coal and stone read the same for any amount.
 export const ITEMS = {
   "iron-ore": { name: "Iron ore" },
   "copper-ore": { name: "Copper ore" },
   coal: { name: "Coal" },
   stone: { name: "Stone" },
+  "iron-plate": { name: "Iron plate", plural: "Iron plates" },
+  "copper-plate": { name: "Copper plate", plural: "Copper plates" },
+  "stone-brick": { name: "Stone brick", plural: "Stone bricks" },
 };
 
 // The item you get from mining each kind of ore tile.
@@ -16,12 +20,16 @@ export const ORE_ITEM = {
   [ORE.STONE]: "stone",
 };
 
-// What a new game starts with: enough for a couple of miners, chests and some belts.
-export const START_KIT = { "iron-ore": 50, "copper-ore": 10, stone: 20 };
+// What a new game starts with: enough for a couple of miners, a furnace fed by
+// inserters, a chest and some belts, plus coal to light the furnace.
+export const START_KIT = { "iron-plate": 50, "copper-plate": 12, stone: 30, coal: 10 };
 
-// { "iron-ore": 8, stone: 6 } → "8 iron ore, 6 stone"
+// { "iron-plate": 8, stone: 6 } → "8 iron plates, 6 stone"
 export function describe(items) {
   return Object.entries(items)
-    .map(([id, n]) => `${n} ${ITEMS[id].name.toLowerCase()}`)
+    .map(([id, n]) => `${n} ${itemName(id, n).toLowerCase()}`)
     .join(", ");
 }
+
+// An item's name for `n` of it: "Iron plate", "Iron plates", "Coal".
+export const itemName = (id, n = 1) => (n !== 1 && ITEMS[id].plural) || ITEMS[id].name;

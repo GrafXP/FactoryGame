@@ -11,7 +11,7 @@ const TILE_TICKS = BELT_LEN / BELT_SPEED; // ticks for an item to cross one tile
 const MAX_RATE = (TICK_RATE * BELT_SPEED) / ITEM_GAP; // items/s a belt carries at most
 
 // A big kit and an empty area: the tests build at x, y >= 40 on seed 3's bare ground.
-const setup = () => createWorld({ seed: 3, kit: { "iron-ore": 5000, "copper-ore": 100, stone: 100 } });
+const setup = () => createWorld({ seed: 3, kit: { "iron-plate": 5000, "copper-plate": 100, stone: 100 } });
 const run = (world, ticks, each) => {
   for (let i = 0; i < ticks; i++) {
     each?.();
@@ -146,10 +146,10 @@ test("removing a belt gives back what's on it", () => {
   const { x, y } = clearArea(world, 4);
   const [b] = lay(world, [[x, y, 1]]);
   put(b, "iron-ore");
-  assert.deepEqual(refundOf(b), { "iron-ore": 2 });
+  assert.deepEqual(refundOf(b), { "iron-plate": 1, "iron-ore": 1 });
   const before = count(world.inventory, "iron-ore");
   removeAt(world, x, y);
-  assert.equal(count(world.inventory, "iron-ore"), before + 2);
+  assert.equal(count(world.inventory, "iron-ore"), before + 1);
 });
 
 test("a closed loop of belts keeps running", () => {

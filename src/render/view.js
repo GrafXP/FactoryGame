@@ -5,10 +5,13 @@ import { ORE_ITEM } from "../sim/items.js";
 import { beltNetwork } from "../sim/transport.js";
 import { createBuildingLayer } from "./buildings.js";
 import { createStatusIcons } from "./status.js";
-import { createBeltItems } from "./belt-items.js";
+import { createItemLayer } from "./items.js";
+import { drawBeltItems, beltItemCount } from "./belt-items.js";
+import { createMachineParts } from "./machines.js";
 
 // Ore colours are picked so the four ores differ in hue *and* lightness in both
-// themes: iron blue, copper orange, coal black, stone pale sand.
+// themes: iron blue, copper orange, coal black, stone pale sand. Ore items are drawn
+// in their ore's colour; `items` has the rest (plates are also told apart by shape).
 const PALETTES = {
   dark: {
     bg: 0x12141a,
@@ -24,6 +27,12 @@ const PALETTES = {
     minerTop: 0xf2c94c,
     chest: 0x9a6a3c,
     chestBand: 0x4a4f5c,
+    furnace: 0x8a7f72,
+    furnaceTop: 0x5d554c,
+    furnaceMouth: 0x17130f,
+    inserter: 0x4a4f5c,
+    inserterArm: 0xf2c94c,
+    items: { "iron-plate": 0xc8d4e3, "copper-plate": 0xf5a36c, "stone-brick": 0xb65a3c },
     ok: 0x5be38a,
     bad: 0xff5a5a,
   },
@@ -41,6 +50,12 @@ const PALETTES = {
     minerTop: 0xe0a800,
     chest: 0xa8743f,
     chestBand: 0x3a3f4c,
+    furnace: 0xa39584,
+    furnaceTop: 0x6e655a,
+    furnaceMouth: 0x221c16,
+    inserter: 0x55596a,
+    inserterArm: 0xe0a800,
+    items: { "iron-plate": 0x7d8ea3, "copper-plate": 0xd9793a, "stone-brick": 0xa0442a },
     ok: 0x10a84f,
     bad: 0xe0282e,
   },
@@ -122,7 +137,8 @@ export function createView(container, world, { theme = "dark" } = {}) {
 
   const buildings = createBuildingLayer(scene);
   const statusIcons = createStatusIcons(scene);
-  const beltItems = createBeltItems(scene);
+  const items = createItemLayer(scene);
+  const machines = createMachineParts(scene);
   const ghosts = createBuildingLayer(scene, { ghost: true });
   let drawnVersion = -1;
 
@@ -218,10 +234,10 @@ export function createView(container, world, { theme = "dark" } = {}) {
     paintHighlight();
     buildings.setTheme(COLORS);
     ghosts.setTheme(COLORS);
-    // Items are drawn in their ore's colour.
-    const itemColors = {};
+    machines.setTheme(COLORS);
+    const itemColors = { ...COLORS.items };
     for (const ore in ORE_ITEM) itemColors[ORE_ITEM[ore]] = COLORS.ore[ore];
-    beltItems.setTheme(itemColors);
+    items.setTheme(itemColors);
     paintOre();
   };
   applyTheme();
@@ -301,7 +317,11 @@ export function createView(container, world, { theme = "dark" } = {}) {
         const models = { left: "belt-left", right: "belt-right" };
         buildings.set([...world.entities.values()].map((e) => (e.type === "belt" ? { ...e, model: models[shape.get(e)] } : e)));
       }
-      beltItems.update(world);
+      // Loose items: on belts, and one at most in each inserter's hand.
+      items.begin(beltItemCount(world) + world.entities.size);
+      drawBeltItems(world, items);
+      machines.update(world, items);
+      items.end();
       if (drawnOre !== world.mapVersion) paintOre();
       statusIcons.update(world.entities.values());
       const m = world.mining;
@@ -333,7 +353,8 @@ export function createView(container, world, { theme = "dark" } = {}) {
       ro.disconnect();
       groundTex.dispose();
       statusIcons.dispose();
-      beltItems.dispose();
+      items.dispose();
+      machines.dispose();
       scene.traverse((obj) => {
         obj.geometry?.dispose();
         obj.material?.dispose();

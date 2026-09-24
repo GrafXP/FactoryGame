@@ -11,12 +11,19 @@ import { createWorld, addEntity, canFit, initialState } from "./world.js";
 import { BUILDINGS } from "./buildings.js";
 import { ITEMS } from "./items.js";
 import { BELT_LEN } from "./transport.js";
+import { SMELTING, FUEL } from "./recipes.js";
+import { SWING } from "./inserter.js";
 
 export const SAVE_FORMAT = "factory-save";
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 // version → function turning a save of that version into one of version + 1.
-export const MIGRATIONS = {};
+export const MIGRATIONS = {
+  // 2 added furnaces and inserters, and building costs moved to plates. A version 1
+  // save has neither building, so it loads as it is. (Removing a building built at
+  // the old ore price refunds today's price.)
+  1: (data) => data,
+};
 
 // A save that can't be loaded. The message is written for the player.
 export class SaveError extends Error {
@@ -44,6 +51,12 @@ function saveEntity(e) {
   if (e.type === "miner") Object.assign(out, { progress: e.progress, status: e.status, item: e.item });
   if (e.type === "chest") out.items = { ...e.inventory.items };
   if (e.type === "belt") out.items = e.items.map(({ item, pos }) => ({ item, pos }));
+  if (e.type === "furnace") {
+    const slot = (s) => s && { item: s.item, n: s.n };
+    Object.assign(out, { input: slot(e.input), fuel: slot(e.fuel), output: slot(e.output) });
+    Object.assign(out, { smelting: e.smelting, progress: e.progress, burn: e.burn, status: e.status });
+  }
+  if (e.type === "inserter") Object.assign(out, { hand: e.hand, swing: e.swing, status: e.status });
   return out;
 }
 
@@ -110,6 +123,12 @@ function load(data) {
     }
     if (s.type === "chest") Object.assign(e.inventory.items, checkItems(s.items, where));
     if (s.type === "belt") e.items = checkBeltItems(s.items, where);
+    if (s.type === "furnace") Object.assign(e, checkFurnace(s, where));
+    if (s.type === "inserter") {
+      check(s.hand === null || Object.hasOwn(ITEMS, s.hand), `${where}: unknown item`);
+      check(Number.isInteger(s.swing) && s.swing >= 0 && s.swing <= SWING, `${where}: bad swing`);
+      Object.assign(e, { hand: s.hand, swing: s.swing, status: String(s.status) });
+    }
     addEntity(world, e);
     maxId = Math.max(maxId, s.id);
   }
@@ -131,6 +150,24 @@ function checkItems(items, where) {
     out[id] = n;
   }
   return out;
+}
+
+// A furnace's slots hold what each slot can take; the plate it's making is a known recipe.
+function checkFurnace(s, where) {
+  const slot = (v, ok, name) => {
+    if (v === null) return null;
+    check(ok(v?.item) && Number.isInteger(v.n) && v.n > 0, `${where}: bad ${name}`);
+    return { item: v.item, n: v.n };
+  };
+  const out = {
+    input: slot(s.input, (id) => Object.hasOwn(SMELTING, id), "input"),
+    fuel: slot(s.fuel, (id) => Object.hasOwn(FUEL, id), "fuel"),
+    output: slot(s.output, (id) => Object.hasOwn(ITEMS, id), "output"),
+  };
+  check(s.smelting === null || Object.hasOwn(SMELTING, s.smelting), `${where}: bad recipe`);
+  check(Number.isInteger(s.progress) && s.progress >= 0, `${where}: bad progress`);
+  check(Number.isInteger(s.burn) && s.burn >= 0, `${where}: bad fuel`);
+  return { ...out, smelting: s.smelting, progress: s.progress, burn: s.burn, status: String(s.status) };
 }
 
 // A belt's items, front first, each on the belt.

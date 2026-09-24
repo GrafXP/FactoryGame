@@ -32,9 +32,29 @@ const ICONS = {
     g.fillStyle = "#ffffff";
     g.fillRect(16, 27, 32, 10);
   },
+  // A furnace with nothing to burn: a flame, crossed out.
+  "no-fuel": (g) => {
+    g.fillStyle = "#ff8a1f";
+    g.beginPath();
+    g.moveTo(32, 12);
+    g.bezierCurveTo(44, 24, 46, 32, 44, 40);
+    g.bezierCurveTo(42, 50, 22, 50, 20, 40);
+    g.bezierCurveTo(19, 33, 24, 28, 26, 22);
+    g.bezierCurveTo(29, 28, 30, 30, 33, 31);
+    g.bezierCurveTo(34, 24, 33, 18, 32, 12);
+    g.fill();
+    g.strokeStyle = "#e0282e";
+    g.lineWidth = 6;
+    g.beginPath();
+    g.arc(32, 32, 24, 0, Math.PI * 2);
+    g.moveTo(15, 15);
+    g.lineTo(49, 49);
+    g.stroke();
+  },
 };
-// Which icon each machine status shows. Statuses not listed (e.g. "working") show none.
-const ICON_FOR = { "no-resource": "no-resource", "no-output": "blocked", full: "blocked" };
+// Which icon each machine status shows. Statuses not listed (e.g. "working", or an
+// inserter "waiting" for room, which is normal) show none.
+const ICON_FOR = { "no-resource": "no-resource", "no-output": "blocked", full: "blocked", "no-fuel": "no-fuel" };
 
 function iconTexture(draw) {
   const canvas = document.createElement("canvas");

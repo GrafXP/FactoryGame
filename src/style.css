@@ -7,11 +7,14 @@
   --accent: #5be38a;
   --on-accent: #0b1a10;
   --nav-h: 60px;
-  /* Item colours match the ore colours in src/render/view.js. */
+  /* Item colours match the ore and item colours in src/render/view.js. */
   --item-iron-ore: #8fb3dd;
   --item-copper-ore: #e8834f;
   --item-coal: #0c0d10;
   --item-stone: #d8c49a;
+  --item-iron-plate: #c8d4e3;
+  --item-copper-plate: #f5a36c;
+  --item-stone-brick: #b65a3c;
   color-scheme: dark;
 }
 
@@ -28,6 +31,9 @@
   --item-copper-ore: #c4561f;
   --item-coal: #2a2a2e;
   --item-stone: #f0e6cc;
+  --item-iron-plate: #7d8ea3;
+  --item-copper-plate: #d9793a;
+  --item-stone-brick: #a0442a;
   color-scheme: light;
 }
 
@@ -319,7 +325,8 @@ body.playing nav {
   color: var(--muted);
 }
 
-/* Build toolbar along the bottom edge; big targets for thumbs. */
+/* Build toolbar along the bottom edge; big targets for thumbs. On a narrow phone
+   it scrolls sideways, with Rotate pinned at the right end. */
 .toolbar {
   position: absolute;
   left: 50%;
@@ -329,13 +336,20 @@ body.playing nav {
   gap: 4px;
   padding: 4px;
   max-width: calc(100% - 16px);
+  overflow-x: auto;
+  scrollbar-width: none;
   background: color-mix(in srgb, var(--panel) 88%, transparent);
   border: 1px solid var(--line);
   border-radius: 16px;
 }
 
+.toolbar::-webkit-scrollbar {
+  display: none;
+}
+
 .tool {
   position: relative;
+  flex: none;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -398,9 +412,18 @@ body.playing nav {
 }
 
 #rotate {
+  position: sticky;
+  right: 0;
   margin-left: 6px;
+  background: var(--panel);
   border-left: 1px solid var(--line);
   border-radius: 0 12px 12px 0;
+}
+
+/* Pinned over the tools scrolling under it, so only its content fades. */
+#rotate:disabled {
+  opacity: 1;
+  color: color-mix(in srgb, var(--text) 35%, transparent);
 }
 
 @media (max-width: 380px) {
@@ -518,6 +541,7 @@ body.playing nav {
 
 .panel .status[data-status="no-resource"],
 .panel .status[data-status="no-output"],
+.panel .status[data-status="no-fuel"],
 .panel .status[data-status="full"] {
   color: #e08a00;
   font-weight: 600;
@@ -555,6 +579,26 @@ body.playing nav {
 
 .items b {
   font-variant-numeric: tabular-nums;
+}
+
+/* A machine's slots: a label, then what's in it. */
+.slots em {
+  width: 3.4em;
+  font-size: 0.8rem;
+  font-style: normal;
+  color: var(--muted);
+}
+
+.panel .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.panel .actions button {
+  padding: 8px 10px;
+  font-size: 0.85rem;
 }
 
 .items .empty,

@@ -26,7 +26,7 @@ const findBlock = (world, ore) => {
 // A running factory: an east-facing miner on iron feeding a belt that turns a corner
 // into a chest, with a second belt merging in from the side.
 const factory = () => {
-  const world = createWorld({ seed: 5, kit: { "iron-ore": 1000, "copper-ore": 100, stone: 100 } });
+  const world = createWorld({ seed: 5, kit: { "iron-plate": 1000, "copper-plate": 100, stone: 100 } });
   const { x, y } = findBlock(world, ORE.IRON);
   const miner = place(world, "miner", x, y, 1);
   const out = outputTile(miner);
@@ -103,10 +103,17 @@ test("an older save is migrated step by step", () => {
   assert.equal(count(world.inventory, "stone"), count(createWorld({ seed: 2 }).inventory, "stone") + 5);
 });
 
+test("a version 1 save (before furnaces) still loads", () => {
+  const { world } = factory();
+  run(world, 300);
+  const v1 = { ...serialize(world), version: 1 };
+  assert.deepEqual(serialize(deserialize(structuredClone(v1))), serialize(world));
+});
+
 test("an older save with no way to migrate it fails with a clear message", () => {
   const data = serialize(createWorld({ seed: 2 }));
   assert.throws(
-    () => deserialize(data, { migrations: {}, version: 2 }),
+    () => deserialize(data, { migrations: {}, version: SAVE_VERSION + 1 }),
     (err) => err instanceof SaveError && /old version/.test(err.message),
   );
 });

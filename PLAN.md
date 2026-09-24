@@ -78,8 +78,8 @@ Item types, a player inventory panel, and hand-mining (hold on an ore tile).
 Buildings cost items, and you start with a small kit.
 With no tool picked, press and hold on ore to mine it (one item every half second,
 and the tile runs out). The bag button (or I) opens the inventory, and toolbar badges
-show how many of each building you can afford. Costs are raw ore for now, since
-plates and gears don't exist yet; move them over in phases 7 and 8.
+show how many of each building you can afford. Costs moved to plates in phase 7
+(furnaces cost stone, so a new player can always smelt); gears come in phase 8.
 - [ ] Holding on iron ore adds iron ore to the inventory at a steady rate.
 - [ ] Placing a building takes its cost out of the inventory. With too few items you can't place it and you're told why.
 - [ ] Removing a building gives its items back.
@@ -127,9 +127,21 @@ under the clock.
 - [ ] New game asks for confirmation and starts a fresh map.
 - [ ] Loading a save from an older version either migrates or fails with a clear message.
 
-### Phase 7: Inserters and furnaces
+### Phase 7: Inserters and furnaces ✅ (done)
 Inserters move items between belts, chests and machines. Furnaces smelt ore into
 plates (they burn coal as fuel).
+A furnace (2×2, costs 10 stone) works out its recipe from the ore it's given
+(`sim/recipes.js`): iron or copper ore → a plate a second, 2 stone → a brick in 2 s.
+One coal burns for 8 plates. It has input, fuel and output slots; the player can
+fill them up to 50 from the furnace's panel and take the output, but belts, miners
+and inserters only top the input and fuel up to 5. An inserter (1×1) takes one
+item from the building behind it and drops it in front, taking 24 ticks each way
+(1.2 items/s). It only picks up what the target can take right now, so one inserter
+feeds a furnace ore and coal off a mixed belt, and it only takes a furnace's output.
+Inserters run without power until phase 9. Building costs are now plates, and the
+start kit is plates, stone and some coal. The save format went to version 2 (old
+saves load unchanged). Loose items are drawn by shape (rocks, plates, bricks), and
+the toolbar scrolls on narrow phones with Rotate pinned at the end.
 - [ ] Ore belt → inserter → furnace → inserter → belt → chest ends with plates in the chest.
 - [ ] A furnace without coal stops and shows a "no fuel" icon.
 - [ ] Inserters visibly swing, and only pick up items the target can accept.

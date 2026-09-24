@@ -61,6 +61,21 @@ function makeParts() {
       { geometry: box(0.76, 0.56, 0.76, 0, 0.28, 0), color: "chest" },
       { geometry: box(0.8, 0.08, 0.8, 0, 0.42, 0), color: "chestBand" },
     ],
+    // A squat stone oven with a chimney. Which way a furnace faces doesn't matter,
+    // so its mouth, where the fire shows while it works (render/machines.js), is on
+    // the south side: the side the camera sees when it's placed unturned.
+    furnace: [
+      { geometry: box(1.8, 0.9, 1.8, 0, 0.45, 0), color: "furnace" },
+      { geometry: box(0.5, 0.55, 0.5, 0.45, 1.17, -0.45), color: "furnaceTop" },
+      { geometry: box(0.8, 0.5, 0.06, 0, 0.27, 0.9), color: "furnaceMouth" },
+    ],
+    // The base and the pivot; the arm swings in render/machines.js. The arrow on the
+    // base points the way items go.
+    inserter: [
+      { geometry: box(0.62, 0.1, 0.62, 0, 0.05, 0), color: "inserter" },
+      { geometry: new THREE.ShapeGeometry(chevron).scale(0.55, 0.55, 1).rotateX(-Math.PI / 2).translate(0, 0.105, -0.14), color: "inserterArm" },
+      { geometry: new THREE.CylinderGeometry(0.06, 0.08, 0.4, 8).translate(0, 0.26, 0), color: "inserterArm" },
+    ],
   };
 }
 
@@ -78,7 +93,7 @@ export function createBuildingLayer(parent, { ghost = false } = {}) {
     for (const part of parts[type]) {
       const material = ghost
         ? new THREE.MeshStandardMaterial({ transparent: true, opacity: 0.55, depthWrite: false })
-        : new THREE.MeshStandardMaterial({ roughness: 0.8, side: part.color === "beltArrow" ? THREE.DoubleSide : THREE.FrontSide });
+        : new THREE.MeshStandardMaterial({ roughness: 0.8, side: part.geometry.type === "ShapeGeometry" ? THREE.DoubleSide : THREE.FrontSide });
       slots.push({ type, part, material, mesh: null });
     }
   }

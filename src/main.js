@@ -3,9 +3,11 @@ import { createGame } from "./game.js";
 import { TICK_RATE, MINE_TICKS } from "./sim/world.js";
 import { parseSeed } from "./sim/rng.js";
 import { BUILDINGS } from "./sim/buildings.js";
-import { ITEMS, describe } from "./sim/items.js";
+import { ITEMS, describe, itemName } from "./sim/items.js";
 import { count, affordable, total } from "./sim/inventory.js";
 import { takeAll, oreLeftUnder } from "./sim/world.js";
+import { SMELTING, FUEL } from "./sim/recipes.js";
+import { fillFrom, emptyOutput, furnaceRoom } from "./sim/furnace.js";
 import { serialize, deserialize } from "./sim/save.js";
 import { readSave, writeSave } from "./storage.js";
 import { getTheme, getThemePref, setThemePref, onThemeChange } from "./theme.js";
@@ -221,9 +223,16 @@ function play(el) {
   };
 }
 
-const TOOL_KEYS = { 1: "belt", 2: "miner", 3: "chest", x: "remove", q: null };
+const TOOL_KEYS = { 1: "belt", 2: "miner", 3: "chest", 4: "furnace", 5: "inserter", x: "remove", q: null };
 
 const itemSwatch = (id) => `<i class="swatch" style="background: var(--item-${id})"></i>`;
+const lower = (id, n) => itemName(id, n).toLowerCase();
+// A list row for each item an inventory holds, in the usual item order.
+const itemRows = (inv) =>
+  Object.keys(ITEMS)
+    .filter((id) => count(inv, id) > 0)
+    .map((id) => `<li>${itemSwatch(id)}<span>${ITEMS[id].name}</span><b>${count(inv, id)}</b></li>`)
+    .join("");
 
 // The game page itself, playing a loaded `world` or a new one from `seed`.
 function playWorld(el, { world, seed, isNew = false }) {
@@ -259,6 +268,12 @@ function playWorld(el, { world, seed, isNew = false }) {
         </button>
         <button class="tool" data-tool="chest" aria-pressed="false">
           <svg viewBox="0 0 24 24"><path d="M4 10h16v9H4zM4 10l2-4h12l2 4M10 14h4"/></svg><span>Chest</span><b class="badge" data-badge="chest"></b>
+        </button>
+        <button class="tool" data-tool="furnace" aria-pressed="false">
+          <svg viewBox="0 0 24 24"><path d="M4 20V9h16v11zM14 9V4h4v5M9 20v-4a3 3 0 0 1 6 0v4"/></svg><span>Furnace</span><b class="badge" data-badge="furnace"></b>
+        </button>
+        <button class="tool" data-tool="inserter" aria-pressed="false">
+          <svg viewBox="0 0 24 24"><path d="M7 20h10M12 20v-5M12 15l-5-6M7 9l5-4M10 4l3 2"/></svg><span>Inserter</span><b class="badge" data-badge="inserter"></b>
         </button>
         <button class="tool danger" data-tool="remove" aria-pressed="false">
           <svg viewBox="0 0 24 24"><path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13"/></svg><span>Remove</span>
@@ -319,10 +334,7 @@ function playWorld(el, { world, seed, isNew = false }) {
     const inv = world.inventory;
     if (inv.version === shownInventory) return;
     shownInventory = inv.version;
-    const rows = Object.keys(ITEMS)
-      .filter((id) => count(inv, id) > 0)
-      .map((id) => `<li>${itemSwatch(id)}<span>${ITEMS[id].name}</span><b>${count(inv, id)}</b></li>`);
-    $("#inv-items").innerHTML = rows.join("") || `<li class="empty">Empty. Hold on an ore patch to mine it.</li>`;
+    $("#inv-items").innerHTML = itemRows(inv) || `<li class="empty">Empty. Hold on an ore patch to mine it.</li>`;
     for (const badge of $("#toolbar").querySelectorAll("[data-badge]")) {
       const n = affordable(inv, BUILDINGS[badge.dataset.badge].cost);
       badge.textContent = n > 99 ? "99+" : n;
@@ -337,65 +349,120 @@ function playWorld(el, { world, seed, isNew = false }) {
     const m = world.mining;
     $("#mining").hidden = !m;
     if (!m) return;
-    $("#mining-label").textContent = `Mining ${ITEMS[m.item].name.toLowerCase()} · ${count(world.inventory, m.item)}`;
+    $("#mining-label").textContent = `Mining ${lower(m.item)} · ${count(world.inventory, m.item)}`;
     $("#mining-bar").style.width = `${(m.progress / MINE_TICKS) * 100}%`;
   };
 
-  // Panel for the building tapped with no tool: a chest's contents, a miner's status.
-  // Redrawn when what it shows changes; a miner's progress bar moves every tick.
+  // Panel for the building tapped with no tool: what it holds and what it's doing.
+  // Redrawn when what it shows changes (its key); progress bars move every tick.
   const entityPanel = $("#entity");
   let shown = null;
   let shownKey = "";
   const MINER_STATUS = {
-    working: (m) => `Mining ${ITEMS[m.item].name.toLowerCase()}`,
+    working: (m) => `Mining ${lower(m.item)}`,
     "no-resource": () => "Stopped: no ore under it. Miners have to sit on an ore patch.",
-    "no-output": () => "Stopped: nothing in front of the chute takes the ore. Put a belt or chest there.",
+    "no-output": () => "Stopped: nothing in front of the chute takes the ore. Put a belt, chest or furnace there.",
     full: () => "Stopped: no room in front for the ore. Empty the chest or clear the belt.",
   };
+  const FURNACE_STATUS = {
+    working: (f) => `Smelting ${lower(f.smelting)} into ${lower(SMELTING[f.smelting].out, 2)}`,
+    "no-input": () => "Idle: nothing to smelt. It takes iron ore, copper ore or stone.",
+    "no-fuel": () => "Stopped: no fuel. Give it coal.",
+    full: () => "Stopped: the output is full. Take what it made, or put an inserter there to take it out.",
+  };
+  const INSERTER_STATUS = {
+    working: (e) => (e.hand ? `Moving ${lower(e.hand)}` : "Swinging back"),
+    idle: () => "Waiting for something the building in front can use.",
+    waiting: (e) => `Holding ${lower(e.hand)} until there's room in front.`,
+    "no-output": () => "Stopped: nothing in front takes items. It drops into belts, chests and furnaces.",
+  };
   const closeButton = `<button class="close" data-action="close" aria-label="Close">✕</button>`;
+  const slotRow = (label, s) =>
+    `<li><em>${label}</em>${s ? `${itemSwatch(s.item)}<span>${itemName(s.item, s.n)}</span><b>${s.n}</b>` : `<span class="empty">Empty</span>`}</li>`;
+  const bar = (fraction) => ($("#entity-bar").style.width = `${fraction * 100}%`);
+
+  // Each panel: the key its markup depends on, the markup, and what moves every tick.
+  const PANELS = {
+    chest: {
+      key: (c) => c.inventory.version,
+      html: (c) => {
+        const n = total(c.inventory);
+        return `<h3>Chest ${closeButton}</h3>
+          <p class="meta">${n} / ${BUILDINGS.chest.capacity} items</p>
+          <ul class="items">${itemRows(c.inventory) || `<li class="empty">Empty</li>`}</ul>
+          <button class="wide" data-action="take"${n ? "" : " disabled"}>Take all</button>`;
+      },
+    },
+    miner: {
+      key: (m, world) => `${m.status} ${m.item} ${oreLeftUnder(world, m)}`,
+      html: (m, world) => `<h3>Miner ${closeButton}</h3>
+        <p class="status" data-status="${m.status}">${MINER_STATUS[m.status](m)}</p>
+        <p class="meta">Ore left under it: ${oreLeftUnder(world, m)}</p>
+        <span class="bar"><i id="entity-bar"></i></span>`,
+      tick: (m) => bar(m.progress / BUILDINGS.miner.period),
+    },
+    // The player can top up the ore and fuel from the inventory and take what it made.
+    furnace: {
+      key: (f, world) => `${f.status} ${JSON.stringify([f.input, f.fuel, f.output, f.smelting])} ${world.inventory.version}`,
+      html: (f, world) => {
+        const inv = world.inventory;
+        const adds = [...Object.keys(FUEL), ...Object.keys(SMELTING)]
+          .map((id) => [id, Math.min(count(inv, id), furnaceRoom(f, id))])
+          .filter(([, n]) => n > 0)
+          .map(([id, n]) => `<button data-action="fill" data-item="${id}">Add ${n} ${lower(id, n)}</button>`);
+        const out = f.output;
+        return `<h3>Furnace ${closeButton}</h3>
+          <p class="status" data-status="${f.status}">${FURNACE_STATUS[f.status](f)}</p>
+          <span class="bar"><i id="entity-bar"></i></span>
+          <ul class="items slots">${slotRow("Ore", f.input)}${slotRow("Fuel", f.fuel)}${slotRow("Made", out)}</ul>
+          ${adds.length ? `<div class="actions">${adds.join("")}</div>` : ""}
+          <button class="wide" data-action="take-output"${out ? "" : " disabled"}>${out ? `Take ${out.n} ${lower(out.item, out.n)}` : "Nothing made yet"}</button>`;
+      },
+      tick: (f) => bar(f.smelting ? f.progress / SMELTING[f.smelting].time : 0),
+    },
+    inserter: {
+      key: (e) => `${e.status} ${e.hand}`,
+      html: (e) => `<h3>Inserter ${closeButton}</h3>
+        <p class="status" data-status="${e.status}">${INSERTER_STATUS[e.status](e)}</p>
+        <p class="meta">It takes from the building behind it and drops into the one in front (the arrow points that way), one item at a time and only what that building can use.</p>`,
+    },
+  };
+
   const syncEntity = (world) => {
     if (!shown) return;
     if (!world.entities.has(shown.id)) return game.builder.closeInspect();
-    if (shown.type === "chest") {
-      const inv = shown.inventory;
-      const key = `chest ${inv.version}`;
-      if (key === shownKey) return;
+    const panel = PANELS[shown.type];
+    const key = `${shown.type} ${panel.key(shown, world)}`;
+    if (key !== shownKey) {
       shownKey = key;
-      const n = total(inv);
-      const rows = Object.keys(ITEMS)
-        .filter((id) => count(inv, id) > 0)
-        .map((id) => `<li>${itemSwatch(id)}<span>${ITEMS[id].name}</span><b>${count(inv, id)}</b></li>`);
-      entityPanel.innerHTML = `<h3>Chest ${closeButton}</h3>
-        <p class="meta">${n} / ${BUILDINGS.chest.capacity} items</p>
-        <ul class="items">${rows.join("") || `<li class="empty">Empty</li>`}</ul>
-        <button class="wide" data-action="take"${n ? "" : " disabled"}>Take all</button>`;
-    } else {
-      const key = `miner ${shown.status} ${shown.item} ${oreLeftUnder(world, shown)}`;
-      if (key !== shownKey) {
-        shownKey = key;
-        entityPanel.innerHTML = `<h3>Miner ${closeButton}</h3>
-          <p class="status" data-status="${shown.status}">${MINER_STATUS[shown.status](shown)}</p>
-          <p class="meta">Ore left under it: ${oreLeftUnder(world, shown)}</p>
-          <span class="bar"><i id="entity-bar"></i></span>`;
-      }
-      $("#entity-bar").style.width = `${(shown.progress / BUILDINGS.miner.period) * 100}%`;
+      entityPanel.innerHTML = panel.html(shown, world);
     }
+    panel.tick?.(shown);
   };
   const showEntity = (e) => {
-    shown = e?.type === "chest" || e?.type === "miner" ? e : null;
+    shown = e && PANELS[e.type] ? e : null;
     shownKey = "";
     entityPanel.hidden = !shown;
     if (shown) syncEntity(game.world);
   };
   entityPanel.addEventListener("click", (e) => {
-    const action = e.target.closest("[data-action]")?.dataset.action;
-    if (action === "close") game.builder.closeInspect();
-    if (action === "take" && shown?.inventory) {
-      const moved = takeAll(game.world, shown);
+    const btn = e.target.closest("[data-action]");
+    const action = btn?.dataset.action;
+    const world = game.world;
+    if (action === "close") return game.builder.closeInspect();
+    if (!shown) return;
+    if (action === "take" && shown.inventory) {
+      const moved = takeAll(world, shown);
       if (Object.keys(moved).length) toast(`Took ${describe(moved)}`);
-      syncEntity(game.world);
-      syncInventory(game.world);
-    }
+    } else if (action === "take-output") {
+      const moved = emptyOutput(shown, world.inventory);
+      if (Object.keys(moved).length) toast(`Took ${describe(moved)}`);
+    } else if (action === "fill") {
+      const n = fillFrom(shown, world.inventory, btn.dataset.item);
+      if (n) toast(`Added ${describe({ [btn.dataset.item]: n })}`);
+    } else return;
+    syncEntity(world);
+    syncInventory(world);
   });
 
   const invPanel = $("#inventory");
@@ -570,14 +637,16 @@ function help(el) {
       <dt>Belt lines</dt><dd>Touch: press and hold, then drag. Mouse: drag with the left button. The belts face the way you drag.</dd>
       <dt>Remove</dt><dd>Pick Remove. Touch: tap a building to mark it, then tap it again to remove it. Mouse: click a building. You get its full cost back.</dd>
       <dt>Moving around</dt><dd>A quick drag always moves the map, even with a tool picked. With a mouse, drag with the right button while laying belts.</dd>
-      <dt>Keys</dt><dd>1 belt, 2 miner, 3 chest, X remove, R rotate, Q or Esc put the tool away.</dd>
+      <dt>Keys</dt><dd>1 belt, 2 miner, 3 chest, 4 furnace, 5 inserter, X remove, R rotate, Q or Esc put the tool away.</dd>
     </dl>
     <h2>Items</h2>
     <dl>
       <dt>Mining</dt><dd>With no tool picked, press and hold on an ore patch (mouse: hold the left button still). Keep holding to keep mining, and slide to the next tile when one runs out.</dd>
-      <dt>Costs</dt><dd>Buildings cost items. The number on each toolbar button is how many you can afford. Removing a building gives everything back.</dd>
-      <dt>Machines</dt><dd>A miner on ore digs one item a second and drops it out of its chute (the yellow block on its front). Put a belt or a chest there to catch it. A crossed-out rock means there's no ore under it; an amber sign means its output is blocked. Tap a chest or miner (no tool picked) to see inside; a chest's Take all moves everything into your inventory.</dd>
-      <dt>Belts</dt><dd>Belts carry items the way their arrows point, round corners, and into a chest at the end. A belt that runs into the side of another adds its items to that line; a line only carries so much, and the rest waits. Removing a belt gives you what was on it.</dd>
+      <dt>Costs</dt><dd>Buildings cost plates and stone. The number on each toolbar button is how many you can afford. Removing a building gives everything back.</dd>
+      <dt>Machines</dt><dd>A miner on ore digs one item a second and drops it out of its chute (the yellow block on its front). Put a belt, chest or furnace there to catch it. A crossed-out rock means there's no ore under it; an amber sign means its output is blocked. Tap a building (no tool picked) to see inside; a chest's Take all moves everything into your inventory.</dd>
+      <dt>Belts</dt><dd>Belts carry items the way their arrows point, round corners, and into a chest or furnace at the end. A belt that runs into the side of another adds its items to that line; a line only carries so much, and the rest waits. Removing a belt gives you what was on it.</dd>
+      <dt>Furnaces</dt><dd>A furnace smelts iron ore into iron plates, copper ore into copper plates and stone into bricks (two stone each), about one a second, burning coal as it goes (one coal smelts 8). A crossed-out flame means it has something to smelt but no coal. Tap it (no tool picked) to add ore and coal from your inventory and take what it made. Belts, miners and inserters feed it too, but only a few at a time. Furnaces cost stone, so you can always build one and smelt your first plates by hand.</dd>
+      <dt>Inserters</dt><dd>An inserter swings items from the building behind it into the one in front, the way its arrow points: off a belt into a furnace, out of a furnace onto a belt, chest to chest. It only picks up what the building in front can use, so one inserter can feed a furnace both ore and coal off a mixed belt. It only takes finished plates out of a furnace.</dd>
       <dt>Inventory</dt><dd>The bag button (or I) shows what you carry and what each building costs. You start with a small kit.</dd>
     </dl>
     <h2>Saving</h2>

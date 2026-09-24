@@ -7,7 +7,7 @@ import { ORE } from "../src/sim/map.js";
 
 const PERIOD = BUILDINGS.miner.period;
 const CAPACITY = BUILDINGS.chest.capacity;
-const RICH = { "iron-ore": 1000, "copper-ore": 1000, stone: 1000 };
+const RICH = { "iron-plate": 1000, "copper-plate": 1000, stone: 1000 };
 
 const run = (world, ticks) => {
   for (let i = 0; i < ticks; i++) step(world);
@@ -96,10 +96,10 @@ test("a miner stops when the chest is full and carries on when it's emptied", ()
 test("removing a chest gives back its cost and its contents", () => {
   const { world, chest } = setup();
   run(world, PERIOD * 5);
-  assert.deepEqual(refundOf(chest), { "iron-ore": 4 + 5 });
+  assert.deepEqual(refundOf(chest), { "iron-plate": 4, "iron-ore": 5 });
   const before = count(world.inventory, "iron-ore");
   removeAt(world, chest.x, chest.y);
-  assert.equal(count(world.inventory, "iron-ore"), before + 9);
+  assert.equal(count(world.inventory, "iron-ore"), before + 5);
   assert.equal(entityAt(world, chest.x, chest.y), null);
 });
 

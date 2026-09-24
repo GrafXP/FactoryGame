@@ -78,7 +78,7 @@ test("a mouse click removes straight away", () => {
   builder.setTool("remove");
   builder.tap(at(10, 10), "mouse");
   assert.equal(world.entities.size, 0);
-  assert.equal(out.messages.at(-1), "Got back 4 iron ore");
+  assert.equal(out.messages.at(-1), "Got back 4 iron plates");
 });
 
 test("touch: the first tap marks a building, a second tap on it removes it", () => {

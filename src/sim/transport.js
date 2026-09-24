@@ -7,7 +7,9 @@
 // most 7.5 items/s, which is also what a merge is capped at.
 import { BUILDINGS, DIRS } from "./buildings.js";
 import { entityAt } from "./grid.js";
-import { add, total } from "./inventory.js";
+import { ITEMS } from "./items.js";
+import { add, count, take, total } from "./inventory.js";
+import { furnaceCanTake, furnaceAdd, furnaceTakeOne } from "./furnace.js";
 
 export const BELT_LEN = 32;
 export const BELT_SPEED = 1;
@@ -15,19 +17,41 @@ export const ITEM_GAP = 8;
 const MID = BELT_LEN / 2;
 
 // Whether building e ever takes items from a neighbour.
-export const takesItems = (e) => e.type === "belt" || !!e.inventory;
+export const takesItems = (e) => e.type === "belt" || e.type === "furnace" || !!e.inventory;
 
 // Whether building e can take `item` right now. Belts take items onto their middle
-// (where a miner's chute drops them); chests store them until they're full.
+// (where a miner's chute drops them); chests store them until they're full;
+// furnaces take ore and fuel into their slots (see furnace.js).
 export function canTake(e, item) {
   if (e.type === "belt") return roomAt(e, MID);
+  if (e.type === "furnace") return furnaceCanTake(e, item);
   return !!e.inventory && total(e.inventory) < BUILDINGS[e.type].capacity;
 }
 
 // Gives e an item. Check canTake first.
 export function put(e, item) {
   if (e.type === "belt") insertAt(e, item, MID);
+  else if (e.type === "furnace") furnaceAdd(e, item);
   else add(e.inventory, item);
+}
+
+// Takes one item that `accepts(item)` says yes to out of building e, for an inserter,
+// and returns it (or null). Belts give up their frontmost such item, chests any,
+// furnaces only what they've made.
+export function takeOne(e, accepts) {
+  if (e.type === "belt") {
+    const i = e.items.findIndex((it) => accepts(it.item));
+    return i < 0 ? null : e.items.splice(i, 1)[0].item;
+  }
+  if (e.type === "furnace") return furnaceTakeOne(e, accepts);
+  if (!e.inventory) return null;
+  for (const id in ITEMS) {
+    if (count(e.inventory, id) && accepts(id)) {
+      take(e.inventory, { [id]: 1 });
+      return id;
+    }
+  }
+  return null;
 }
 
 const roomAt = (belt, pos) => belt.items.every((it) => Math.abs(it.pos - pos) >= ITEM_GAP);

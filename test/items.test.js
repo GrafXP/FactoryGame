@@ -40,6 +40,7 @@ test("inventory counts, pays and refunds costs", () => {
 
 test("describe lists items in words", () => {
   assert.equal(describe({ "iron-ore": 8, stone: 6 }), "8 iron ore, 6 stone");
+  assert.equal(describe({ "iron-plate": 2, "copper-plate": 1 }), "2 iron plates, 1 copper plate");
 });
 
 test("a new game starts with the kit, and every building is affordable from it", () => {
@@ -58,12 +59,12 @@ test("placing pays the cost, and removing refunds it", () => {
 });
 
 test("you can't place what you can't pay for, and are told what's missing", () => {
-  const world = createWorld({ seed: 1, kit: { "iron-ore": 5 } });
-  assert.equal(canPlace(world, "miner", 10, 10, 0), "Missing 3 iron ore, 4 copper ore, 6 stone");
+  const world = createWorld({ seed: 1, kit: { "iron-plate": 5 } });
+  assert.equal(canPlace(world, "miner", 10, 10, 0), "Missing 3 iron plates, 4 copper plates, 6 stone");
   assert.equal(place(world, "miner", 10, 10, 0), null);
-  assert.equal(count(world.inventory, "iron-ore"), 5, "a refused placement costs nothing");
+  assert.equal(count(world.inventory, "iron-plate"), 5, "a refused placement costs nothing");
   assert.ok(place(world, "chest", 10, 10, 0));
-  assert.equal(canPlace(world, "chest", 11, 10, 0), "Missing 3 iron ore");
+  assert.equal(canPlace(world, "chest", 11, 10, 0), "Missing 3 iron plates");
   // A blocked tile is reported before the cost.
   assert.equal(canPlace(world, "chest", 10, 10, 0), "Something is in the way");
 });
