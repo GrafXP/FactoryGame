@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createWorld, step, place, removeAt, refundOf } from "../src/sim/world.js";
 import { BUILDINGS, outputTile } from "../src/sim/buildings.js";
 import { canTake, put } from "../src/sim/transport.js";
-import { furnaceAdd, fillFrom, emptyOutput } from "../src/sim/furnace.js";
+import { furnaceAdd, fillFrom, emptySlot } from "../src/sim/furnace.js";
 import { SWING } from "../src/sim/inserter.js";
 import { SMELTING, FUEL } from "../src/sim/recipes.js";
 import { count, total } from "../src/sim/inventory.js";
@@ -100,6 +100,27 @@ test("stone needs two per brick and takes longer", () => {
   assert.equal(f.status, "no-input");
 });
 
+test("a lone stone waits for a second one, and the player can take it back", () => {
+  const world = setup();
+  const { x, y } = clearArea(world, 4);
+  const f = place(world, "furnace", x, y, 0);
+  furnaceAdd(f, "stone", 1);
+  furnaceAdd(f, "coal", 1);
+  run(world, SMELTING.stone.time * 2);
+  assert.equal(f.status, "no-input");
+  assert.equal(f.output, null);
+  assert.equal(canTake(f, "iron-ore"), false, "the stone blocks other ore");
+
+  const before = count(world.inventory, "stone");
+  assert.deepEqual(emptySlot(f, "input", world.inventory), { stone: 1 });
+  assert.equal(count(world.inventory, "stone"), before + 1);
+  assert.equal(f.input, null);
+  assert.equal(fillFrom(f, world.inventory, "iron-ore"), 50, "and other ore can go in");
+  run(world, PLATE_TICKS);
+  assert.deepEqual(f.output, { item: "iron-plate", n: 1 });
+  assert.deepEqual(emptySlot(f, "fuel", world.inventory), {}, "the coal is already burning");
+});
+
 test("a full output stops the furnace, and emptying it starts it again", () => {
   const world = setup();
   const { x, y } = clearArea(world, 4);
@@ -112,7 +133,7 @@ test("a full output stops the furnace, and emptying it starts it again", () => {
   assert.equal(f.input.n, 3);
 
   const before = count(world.inventory, "iron-plate");
-  assert.deepEqual(emptyOutput(f, world.inventory), { "iron-plate": STACK });
+  assert.deepEqual(emptySlot(f, "output", world.inventory), { "iron-plate": STACK });
   assert.equal(count(world.inventory, "iron-plate"), before + STACK);
   run(world, PLATE_TICKS);
   assert.deepEqual(f.output, { item: "iron-plate", n: 1 });

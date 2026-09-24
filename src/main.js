@@ -7,7 +7,7 @@ import { ITEMS, describe, itemName } from "./sim/items.js";
 import { count, affordable, total } from "./sim/inventory.js";
 import { takeAll, oreLeftUnder } from "./sim/world.js";
 import { SMELTING, FUEL } from "./sim/recipes.js";
-import { fillFrom, emptyOutput, furnaceRoom } from "./sim/furnace.js";
+import { fillFrom, emptySlot, furnaceRoom } from "./sim/furnace.js";
 import { serialize, deserialize } from "./sim/save.js";
 import { readSave, writeSave } from "./storage.js";
 import { getTheme, getThemePref, setThemePref, onThemeChange } from "./theme.js";
@@ -366,7 +366,11 @@ function playWorld(el, { world, seed, isNew = false }) {
   };
   const FURNACE_STATUS = {
     working: (f) => `Smelting ${lower(f.smelting)} into ${lower(SMELTING[f.smelting].out, 2)}`,
-    "no-input": () => "Idle: nothing to smelt. It takes iron ore, copper ore or stone.",
+    "no-input": (f) => {
+      if (!f.input) return "Idle: nothing to smelt. It takes iron ore, copper ore or stone.";
+      const { need, out } = SMELTING[f.input.item];
+      return `Waiting: it takes ${need} ${lower(f.input.item, need)} to make ${lower(out)}. Add more, or take it back.`;
+    },
     "no-fuel": () => "Stopped: no fuel. Give it coal.",
     full: () => "Stopped: the output is full. Take what it made, or put an inserter there to take it out.",
   };
@@ -377,8 +381,14 @@ function playWorld(el, { world, seed, isNew = false }) {
     "no-output": () => "Stopped: nothing in front takes items. It drops into belts, chests and furnaces.",
   };
   const closeButton = `<button class="close" data-action="close" aria-label="Close">✕</button>`;
-  const slotRow = (label, s) =>
-    `<li><em>${label}</em>${s ? `${itemSwatch(s.item)}<span>${itemName(s.item, s.n)}</span><b>${s.n}</b>` : `<span class="empty">Empty</span>`}</li>`;
+  // A furnace slot, with a button to take back what's in it (the output has its own big one).
+  const slotRow = (label, s, slot) =>
+    `<li><em>${label}</em>${
+      s
+        ? `${itemSwatch(s.item)}<span>${itemName(s.item, s.n)}</span><b>${s.n}</b>` +
+          (slot ? `<button class="take" data-action="empty" data-slot="${slot}" aria-label="Take back ${lower(s.item, s.n)}">Take</button>` : "")
+        : `<span class="empty">Empty</span>`
+    }</li>`;
   const bar = (fraction) => ($("#entity-bar").style.width = `${fraction * 100}%`);
 
   // Each panel: the key its markup depends on, the markup, and what moves every tick.
@@ -401,7 +411,7 @@ function playWorld(el, { world, seed, isNew = false }) {
         <span class="bar"><i id="entity-bar"></i></span>`,
       tick: (m) => bar(m.progress / BUILDINGS.miner.period),
     },
-    // The player can top up the ore and fuel from the inventory and take what it made.
+    // The player can add ore and fuel from the inventory, take them back, and take what it made.
     furnace: {
       key: (f, world) => `${f.status} ${JSON.stringify([f.input, f.fuel, f.output, f.smelting])} ${world.inventory.version}`,
       html: (f, world) => {
@@ -414,9 +424,9 @@ function playWorld(el, { world, seed, isNew = false }) {
         return `<h3>Furnace ${closeButton}</h3>
           <p class="status" data-status="${f.status}">${FURNACE_STATUS[f.status](f)}</p>
           <span class="bar"><i id="entity-bar"></i></span>
-          <ul class="items slots">${slotRow("Ore", f.input)}${slotRow("Fuel", f.fuel)}${slotRow("Made", out)}</ul>
+          <ul class="items slots">${slotRow("Ore", f.input, "input")}${slotRow("Fuel", f.fuel, "fuel")}${slotRow("Made", out)}</ul>
           ${adds.length ? `<div class="actions">${adds.join("")}</div>` : ""}
-          <button class="wide" data-action="take-output"${out ? "" : " disabled"}>${out ? `Take ${out.n} ${lower(out.item, out.n)}` : "Nothing made yet"}</button>`;
+          <button class="wide" data-action="empty" data-slot="output"${out ? "" : " disabled"}>${out ? `Take ${out.n} ${lower(out.item, out.n)}` : "Nothing made yet"}</button>`;
       },
       tick: (f) => bar(f.smelting ? f.progress / SMELTING[f.smelting].time : 0),
     },
@@ -454,8 +464,8 @@ function playWorld(el, { world, seed, isNew = false }) {
     if (action === "take" && shown.inventory) {
       const moved = takeAll(world, shown);
       if (Object.keys(moved).length) toast(`Took ${describe(moved)}`);
-    } else if (action === "take-output") {
-      const moved = emptyOutput(shown, world.inventory);
+    } else if (action === "empty") {
+      const moved = emptySlot(shown, btn.dataset.slot, world.inventory);
       if (Object.keys(moved).length) toast(`Took ${describe(moved)}`);
     } else if (action === "fill") {
       const n = fillFrom(shown, world.inventory, btn.dataset.item);

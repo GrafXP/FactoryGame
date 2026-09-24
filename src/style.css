@@ -589,6 +589,11 @@ body.playing nav {
   color: var(--muted);
 }
 
+.slots .take {
+  padding: 3px 10px;
+  font-size: 0.8rem;
+}
+
 .panel .actions {
   display: flex;
   flex-wrap: wrap;

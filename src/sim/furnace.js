@@ -69,11 +69,14 @@ export function fillFrom(f, inv, item) {
   return n;
 }
 
-// Moves the whole output into inventory `inv` and returns what moved.
-export function emptyOutput(f, inv) {
-  if (!f.output) return {};
-  const moved = { [f.output.item]: f.output.n };
-  f.output = null;
+// Moves everything in `slot` ("input", "fuel" or "output") into inventory `inv`
+// and returns what moved. The player takes plates out this way, and ore or coal
+// back, e.g. a lone stone that's waiting for a second one.
+export function emptySlot(f, slot, inv) {
+  const s = f[slot];
+  if (!s) return {};
+  const moved = { [s.item]: s.n };
+  f[slot] = null;
   give(inv, moved);
   return moved;
 }
