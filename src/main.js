@@ -341,10 +341,10 @@ function help(el) {
     </dl>
     <h2>Building</h2>
     <dl>
-      <dt>Place</dt><dd>Pick a building in the toolbar, then tap the map. The ghost is green where it fits and red where it doesn't. Tap the tool again to put it away.</dd>
+      <dt>Place</dt><dd>Pick a building in the toolbar. Touch: tap the map to put the ghost there, then tap the ghost to build it (tap elsewhere to move it). Mouse: the ghost follows the cursor, click to build. The ghost is green where it fits and red where it doesn't. Tap the tool again to put it away.</dd>
       <dt>Rotate</dt><dd>The Rotate button or R turns the next building.</dd>
       <dt>Belt lines</dt><dd>Touch: press and hold, then drag. Mouse: drag with the left button. The belts face the way you drag.</dd>
-      <dt>Remove</dt><dd>Pick Remove, then tap a building.</dd>
+      <dt>Remove</dt><dd>Pick Remove. Touch: tap a building to mark it, then tap it again to remove it. Mouse: click a building. You get its full cost back.</dd>
       <dt>Moving around</dt><dd>A quick drag always moves the map, even with a tool picked. With a mouse, drag with the right button while laying belts.</dd>
       <dt>Keys</dt><dd>1 belt, 2 miner, 3 chest, X remove, R rotate, Q or Esc put the tool away.</dd>
     </dl>

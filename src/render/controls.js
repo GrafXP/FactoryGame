@@ -6,6 +6,8 @@
 // things down instead of panning: straight away with the left mouse button, or after
 // a long press on touch (so a quick drag still pans). "hold" always waits for a long
 // press, with a finger or the left button, so a click or quick drag works as normal.
+// `onPoint` follows a hovering mouse (null when it leaves); a finger has no hover.
+// `onTap(p, pointerType)` says whether a tap came from "mouse", "touch" or "pen".
 // Works through the view's `cam`, never touches the sim. All callbacks get ground
 // points { x, y } in tile units (floats).
 const TAP_SLOP = 10; // px a press may move and still count as a tap
@@ -43,7 +45,6 @@ export function createControls(canvas, cam, { onPoint, onTap, canPaint = () => f
       stopPainting(false);
       anchor = null;
       pinch = twoFingers();
-      onPoint?.(null);
     }
   };
 
@@ -56,7 +57,6 @@ export function createControls(canvas, cam, { onPoint, onTap, canPaint = () => f
 
     const p = ground(e);
     const mouse = e.pointerType === "mouse";
-    if (!mouse) onPoint?.(p);
     const mode = p && canPaint(p);
     if (!mode || (mouse && e.button !== 0)) return;
     const beginPaint = () => {
@@ -82,11 +82,7 @@ export function createControls(canvas, cam, { onPoint, onTap, canPaint = () => f
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > TAP_SLOP) {
       press = null;
-      if (!painting) {
-        // It's a pan, not a tap: drop the pending long press and the finger's ghost.
-        clearTimeout(longPress);
-        if (e.pointerType !== "mouse") onPoint?.(null);
-      }
+      if (!painting) clearTimeout(longPress); // it's a pan, not a tap or a long press
     }
 
     if (painting) {
@@ -113,10 +109,9 @@ export function createControls(canvas, cam, { onPoint, onTap, canPaint = () => f
     if (painting) stopPainting(up);
     else if (press?.id === e.pointerId && up) {
       const p = ground(e);
-      if (p) onTap?.(p);
+      if (p) onTap?.(p, e.pointerType);
     }
     press = null;
-    if (e.pointerType !== "mouse") onPoint?.(null);
     startGesture(); // lifting one finger of a pinch carries on as a drag
   };
 

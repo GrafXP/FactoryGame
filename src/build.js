@@ -6,10 +6,22 @@ import { describe } from "./sim/items.js";
 // Build mode: the current tool and facing, the ghost preview, and turning taps and
 // drags into sim calls. Tools are a building type, "remove", or null (inspect).
 // With no tool, pressing and holding on ore hand-mines it.
+//
+// A mouse shows the ghost under the cursor and a click builds. A finger would hide
+// the ghost, so touch builds in two taps: the first leaves the ghost where you
+// tapped, a tap on the ghost builds it, and a tap anywhere else moves it. Removing
+// works the same way: the first tap marks a building, a second tap on it removes it.
 export function createBuilder(world, view, { onChange, onMessage, onInspect } = {}) {
   let tool = null;
   let rot = 0;
-  let pointer = null; // ground point the ghost follows
+  let pointer = null; // ground point under a hovering mouse
+  let pending = null; // ground point where a touch-placed ghost waits for its second tap
+  let marked = null; // building a touch has marked for removal, waiting for its second tap
+  const hinted = new Set(); // each "tap again" hint is shown once
+  const hint = (text) => {
+    if (!hinted.has(text)) onMessage?.(text);
+    hinted.add(text);
+  };
   let paint = null; // { start: tile, end: tile } while dragging a belt line
   let gesture = null; // "belt" or "mine" while a press-and-hold is under way
   let inspected = null; // tile shown with the inspect tool
@@ -27,8 +39,18 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
     if (paint) {
       return beltLine(paint.start.x, paint.start.y, paint.end.x, paint.end.y, rot).map((t) => ({ type: "belt", ...t }));
     }
-    if (!pointer || !BUILDINGS[tool]) return [];
-    return [{ type: tool, rot, ...anchorAt(tool, pointer) }];
+    const at = pointer || pending;
+    if (!at || !BUILDINGS[tool]) return [];
+    return [{ type: tool, rot, ...anchorAt(tool, at) }];
+  };
+
+  // Whether ground point p is on the waiting touch ghost.
+  const onPending = (p) => {
+    if (!pending) return false;
+    const a = anchorAt(tool, pending);
+    const { w, h } = footprint(tool, rot);
+    const t = tileOf(p);
+    return t.x >= a.x && t.x < a.x + w && t.y >= a.y && t.y < a.y + h;
   };
 
   const refresh = () => {
@@ -43,7 +65,8 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
       }),
     );
     if (tool === "remove") {
-      const e = pointer && entityAt(world, Math.floor(pointer.x), Math.floor(pointer.y));
+      if (marked && !world.entities.has(marked.id)) marked = null;
+      const e = pointer ? entityAt(world, Math.floor(pointer.x), Math.floor(pointer.y)) : marked;
       view.setHighlight(e && rectOf(e), "remove");
     } else if (tool === null && inspected && !gesture) {
       const e = entityAt(world, inspected.x, inspected.y);
@@ -72,6 +95,8 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
     setTool(next) {
       tool = next === tool ? null : next;
       paint = null;
+      pending = null;
+      marked = null;
       inspected = null;
       onInspect?.(null);
       changed();
@@ -93,19 +118,35 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
       refresh();
     },
 
-    tap(p) {
+    tap(p, pointerType) {
       const t = tileOf(p);
+      const twoTap = pointerType === "touch" || pointerType === "pen";
       if (tool === "remove") {
-        const removed = removeAt(world, t.x, t.y);
-        if (removed) onMessage?.(`Got back ${describe(BUILDINGS[removed.type].cost)}`);
-        else onMessage?.("Nothing to remove here");
+        const e = entityAt(world, t.x, t.y);
+        if (!e) {
+          marked = null;
+          onMessage?.("Nothing to remove here");
+        } else if (twoTap && e !== marked) {
+          marked = e;
+          hint("Tap it again to remove it");
+        } else {
+          removeAt(world, t.x, t.y);
+          marked = null;
+          onMessage?.(`Got back ${describe(BUILDINGS[e.type].cost)}`);
+        }
+      } else if (BUILDINGS[tool] && twoTap && !onPending(p)) {
+        pending = p;
+        hint("Tap the ghost again to build");
       } else if (BUILDINGS[tool]) {
-        const { x, y } = anchorAt(tool, p);
+        const { x, y } = anchorAt(tool, twoTap ? pending : p);
         const short = missing(world.inventory, BUILDINGS[tool].cost);
         const why = canFit(world, tool, x, y, rot);
         if (short) onMessage?.(`Can't build: missing ${describe(short)}`);
         else if (why) onMessage?.(`Can't build here: ${why.toLowerCase()}`);
-        else place(world, tool, x, y, rot);
+        else {
+          place(world, tool, x, y, rot);
+          pending = null;
+        }
       } else {
         inspected = tileAt(world, t.x, t.y);
         onInspect?.(inspected);

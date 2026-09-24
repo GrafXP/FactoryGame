@@ -63,6 +63,9 @@ remove mode. Buildings have footprints (1×1 belt, 2×2 miner, 1×1 chest) and c
 overlap. They don't do anything yet.
 Touch: a quick drag always pans, so belt lines start with a press-and-hold (a short
 buzz) and then a drag. Mouse: left-drag lays belts, right/middle-drag pans.
+A finger hides the ghost, so touch builds in two taps: the first shows the ghost,
+a tap on the ghost builds it. Remove works the same way (tap to mark, tap again
+to remove). With a mouse the ghost follows the cursor and one click does it.
 - [ ] Pick a building, see a green ghost (red where it isn't allowed), tap to place.
 - [ ] The rotate button (or R) turns the ghost, and placed buildings keep their facing.
 - [ ] Remove mode deletes a tapped building.
