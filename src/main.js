@@ -227,6 +227,15 @@ const TOOL_KEYS = { 1: "belt", 2: "miner", 3: "chest", 4: "furnace", 5: "inserte
 
 const itemSwatch = (id) => `<i class="swatch" style="background: var(--item-${id})"></i>`;
 const lower = (id, n) => itemName(id, n).toLowerCase();
+// A chip per item of a cost, marked short (with how many you have) when the inventory can't pay it.
+const costChips = (cost, inv) =>
+  Object.entries(cost)
+    .map(([id, n]) => {
+      const have = count(inv, id);
+      const short = have < n;
+      return `<span class="chip" data-short="${short}">${itemSwatch(id)}${n} ${lower(id, n)}${short ? ` <small>have ${have}</small>` : ""}</span>`;
+    })
+    .join("");
 // A list row for each item an inventory holds, in the usual item order.
 const itemRows = (inv) =>
   Object.keys(ITEMS)
@@ -282,8 +291,11 @@ function playWorld(el, { world, seed, isNew = false }) {
           <svg viewBox="0 0 24 24"><path d="M19 12a7 7 0 1 1-2-4.9M19 4v4h-4"/></svg><span>Rotate</span>
         </button>
       </div>
-      <div class="toast" id="toast" hidden></div>
-      <div class="mining" id="mining" hidden><span id="mining-label"></span><span class="bar"><i id="mining-bar"></i></span></div>
+      <div class="bottom-stack">
+        <div class="toast" id="toast" hidden></div>
+        <div class="mining" id="mining" hidden><span id="mining-label"></span><span class="bar"><i id="mining-bar"></i></span></div>
+        <div class="cost-strip" id="cost-strip" hidden></div>
+      </div>
       <div class="side">
         <div class="panel" id="entity" hidden></div>
         <div class="panel" id="inventory" hidden>
@@ -321,29 +333,49 @@ function playWorld(el, { world, seed, isNew = false }) {
     toastTimer = setTimeout(() => (el.hidden = true), 1800);
   };
 
-  // Toolbar mirrors the builder: the active tool is pressed, rotate only works for buildings.
-  const syncTools = ({ tool }) => {
-    for (const b of $("#toolbar").querySelectorAll("[data-tool]")) b.setAttribute("aria-pressed", b.dataset.tool === tool);
-    $("#rotate").disabled = !BUILDINGS[tool];
+  // The picked building's cost, just above the toolbar: each item it takes, in red
+  // with what you have when you're short, and how many you can build.
+  let tool = null;
+  const syncCost = (inv) => {
+    const b = BUILDINGS[tool];
+    $("#cost-strip").hidden = !b;
+    if (!b) return;
+    const n = affordable(inv, b.cost);
+    const can = n ? `you can build ${n > 99 ? "99+" : n}` : "you can't build one yet";
+    $("#cost-strip").innerHTML = `<div><b>${b.name}</b> costs${tool === "belt" ? " (each)" : ""} · <span class="can" data-zero="${!n}">${can}</span></div>
+      <div class="chips">${costChips(b.cost, inv)}</div>`;
   };
 
-  // Inventory panel, toolbar badges (how many of each building you can afford) and
-  // the mining readout. Redrawn only when the inventory changes.
+  // Toolbar mirrors the builder: the active tool is pressed, rotate only works for buildings.
+  const syncTools = (state) => {
+    tool = state.tool;
+    for (const b of $("#toolbar").querySelectorAll("[data-tool]")) b.setAttribute("aria-pressed", b.dataset.tool === tool);
+    $("#rotate").disabled = !BUILDINGS[tool];
+    syncCost(game.world.inventory);
+  };
+  for (const btn of $("#toolbar").querySelectorAll("[data-tool]")) {
+    const b = BUILDINGS[btn.dataset.tool];
+    if (b) btn.title = `${b.name}: ${describe(b.cost)}`;
+  }
+
+  // Inventory panel, costs, toolbar badges (how many of each building you can
+  // afford) and the cost strip. Redrawn only when the inventory changes.
   let shownInventory = -1;
   const syncInventory = (world) => {
     const inv = world.inventory;
     if (inv.version === shownInventory) return;
     shownInventory = inv.version;
     $("#inv-items").innerHTML = itemRows(inv) || `<li class="empty">Empty. Hold on an ore patch to mine it.</li>`;
+    $("#inv-costs").innerHTML = Object.values(BUILDINGS)
+      .map((b) => `<li><span>${b.name}</span><span class="chips">${costChips(b.cost, inv)}</span></li>`)
+      .join("");
     for (const badge of $("#toolbar").querySelectorAll("[data-badge]")) {
       const n = affordable(inv, BUILDINGS[badge.dataset.badge].cost);
       badge.textContent = n > 99 ? "99+" : n;
       badge.dataset.zero = n === 0;
     }
+    syncCost(inv);
   };
-  $("#inv-costs").innerHTML = Object.values(BUILDINGS)
-    .map((b) => `<li><span>${b.name}</span><span class="cost">${describe(b.cost)}</span></li>`)
-    .join("");
 
   const syncMining = (world) => {
     const m = world.mining;
