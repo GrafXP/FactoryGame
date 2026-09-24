@@ -3,7 +3,11 @@
 import { generateMap, ORE, ORE_NAMES } from "./map.js";
 import { BUILDINGS, footprint, outputTile } from "./buildings.js";
 import { ORE_ITEM, START_KIT, describe } from "./items.js";
-import { createInventory, add, give, missing, take, total, moveAll } from "./inventory.js";
+import { createInventory, add, give, missing, take, moveAll } from "./inventory.js";
+import { inMap, entityAt } from "./grid.js";
+import { stepBelts, takesItems, canTake, put } from "./transport.js";
+
+export { entityAt };
 
 export const TICK_RATE = 60;
 export const MAP_SIZE = 128;
@@ -29,9 +33,8 @@ export function step(world) {
   world.tick++;
   stepMining(world);
   for (const e of world.entities.values()) if (e.type === "miner") stepMiner(world, e);
+  stepBelts(world);
 }
-
-const inMap = (world, x, y) => Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0 && x < world.size && y < world.size;
 
 // What's on tile (x, y), or null outside the map.
 export function tileAt(world, x, y) {
@@ -39,11 +42,6 @@ export function tileAt(world, x, y) {
   const { size, ore, amount } = world.map;
   const i = y * size + x;
   return { x, y, ore: ore[i], oreName: ORE_NAMES[ore[i]], amount: amount[i], entity: entityAt(world, x, y) };
-}
-
-export function entityAt(world, x, y) {
-  if (!inMap(world, x, y)) return null;
-  return world.entities.get(world.grid[y * world.size + x]) || null;
 }
 
 // Why a building's footprint doesn't fit at (x, y), or null if it does.
@@ -87,14 +85,16 @@ export function removeAt(world, x, y) {
   fill(world, entity, 0);
   give(world.inventory, refundOf(entity));
   if (entity.inventory) entity.inventory.items = {};
+  if (entity.items) entity.items = [];
   world.version++;
   return entity;
 }
 
-// What removing a building gives back: its cost plus whatever it holds.
+// What removing a building gives back: its cost plus whatever it holds or carries.
 export function refundOf(entity) {
   const items = { ...BUILDINGS[entity.type].cost };
   for (const id in entity.inventory?.items) items[id] = (items[id] || 0) + entity.inventory.items[id];
+  for (const it of entity.items || []) items[it.item] = (items[it.item] || 0) + 1;
   return items;
 }
 
@@ -104,23 +104,19 @@ export function takeAll(world, chest) {
 }
 
 // State a new building starts with. Miners track their dig and why they're stopped,
-// chests hold items.
+// chests hold items, belts carry them (see transport.js).
 function initialState(type) {
   if (type === "miner") return { progress: 0, status: "working", item: null };
   if (type === "chest") return { inventory: createInventory() };
+  if (type === "belt") return { items: [] };
   return {};
-}
-
-// Whether building `e` can take one more `item` right now.
-function accepts(e, item) {
-  return !!e.inventory && total(e.inventory) < BUILDINGS[e.type].capacity;
 }
 
 // A miner digs the ore under its footprint into whatever is on its output tile.
 // status says what it's doing: "working", "no-resource" (no ore left under it),
-// "no-output" (nothing in front that takes items) or "full" (that thing is full).
-// It only digs when the item has somewhere to go, so a stopped miner loses nothing.
-// `item` is what it's digging.
+// "no-output" (nothing in front takes items) or "full" (it has dug an item and the
+// thing in front has no room for it yet). It waits with the finished item rather
+// than dropping it, so a stopped miner loses nothing. `item` is what it's digging.
 function stepMiner(world, m) {
   const i = oreUnder(world, m);
   if (i < 0) {
@@ -132,13 +128,22 @@ function stepMiner(world, m) {
   const item = (m.item = ORE_ITEM[world.map.ore[i]]);
   const out = outputTile(m);
   const target = entityAt(world, out.x, out.y);
-  if (!target || !target.inventory) m.status = "no-output";
-  else if (!accepts(target, item)) m.status = "full";
-  else m.status = "working";
-  if (m.status !== "working" || ++m.progress < BUILDINGS.miner.period) return;
-  m.progress = 0;
-  dig(world, i);
-  add(target.inventory, item);
+  if (!target || !takesItems(target)) {
+    m.status = "no-output";
+    return;
+  }
+  const period = BUILDINGS.miner.period;
+  if (m.progress < period) m.progress++;
+  if (m.progress < period) {
+    m.status = "working";
+  } else if (!canTake(target, item)) {
+    m.status = "full";
+  } else {
+    m.status = "working";
+    m.progress = 0;
+    dig(world, i);
+    put(target, item);
+  }
 }
 
 // Index of the first ore tile under a building, or -1 if there's none.

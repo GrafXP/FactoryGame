@@ -238,8 +238,8 @@ function play(el) {
   const MINER_STATUS = {
     working: (m) => `Mining ${ITEMS[m.item].name.toLowerCase()}`,
     "no-resource": () => "Stopped: no ore under it. Miners have to sit on an ore patch.",
-    "no-output": () => "Stopped: nothing in front of the chute takes the ore. Put a chest there.",
-    full: () => "Stopped: the chest in front is full. Empty it to carry on.",
+    "no-output": () => "Stopped: nothing in front of the chute takes the ore. Put a belt or chest there.",
+    full: () => "Stopped: no room in front for the ore. Empty the chest or clear the belt.",
   };
   const closeButton = `<button class="close" data-action="close" aria-label="Close">✕</button>`;
   const syncEntity = (world) => {
@@ -415,7 +415,8 @@ function help(el) {
     <dl>
       <dt>Mining</dt><dd>With no tool picked, press and hold on an ore patch (mouse: hold the left button still). Keep holding to keep mining, and slide to the next tile when one runs out.</dd>
       <dt>Costs</dt><dd>Buildings cost items. The number on each toolbar button is how many you can afford. Removing a building gives everything back.</dd>
-      <dt>Machines</dt><dd>A miner on ore digs one item a second and drops it out of its chute (the yellow block on its front). Put a chest there to catch it. A crossed-out rock means there's no ore under it; an amber sign means its output is blocked. Tap a chest or miner (no tool picked) to see inside; a chest's Take all moves everything into your inventory.</dd>
+      <dt>Machines</dt><dd>A miner on ore digs one item a second and drops it out of its chute (the yellow block on its front). Put a belt or a chest there to catch it. A crossed-out rock means there's no ore under it; an amber sign means its output is blocked. Tap a chest or miner (no tool picked) to see inside; a chest's Take all moves everything into your inventory.</dd>
+      <dt>Belts</dt><dd>Belts carry items the way their arrows point, round corners, and into a chest at the end. A belt that runs into the side of another adds its items to that line; a line only carries so much, and the rest waits. Removing a belt gives you what was on it.</dd>
       <dt>Inventory</dt><dd>The bag button (or I) shows what you carry and what each building costs. You start with a small kit.</dd>
     </dl>
     <h2>The map</h2>

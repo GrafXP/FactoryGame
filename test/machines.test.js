@@ -71,10 +71,6 @@ test("a miner with nothing in front waits, and starts once a chest is placed", (
   removeAt(world, chest.x, chest.y);
   run(world, PERIOD * 3);
   assert.equal(miner.status, "no-output");
-  place(world, "belt", chest.x, chest.y, 0);
-  run(world, 1);
-  assert.equal(miner.status, "no-output", "belts don't take items yet");
-  removeAt(world, chest.x, chest.y);
   const again = place(world, "chest", chest.x, chest.y, 0);
   run(world, PERIOD);
   assert.equal(count(again.inventory, "iron-ore"), 1);

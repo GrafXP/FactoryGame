@@ -2,7 +2,8 @@ import * as THREE from "three";
 import { footprint } from "../sim/buildings.js";
 
 // Each building is a few instanced parts. Geometry is modelled facing north (-z)
-// around the footprint's centre; `color` is a palette key.
+// around the footprint's centre; `color` is a palette key. A placement can pick a
+// variant with `model` (belt corners are "belt-left" and "belt-right").
 function makeParts() {
   const box = (w, h, d, x, y, z) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
 
@@ -15,10 +16,39 @@ function makeParts() {
   chevron.lineTo(-0.28, -0.28);
   const arrow = new THREE.ShapeGeometry(chevron).rotateX(-Math.PI / 2).translate(0, 0.09, 0.04);
 
+  // A corner belt: a quarter ring round the corner between its input and output
+  // edges. Fed from the left (west), that's the north-west corner; from the right,
+  // the north-east. Shape coordinates are (x, -z), so rotateX lays it flat.
+  const corner = (side) => {
+    const s = side === "left" ? 1 : -1;
+    const cx = -0.5 * s;
+    const ring = new THREE.Shape();
+    const [a0, a1] = side === "left" ? [0, -Math.PI / 2] : [Math.PI, Math.PI * 1.5];
+    ring.absarc(cx, 0.5, 0.95, a0, a1, side === "left");
+    ring.absarc(cx, 0.5, 0.05, a1, a0, side !== "left");
+    return new THREE.ExtrudeGeometry(ring, { depth: 0.08, bevelEnabled: false, curveSegments: 12 }).rotateX(-Math.PI / 2);
+  };
+  // The arrow on a corner sits on the curve, turned halfway between in and out.
+  const cornerArrow = (side) => {
+    const s = side === "left" ? 1 : -1;
+    return new THREE.ShapeGeometry(chevron)
+      .rotateX(-Math.PI / 2)
+      .rotateY((-Math.PI / 4) * s)
+      .translate(-0.5 * s + 0.5 * Math.SQRT1_2 * s, 0.09, -0.5 + 0.5 * Math.SQRT1_2);
+  };
+
   return {
     belt: [
       { geometry: box(0.9, 0.08, 1, 0, 0.04, 0), color: "belt" },
       { geometry: arrow, color: "beltArrow" },
+    ],
+    "belt-left": [
+      { geometry: corner("left"), color: "belt" },
+      { geometry: cornerArrow("left"), color: "beltArrow" },
+    ],
+    "belt-right": [
+      { geometry: corner("right"), color: "belt" },
+      { geometry: cornerArrow("right"), color: "beltArrow" },
     ],
     miner: [
       { geometry: box(1.7, 0.7, 1.7, 0, 0.35, 0), color: "miner" },
@@ -34,7 +64,7 @@ function makeParts() {
   };
 }
 
-// A set of instanced meshes drawing a list of placements { type, x, y, rot }.
+// A set of instanced meshes drawing a list of placements { type, x, y, rot, model? }.
 // A ghost layer is see-through and colours each placement by its `ok` flag.
 export function createBuildingLayer(parent, { ghost = false } = {}) {
   const group = new THREE.Group();
@@ -78,7 +108,7 @@ export function createBuildingLayer(parent, { ghost = false } = {}) {
   const set = (placements) => {
     last = placements;
     const byType = {};
-    for (const p of placements) (byType[p.type] ||= []).push(p);
+    for (const p of placements) (byType[p.model || p.type] ||= []).push(p);
     for (const slot of slots) {
       const list = byType[slot.type] || [];
       ensure(slot, list.length);

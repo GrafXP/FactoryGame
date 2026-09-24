@@ -1,8 +1,11 @@
 import * as THREE from "three";
 import { ORE } from "../sim/map.js";
 import { MINE_TICKS } from "../sim/world.js";
+import { ORE_ITEM } from "../sim/items.js";
+import { beltNetwork } from "../sim/transport.js";
 import { createBuildingLayer } from "./buildings.js";
 import { createStatusIcons } from "./status.js";
+import { createBeltItems } from "./belt-items.js";
 
 // Ore colours are picked so the four ores differ in hue *and* lightness in both
 // themes: iron blue, copper orange, coal black, stone pale sand.
@@ -119,6 +122,7 @@ export function createView(container, world, { theme = "dark" } = {}) {
 
   const buildings = createBuildingLayer(scene);
   const statusIcons = createStatusIcons(scene);
+  const beltItems = createBeltItems(scene);
   const ghosts = createBuildingLayer(scene, { ghost: true });
   let drawnVersion = -1;
 
@@ -214,6 +218,10 @@ export function createView(container, world, { theme = "dark" } = {}) {
     paintHighlight();
     buildings.setTheme(COLORS);
     ghosts.setTheme(COLORS);
+    // Items are drawn in their ore's colour.
+    const itemColors = {};
+    for (const ore in ORE_ITEM) itemColors[ORE_ITEM[ore]] = COLORS.ore[ore];
+    beltItems.setTheme(itemColors);
     paintOre();
   };
   applyTheme();
@@ -288,8 +296,12 @@ export function createView(container, world, { theme = "dark" } = {}) {
     render() {
       if (drawnVersion !== world.version) {
         drawnVersion = world.version;
-        buildings.set([...world.entities.values()]);
+        // Belts are drawn straight or as a corner, depending on what feeds them.
+        const { shape } = beltNetwork(world);
+        const models = { left: "belt-left", right: "belt-right" };
+        buildings.set([...world.entities.values()].map((e) => (e.type === "belt" ? { ...e, model: models[shape.get(e)] } : e)));
       }
+      beltItems.update(world);
       if (drawnOre !== world.mapVersion) paintOre();
       statusIcons.update(world.entities.values());
       const m = world.mining;
@@ -321,6 +333,7 @@ export function createView(container, world, { theme = "dark" } = {}) {
       ro.disconnect();
       groundTex.dispose();
       statusIcons.dispose();
+      beltItems.dispose();
       scene.traverse((obj) => {
         obj.geometry?.dispose();
         obj.material?.dispose();
