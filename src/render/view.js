@@ -8,6 +8,7 @@ import { createStatusIcons } from "./status.js";
 import { createItemLayer } from "./items.js";
 import { drawBeltItems, beltItemCount } from "./belt-items.js";
 import { createMachineParts } from "./machines.js";
+import { createRecipeIcons } from "./recipe-icons.js";
 
 // Ore colours are picked so the four ores differ in hue *and* lightness in both
 // themes: iron blue, copper orange, coal black, stone pale sand. Ore items are drawn
@@ -32,7 +33,17 @@ const PALETTES = {
     furnaceMouth: 0x17130f,
     inserter: 0x4a4f5c,
     inserterArm: 0xf2c94c,
-    items: { "iron-plate": 0xc8d4e3, "copper-plate": 0xf5a36c, "stone-brick": 0xb65a3c },
+    assembler: 0x5f7a96,
+    assemblerBase: 0x363d4a,
+    assemblerCog: 0xf2c94c,
+    items: {
+      "iron-plate": 0xc8d4e3,
+      "copper-plate": 0xf5a36c,
+      "stone-brick": 0xb65a3c,
+      "iron-gear": 0xa9b4c2,
+      "copper-cable": 0xf0a24a,
+      "electronic-circuit": 0x3fbf6a,
+    },
     ok: 0x5be38a,
     bad: 0xff5a5a,
   },
@@ -55,7 +66,17 @@ const PALETTES = {
     furnaceMouth: 0x221c16,
     inserter: 0x55596a,
     inserterArm: 0xe0a800,
-    items: { "iron-plate": 0x7d8ea3, "copper-plate": 0xd9793a, "stone-brick": 0xa0442a },
+    assembler: 0x7b95b0,
+    assemblerBase: 0x4a5260,
+    assemblerCog: 0xe0a800,
+    items: {
+      "iron-plate": 0x7d8ea3,
+      "copper-plate": 0xd9793a,
+      "stone-brick": 0xa0442a,
+      "iron-gear": 0x6b7788,
+      "copper-cable": 0xc4661a,
+      "electronic-circuit": 0x1f9a4a,
+    },
     ok: 0x10a84f,
     bad: 0xe0282e,
   },
@@ -139,6 +160,7 @@ export function createView(container, world, { theme = "dark" } = {}) {
   const statusIcons = createStatusIcons(scene);
   const items = createItemLayer(scene);
   const machines = createMachineParts(scene);
+  const recipeIcons = createRecipeIcons(scene);
   const ghosts = createBuildingLayer(scene, { ghost: true });
   let drawnVersion = -1;
 
@@ -238,6 +260,7 @@ export function createView(container, world, { theme = "dark" } = {}) {
     const itemColors = { ...COLORS.items };
     for (const ore in ORE_ITEM) itemColors[ORE_ITEM[ore]] = COLORS.ore[ore];
     items.setTheme(itemColors);
+    recipeIcons.setTheme(itemColors);
     paintOre();
   };
   applyTheme();
@@ -324,6 +347,7 @@ export function createView(container, world, { theme = "dark" } = {}) {
       items.end();
       if (drawnOre !== world.mapVersion) paintOre();
       statusIcons.update(world.entities.values());
+      recipeIcons.update(world.entities.values());
       const m = world.mining;
       mineMark.visible = !!m;
       if (m) {
@@ -355,6 +379,7 @@ export function createView(container, world, { theme = "dark" } = {}) {
       statusIcons.dispose();
       items.dispose();
       machines.dispose();
+      recipeIcons.dispose();
       scene.traverse((obj) => {
         obj.geometry?.dispose();
         obj.material?.dispose();

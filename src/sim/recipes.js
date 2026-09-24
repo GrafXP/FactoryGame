@@ -12,3 +12,16 @@ export const SMELTING = {
 export const FUEL = {
   coal: 480,
 };
+
+// Assembler recipes, by the item they make (which is also the recipe's id): the
+// ingredients `in` become `n` of the item after `time` ticks. The times let one
+// inserter per ingredient keep up (an inserter moves 1.2 items/s), so a copper
+// cable assembler feeds a circuit assembler through one inserter. The player can
+// hand-craft all of them, HAND_SPEED times as fast.
+export const RECIPES = {
+  "iron-gear": { in: { "iron-plate": 2 }, n: 1, time: 120 },
+  "copper-cable": { in: { "copper-plate": 1 }, n: 2, time: 60 },
+  "electronic-circuit": { in: { "iron-plate": 1, "copper-cable": 3 }, n: 1, time: 150 },
+};
+
+export const HAND_SPEED = 2;

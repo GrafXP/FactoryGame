@@ -26,7 +26,7 @@ const findBlock = (world, ore) => {
 // A running factory: an east-facing miner on iron feeding a belt that turns a corner
 // into a chest, with a second belt merging in from the side.
 const factory = () => {
-  const world = createWorld({ seed: 5, kit: { "iron-plate": 1000, "copper-plate": 100, stone: 100 } });
+  const world = createWorld({ seed: 5, kit: { "iron-plate": 1000, "copper-plate": 100, "iron-gear": 1000, "electronic-circuit": 1000, stone: 100 } });
   const { x, y } = findBlock(world, ORE.IRON);
   const miner = place(world, "miner", x, y, 1);
   const out = outputTile(miner);

@@ -69,6 +69,14 @@ function makeParts() {
       { geometry: box(0.5, 0.55, 0.5, 0.45, 1.17, -0.45), color: "furnaceTop" },
       { geometry: box(0.8, 0.5, 0.06, 0, 0.27, 0.9), color: "furnaceMouth" },
     ],
+    // A boxy machine; the cog on top turns while it works (render/machines.js), and
+    // an icon over it shows its recipe (render/recipe-icons.js).
+    assembler: [
+      { geometry: box(2.9, 0.2, 2.9, 0, 0.1, 0), color: "assemblerBase" },
+      { geometry: box(2.6, 1.0, 2.6, 0, 0.7, 0), color: "assembler" },
+      { geometry: box(1.7, 0.08, 1.7, 0, 1.24, 0), color: "assemblerBase" },
+      { geometry: new THREE.CylinderGeometry(0.12, 0.12, 0.3, 8).translate(0, 1.35, 0), color: "assemblerBase" },
+    ],
     // The base and the pivot; the arm swings in render/machines.js. The arrow on the
     // base points the way items go.
     inserter: [

@@ -14,6 +14,10 @@ import { BUILDING_KEYS } from "./ui/catalog.js";
 import { createBuildMenu } from "./ui/build-menu.js";
 import { createResources } from "./ui/resources.js";
 import { createEntityPanel } from "./ui/panels.js";
+import { createCrafting } from "./ui/crafting.js";
+import { queueItems } from "./sim/crafting.js";
+import { RECIPES } from "./sim/recipes.js";
+import { describe } from "./sim/items.js";
 
 const view = document.getElementById("view");
 let cleanup = null;
@@ -246,18 +250,21 @@ function playWorld(el, { world, seed, isNew = false }) {
         </div>
         <div class="resources" id="resources" role="button" tabindex="0" aria-label="Inventory (I)" aria-expanded="false"></div>
       </div>
-      <div class="bottom-stack">
-        <div class="toast" id="toast" hidden></div>
-        <div class="mining" id="mining" hidden><span id="mining-label"></span><span class="bar"><i id="mining-bar"></i></span></div>
-        <div class="toolinfo" id="toolinfo" hidden></div>
-      </div>
       <div class="buildbar" id="buildbar"></div>
       <div class="side">
         <div class="panel" id="entity" hidden></div>
         <div class="panel" id="inventory" hidden>
           <h3>Inventory<button class="close" data-action="close" aria-label="Close">${icon("close")}</button></h3>
           <ul class="items"></ul>
+          <h3>Craft by hand</h3>
+          <div id="craft"></div>
         </div>
+      </div>
+      <div class="bottom-stack">
+        <div class="toast" id="toast" hidden></div>
+        <div class="mining" id="mining" hidden><span id="mining-label"></span><span class="bar"><i id="mining-bar"></i></span></div>
+        <div class="mining" id="crafting" hidden><span></span><span class="bar"><i></i></span></div>
+        <div class="toolinfo" id="toolinfo" hidden></div>
       </div>
       <div class="debug" id="debug" hidden>
         <div id="dbg-perf">– fps · – ups</div>
@@ -339,6 +346,9 @@ function playWorld(el, { world, seed, isNew = false }) {
     $("#mining-bar").style.width = `${(m.progress / MINE_TICKS) * 100}%`;
   };
 
+  // The crafting readout is left out while the inventory's own queue is showing.
+  const crafting = createCrafting($("#craft"), $("#crafting"), { toast, showReadout: () => $("#inventory").hidden });
+
   const entityPanel = createEntityPanel($("#entity"), {
     close: () => game.builder.closeInspect(),
     changed: () => syncInventory(game.world),
@@ -368,6 +378,7 @@ function playWorld(el, { world, seed, isNew = false }) {
     onTick: (world) => {
       syncInventory(world);
       syncMining(world);
+      crafting.sync(world);
       entityPanel.sync(world);
       const s = Math.floor(world.tick / TICK_RATE);
       if (s === shownSeconds) return;
@@ -376,8 +387,16 @@ function playWorld(el, { world, seed, isNew = false }) {
     },
   });
 
-  menu = createBuildMenu({ bar: $("#buildbar"), info: $("#toolinfo"), sheet: $("#sheet") }, game.builder);
+  // The build bar's Craft button: hand-craft the parts a building is missing.
+  const craftParts = (cost) => {
+    const { steps, missing } = queueItems(game.world, cost);
+    if (missing) toast(`Can't craft that: missing ${describe(missing)}`);
+    else toast(`Crafting ${describe(Object.fromEntries(steps.map((s) => [s.recipe, s.n * RECIPES[s.recipe].n])))}`);
+    crafting.sync(game.world);
+  };
+  menu = createBuildMenu({ bar: $("#buildbar"), info: $("#toolinfo"), sheet: $("#sheet") }, game.builder, { craft: craftParts });
   syncInventory(game.world);
+  crafting.sync(game.world);
   $("#dbg-seed").textContent = `seed ${game.world.seed}`;
 
   // The line under the clock: Running or Paused, or briefly "Saved".
@@ -510,17 +529,19 @@ function help(el) {
       <dt>Belt lines</dt><dd>Touch: press and hold, then drag. Mouse: drag with the left button. The belts face the way you drag.</dd>
       <dt>Remove</dt><dd>Pick Remove. Touch: tap a building to mark it, then tap it again to remove it. Mouse: click a building. You get its full cost back.</dd>
       <dt>Moving around</dt><dd>A quick drag always moves the map, even with a tool picked. With a mouse, drag with the right button while laying belts.</dd>
-      <dt>Keys</dt><dd>B build menu, 1 belt, 2 miner, 3 chest, 4 furnace, 5 inserter, X remove, R rotate, Q or Esc put the tool away.</dd>
+      <dt>Keys</dt><dd>B build menu, 1 belt, 2 miner, 3 chest, 4 furnace, 5 inserter, 6 assembler, X remove, R rotate, Q or Esc put the tool away.</dd>
     </dl>
     <h2>Items</h2>
     <dl>
       <dt>Mining</dt><dd>With no tool picked, press and hold on an ore patch (mouse: hold the left button still). Keep holding to keep mining, and slide to the next tile when one runs out.</dd>
-      <dt>Costs</dt><dd>Buildings cost plates and stone. Removing a building gives everything back.</dd>
+      <dt>Costs</dt><dd>Buildings cost plates, gears, circuits and stone. Removing a building gives everything back.</dd>
       <dt>Machines</dt><dd>A miner on ore digs one item a second and drops it out of its chute (the yellow block on its front). Put a belt, chest or furnace there to catch it. A crossed-out rock means there's no ore under it; an amber sign means its output is blocked. Tap a building (no tool picked) to see inside; a chest's Take all moves everything into your inventory.</dd>
       <dt>Belts</dt><dd>Belts carry items the way their arrows point, round corners, and into a chest or furnace at the end. A belt that runs into the side of another adds its items to that line; a line only carries so much, and the rest waits. Removing a belt gives you what was on it.</dd>
       <dt>Furnaces</dt><dd>A furnace smelts iron ore into iron plates, copper ore into copper plates and stone into bricks (two stone each), about one a second, burning coal as it goes (one coal smelts 8). A crossed-out flame means it has something to smelt but no coal. Tap it (no tool picked) to add ore and coal from your inventory and take what it made. Belts, miners and inserters feed it too, but only a few at a time. Furnaces cost stone, so you can always build one and smelt your first plates by hand.</dd>
       <dt>Inserters</dt><dd>An inserter swings items from the building behind it into the one in front, the way its arrow points: off a belt into a furnace, out of a furnace onto a belt, chest to chest. It only picks up what the building in front can use, so one inserter can feed a furnace both ore and coal off a mixed belt. It only takes finished plates out of a furnace.</dd>
-      <dt>Inventory</dt><dd>The resource bar shows what you carry. Ore is drawn as a rock, plates as plates and bricks as bricks, each in its own colour. You start with a small kit.</dd>
+      <dt>Assemblers</dt><dd>An assembler makes one thing: gears (2 iron plates each), copper cable (2 from a copper plate) or circuits (an iron plate and 3 cables). Tap it (no tool picked) to pick what it makes; the icon over it shows what that is, and a question mark means it hasn't been told. Feed it with inserters and take what it makes out with another, or add and take by hand from its panel. Changing what it makes gives you back what it holds. A line like copper plates → cable assembler → inserter → circuit assembler runs on its own.</dd>
+      <dt>Crafting by hand</dt><dd>The inventory panel (tap the resource bar) has Craft by hand: +1 or +5 of gears, cable or circuits. Parts you need along the way are crafted first, so a circuit can be made straight from plates. Hands work twice as fast as an assembler, one craft at a time; the bar above the buttons shows progress, and ✕ in the queue calls a craft off and gives back its ingredients. When you pick a building you can't afford, Craft next to Done makes the parts you're missing.</dd>
+      <dt>Inventory</dt><dd>The resource bar shows what you carry. Ore is drawn as a rock, plates as plates, bricks as bricks, gears as gears, cable as a spool and circuits as green boards, each in its own colour. You start with a small kit.</dd>
     </dl>
     <h2>Saving</h2>
     <dl>

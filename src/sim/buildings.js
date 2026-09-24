@@ -1,16 +1,31 @@
 // Building types. Sizes are for rotation 0; odd rotations swap w and h.
 // Costs are paid from the player's inventory and refunded in full on removal.
-// Furnaces are made of stone, so a player with no plates can always smelt some.
+// Furnaces are made of stone, so a player with no plates can always smelt some;
+// gears and circuits can always be hand-crafted from plates.
 // A miner digs one item every `period` ticks; a chest holds up to `capacity` items.
 // A furnace's slots hold up to `stack` each, but belts, miners and inserters only
 // top them up to `feed` (see furnace.js). An inserter takes `swing` ticks to swing
-// across, and as long to swing back.
+// across, and as long to swing back. An assembler's slots hold up to `stack` of
+// each ingredient; machines fill them to two crafts' worth (see assembler.js).
 export const BUILDINGS = {
   belt: { name: "Belt", w: 1, h: 1, cost: { "iron-plate": 1 } },
-  miner: { name: "Miner", w: 2, h: 2, cost: { "iron-plate": 8, "copper-plate": 4, stone: 6 }, period: 60 },
+  miner: { name: "Miner", w: 2, h: 2, cost: { "iron-gear": 3, "iron-plate": 3, stone: 6 }, period: 60 },
   chest: { name: "Chest", w: 1, h: 1, cost: { "iron-plate": 4 }, capacity: 50 },
   furnace: { name: "Furnace", w: 2, h: 2, cost: { stone: 10 }, stack: 50, feed: 5 },
-  inserter: { name: "Inserter", w: 1, h: 1, cost: { "iron-plate": 2, "copper-plate": 1 }, swing: 24 },
+  inserter: {
+    name: "Inserter",
+    w: 1,
+    h: 1,
+    cost: { "iron-plate": 1, "iron-gear": 1, "electronic-circuit": 1 },
+    swing: 24,
+  },
+  assembler: {
+    name: "Assembler",
+    w: 3,
+    h: 3,
+    cost: { "iron-plate": 9, "iron-gear": 5, "electronic-circuit": 3 },
+    stack: 50,
+  },
 };
 
 // Rotation r faces DIRS[r]: 0 north (-y), 1 east, 2 south, 3 west.

@@ -15,6 +15,9 @@
   --item-iron-plate: #c8d4e3;
   --item-copper-plate: #f5a36c;
   --item-stone-brick: #b65a3c;
+  --item-iron-gear: #a9b4c2;
+  --item-copper-cable: #f0a24a;
+  --item-electronic-circuit: #3fbf6a;
   color-scheme: dark;
 }
 
@@ -34,6 +37,9 @@
   --item-iron-plate: #7d8ea3;
   --item-copper-plate: #d9793a;
   --item-stone-brick: #a0442a;
+  --item-iron-gear: #6b7788;
+  --item-copper-cable: #c4661a;
+  --item-electronic-circuit: #1f9a4a;
   color-scheme: light;
 }
 
@@ -325,6 +331,10 @@ body.playing nav {
 
 .item-icon .shade {
   fill: color-mix(in srgb, var(--c) 68%, #000);
+}
+
+.item-icon .dark {
+  fill: color-mix(in srgb, var(--c) 30%, #111);
 }
 
 /* Everything the player carries; tap for the inventory. Scrolls sideways when long. */
@@ -739,7 +749,8 @@ body.playing nav {
   justify-content: flex-start;
 }
 
-/* Panels (the tapped building, the inventory) stack in a column on the right, under the resource bar. */
+/* Panels (the tapped building, the inventory) stack in a column on the right, under the
+   resource bar, leaving room above the bottom bar for a readout or the tool bar. */
 .side {
   position: absolute;
   top: calc(104px + env(safe-area-inset-top, 0px));
@@ -748,7 +759,7 @@ body.playing nav {
   flex-direction: column;
   gap: 8px;
   width: min(270px, calc(100% - 24px));
-  max-height: calc(100% - 210px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  max-height: calc(100% - 254px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
   pointer-events: none;
 }
 
@@ -886,6 +897,111 @@ body.playing nav {
   gap: 6px;
   padding: 8px 10px;
   font-size: 0.85rem;
+}
+
+.panel button.wide.secondary {
+  color: var(--text);
+  background: none;
+  border: 1px solid var(--line);
+}
+
+/* Hand-crafting: the queue (the craft under way has a bar), then a row per recipe. */
+.queue li > span:first-of-type,
+.recipes li > span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.recipes small {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.queue .take,
+.recipes button {
+  display: grid;
+  place-items: center;
+  min-width: 38px;
+  padding: 6px 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.queue .take .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.recipes button:disabled {
+  opacity: 0.4;
+}
+
+.queue {
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* An assembler's recipe: what it makes (with Change), or the list to pick from. */
+.makes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 4px;
+  font-size: 0.85rem;
+}
+
+.makes span {
+  flex: 1;
+}
+
+.makes .take {
+  padding: 3px 10px;
+  font-size: 0.8rem;
+}
+
+.recipe-picks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recipe-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.recipe-pick .item-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.recipe-pick span {
+  display: flex;
+  flex-direction: column;
+}
+
+.recipe-pick small {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.recipe-pick[aria-pressed="true"] {
+  border-color: var(--accent);
+}
+
+/* The build bar's Craft button, for a building you can't afford but can craft the parts of. */
+.toolinfo .ti-craft {
+  padding: 9px 12px;
+  font-weight: 600;
+  color: var(--accent);
+  border-color: var(--accent);
+  border-radius: 10px;
 }
 
 /* Costs: a chip per item, red when you're short. */

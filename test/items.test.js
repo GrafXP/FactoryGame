@@ -60,7 +60,7 @@ test("placing pays the cost, and removing refunds it", () => {
 
 test("you can't place what you can't pay for, and are told what's missing", () => {
   const world = createWorld({ seed: 1, kit: { "iron-plate": 5 } });
-  assert.equal(canPlace(world, "miner", 10, 10, 0), "Missing 3 iron plates, 4 copper plates, 6 stone");
+  assert.equal(canPlace(world, "miner", 10, 10, 0), "Missing 3 iron gears, 6 stone");
   assert.equal(place(world, "miner", 10, 10, 0), null);
   assert.equal(count(world.inventory, "iron-plate"), 5, "a refused placement costs nothing");
   assert.ok(place(world, "chest", 10, 10, 0));

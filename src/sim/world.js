@@ -8,6 +8,8 @@ import { inMap, entityAt } from "./grid.js";
 import { stepBelts, takesItems, canTake, put } from "./transport.js";
 import { furnaceState, furnaceContents, stepFurnace } from "./furnace.js";
 import { inserterState, stepInserter } from "./inserter.js";
+import { assemblerState, assemblerContents, stepAssembler } from "./assembler.js";
+import { craftState, stepCraft } from "./crafting.js";
 
 export { entityAt };
 
@@ -29,15 +31,18 @@ export function createWorld({ seed = 1, size = MAP_SIZE, kit = START_KIT, map } 
     version: 0, // bumped whenever entities change, so the view knows to redraw them
     inventory: createInventory(kit), // the player's
     mining: null, // { x, y, item, progress } while the player is hand-mining a tile
+    craft: craftState(), // the player's hand-crafting queue (crafting.js)
   };
 }
 
 export function step(world) {
   world.tick++;
   stepMining(world);
+  stepCraft(world);
   for (const e of world.entities.values()) {
     if (e.type === "miner") stepMiner(world, e);
     else if (e.type === "furnace") stepFurnace(e);
+    else if (e.type === "assembler") stepAssembler(e);
     else if (e.type === "inserter") stepInserter(world, e);
   }
   stepBelts(world);
@@ -100,6 +105,7 @@ export function removeAt(world, x, y) {
   if (entity.inventory) entity.inventory.items = {};
   if (entity.items) entity.items = [];
   if (entity.type === "furnace") Object.assign(entity, furnaceState());
+  if (entity.type === "assembler") Object.assign(entity, assemblerState());
   if (entity.hand) entity.hand = null;
   world.version++;
   return entity;
@@ -112,6 +118,7 @@ export function refundOf(entity) {
   for (const id in entity.inventory?.items) add(id, entity.inventory.items[id]);
   for (const it of entity.items || []) add(it.item);
   if (entity.type === "furnace") for (const [id, n] of Object.entries(furnaceContents(entity))) add(id, n);
+  if (entity.type === "assembler") for (const [id, n] of Object.entries(assemblerContents(entity))) add(id, n);
   if (entity.hand) add(entity.hand);
   return items;
 }
@@ -122,14 +129,15 @@ export function takeAll(world, chest) {
 }
 
 // State a new building starts with. Miners track their dig and why they're stopped,
-// chests hold items, belts carry them (see transport.js), furnaces and inserters
-// are in furnace.js and inserter.js.
+// chests hold items, belts carry them (see transport.js); furnaces, inserters and
+// assemblers are in furnace.js, inserter.js and assembler.js.
 export function initialState(type) {
   if (type === "miner") return { progress: 0, status: "working", item: null };
   if (type === "chest") return { inventory: createInventory() };
   if (type === "belt") return { items: [] };
   if (type === "furnace") return furnaceState();
   if (type === "inserter") return inserterState();
+  if (type === "assembler") return assemblerState();
   return {};
 }
 

@@ -32,6 +32,14 @@ const ICONS = {
     g.fillStyle = "#ffffff";
     g.fillRect(16, 27, 32, 10);
   },
+  // An assembler that hasn't been told what to make: a question mark.
+  "no-recipe": (g) => {
+    g.fillStyle = "#6cb4ff";
+    g.font = "bold 40px system-ui, sans-serif";
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.fillText("?", 32, 35);
+  },
   // A furnace with nothing to burn: a flame, crossed out.
   "no-fuel": (g) => {
     g.fillStyle = "#ff8a1f";
@@ -54,7 +62,13 @@ const ICONS = {
 };
 // Which icon each machine status shows. Statuses not listed (e.g. "working", or an
 // inserter "waiting" for room, which is normal) show none.
-const ICON_FOR = { "no-resource": "no-resource", "no-output": "blocked", full: "blocked", "no-fuel": "no-fuel" };
+const ICON_FOR = {
+  "no-resource": "no-resource",
+  "no-output": "blocked",
+  full: "blocked",
+  "no-fuel": "no-fuel",
+  "no-recipe": "no-recipe",
+};
 
 function iconTexture(draw) {
   const canvas = document.createElement("canvas");

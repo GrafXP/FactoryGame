@@ -1,17 +1,22 @@
 import * as THREE from "three";
 import { ITEMS } from "../sim/items.js";
+import { gearGeometry } from "./shapes.js";
 
 // Draws loose items (on belts, in inserter hands) as instanced meshes, one per
 // shape (ITEMS[id].shape): ore is a rough rock, plates are flat, bricks are
-// blocks. Each shape sits with its bottom at the same height, so they all rest on
-// a belt the same way.
+// blocks, gears are gears, cable is a coil and circuits are boards. Each shape
+// sits with its bottom at the same height, so they all rest on a belt the same way.
 
-// y is where the item's centre would be for a rock; flatter shapes are moved down.
+// y is where the item's centre would be for a rock; the others are moved down so
+// their bottoms are where a rock's is (0.09 below).
 function makeShapes() {
   return {
     rock: new THREE.DodecahedronGeometry(0.13, 0),
     plate: new THREE.BoxGeometry(0.26, 0.05, 0.2).translate(0, -0.065, 0),
     brick: new THREE.BoxGeometry(0.24, 0.1, 0.13).translate(0, -0.04, 0),
+    gear: gearGeometry(8, 0.09, 0.13, 0.035, 0.05).translate(0, -0.09, 0),
+    cable: new THREE.TorusGeometry(0.075, 0.03, 6, 12).rotateX(Math.PI / 2).translate(0, -0.06, 0),
+    circuit: new THREE.BoxGeometry(0.24, 0.035, 0.18).translate(0, -0.0725, 0),
   };
 }
 

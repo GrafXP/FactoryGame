@@ -163,9 +163,24 @@ shape and colour (rock, plate, brick; `ITEMS[id].shape`).
 - [ ] Any building is at most two taps away, and the bar at the bottom fits a small phone.
 - [ ] You can tell what a building costs, and what you're missing, before placing it.
 
-### Phase 8: Assemblers and recipes
+### Phase 8: Assemblers and recipes ✅ (done)
 Assemblers with a recipe picker. The first recipe chain: gear, copper cable,
 circuit. Hand-crafting the same recipes from the inventory.
+Recipes live in `sim/recipes.js` (RECIPES, keyed by the item they make): a gear
+is 2 iron plates in 2 s, 2 copper cables 1 copper plate in 1 s, a circuit 1 iron
+plate + 3 cables in 2.5 s. Those rates let one inserter (1.2 items/s) keep each
+input fed, so copper → cable assembler → inserter → circuit assembler makes a
+circuit every 2.5 s. An assembler (3×3) is set from its panel, which is a recipe
+picker until it has one; changing the recipe gives back what it holds. Machines
+fill each ingredient to two crafts' worth, the player up to 50. A cog on top turns
+once per craft, and an icon on the roof's corner shows the recipe (a "?" until it
+has one). Hand-crafting (`sim/crafting.js`) is a queue in the inventory panel, twice
+as fast as an assembler; asking for something crafts its missing parts first, a
+craft takes its ingredients when it starts, and cancelling the one under way gives
+them back. The queue is saved (save format 3). Picking a building you can't afford
+but could craft the parts of shows a Craft button next to Done. Miners and
+inserters now cost gears (inserters a circuit too); the start kit has some gears
+and circuits.
 - [ ] Set an assembler to gears, feed it iron plates, and gears come out.
 - [ ] A fully automated circuit line (iron + copper → cable + plates → circuits) runs unattended.
 - [ ] Hand-crafting a gear from plates works from the inventory panel.

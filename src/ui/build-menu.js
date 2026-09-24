@@ -1,6 +1,7 @@
 import { BUILDINGS } from "../sim/buildings.js";
 import { affordable } from "../sim/inventory.js";
 import { describe } from "../sim/items.js";
+import { planItems } from "../sim/crafting.js";
 import { CATEGORIES, ABOUT } from "./catalog.js";
 import { icon } from "./icons.js";
 import { costChips } from "./format.js";
@@ -13,7 +14,8 @@ import { costChips } from "./format.js";
 //  - The build sheet: a tab per category, a card per building with what it's for,
 //    its cost and how many you can afford.
 //  - The tool bar, just above the bottom bar while a tool is picked: what it is,
-//    its cost, Rotate and Done.
+//    its cost, Rotate and Done. When you can't afford the building but could
+//    hand-craft the parts it's missing, a Craft button calls `craft(cost)`.
 const QUICK_SLOTS = 4;
 const QUICK_KEY = "factory:quick";
 const DEFAULT_QUICK = ["belt", "inserter", "miner", "furnace"];
@@ -33,7 +35,7 @@ function loadQuick() {
 
 const countBadge = (n) => (n > 99 ? "99+" : String(n));
 
-export function createBuildMenu({ bar, info, sheet }, builder) {
+export function createBuildMenu({ bar, info, sheet }, builder, { craft }) {
   let tool = null;
   let inv = { items: {} };
   let tab = 0;
@@ -87,12 +89,14 @@ export function createBuildMenu({ bar, info, sheet }, builder) {
     } else if (tool) {
       const b = BUILDINGS[tool];
       const n = affordable(inv, b.cost);
+      const craftable = !n && !planItems(inv, b.cost).missing;
       put(
         info,
         `${icon(tool)}<div class="ti-main">
           <div class="ti-text"><b>${b.name}</b><small data-zero="${!n}">${n ? `can build ${countBadge(n)}` : "can't afford one"}</small></div>
           <div class="chips">${costChips(b.cost, inv, { compact: true })}</div>
         </div>
+        ${craftable ? `<button class="ti-craft" data-action="craft" title="Hand-craft the missing parts">Craft</button>` : ""}
         <button class="ti-btn" data-action="rotate" aria-label="Rotate (R)">${icon("rotate")}</button>
         <button class="done" data-action="done">Done</button>`,
       );
@@ -156,6 +160,7 @@ export function createBuildMenu({ bar, info, sheet }, builder) {
     const action = e.target.closest("[data-action]")?.dataset.action;
     if (action === "rotate") builder.rotate();
     if (action === "done") builder.setTool(null);
+    if (action === "craft" && BUILDINGS[tool]) craft(BUILDINGS[tool].cost);
   });
   sheet.addEventListener("click", (e) => {
     const el = e.target.closest("[data-action], [data-tab], [data-pick]");

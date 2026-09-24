@@ -14,7 +14,7 @@ const { stack: STACK, feed: FEED } = BUILDINGS.furnace;
 const PLATE_TICKS = SMELTING["iron-ore"].time;
 
 const setup = () =>
-  createWorld({ seed: 3, kit: { "iron-plate": 1000, "copper-plate": 1000, stone: 1000, coal: 100, "iron-ore": 100 } });
+  createWorld({ seed: 3, kit: { "iron-plate": 1000, "copper-plate": 1000, "iron-gear": 1000, "electronic-circuit": 1000, stone: 1000, coal: 100, "iron-ore": 100 } });
 const run = (world, ticks, each) => {
   for (let i = 0; i < ticks; i++) {
     each?.(i);

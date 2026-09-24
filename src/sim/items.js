@@ -11,6 +11,9 @@ export const ITEMS = {
   "iron-plate": { name: "Iron plate", plural: "Iron plates", shape: "plate" },
   "copper-plate": { name: "Copper plate", plural: "Copper plates", shape: "plate" },
   "stone-brick": { name: "Stone brick", plural: "Stone bricks", shape: "brick" },
+  "iron-gear": { name: "Iron gear", plural: "Iron gears", shape: "gear" },
+  "copper-cable": { name: "Copper cable", plural: "Copper cables", shape: "cable" },
+  "electronic-circuit": { name: "Circuit", plural: "Circuits", shape: "circuit" },
 };
 
 // The item you get from mining each kind of ore tile.
@@ -22,8 +25,16 @@ export const ORE_ITEM = {
 };
 
 // What a new game starts with: enough for a couple of miners, a furnace fed by
-// inserters, a chest and some belts, plus coal to light the furnace.
-export const START_KIT = { "iron-plate": 50, "copper-plate": 12, stone: 30, coal: 10 };
+// inserters, a chest and some belts, plus coal to light the furnace. Anything more
+// (an assembler, say) means hand-crafting gears and circuits from the plates.
+export const START_KIT = {
+  "iron-plate": 40,
+  "copper-plate": 10,
+  "iron-gear": 10,
+  "electronic-circuit": 4,
+  stone: 30,
+  coal: 10,
+};
 
 // { "iron-plate": 8, stone: 6 } → "8 iron plates, 6 stone"
 export function describe(items) {

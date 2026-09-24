@@ -7,7 +7,7 @@ import { ORE } from "../src/sim/map.js";
 
 const PERIOD = BUILDINGS.miner.period;
 const CAPACITY = BUILDINGS.chest.capacity;
-const RICH = { "iron-plate": 1000, "copper-plate": 1000, stone: 1000 };
+const RICH = { "iron-plate": 1000, "copper-plate": 1000, "iron-gear": 1000, "electronic-circuit": 1000, stone: 1000 };
 
 const run = (world, ticks) => {
   for (let i = 0; i < ticks; i++) step(world);
