@@ -4,7 +4,8 @@ import { createWorld, step, place, removeAt, takeAll, refundOf, oreLeftUnder, en
 import { BUILDINGS, outputTile } from "../src/sim/buildings.js";
 import { count, total } from "../src/sim/inventory.js";
 import { ORE } from "../src/sim/map.js";
-import { charge, ALL } from "./helpers.js";
+import { chunkOf, tileIndex } from "../src/sim/chunks.js";
+import { charge, ALL, oreBlock } from "./helpers.js";
 
 const PERIOD = BUILDINGS.miner.period;
 const CAPACITY = BUILDINGS.chest.capacity;
@@ -17,21 +18,11 @@ const run = (world, ticks) => {
   }
 };
 
-// Top-left of a 2×2 block that's all `ore`, with plain room around it.
-const findBlock = (world, ore) => {
-  const at = (x, y) => world.map.ore[y * world.size + x];
-  for (let y = 2; y < world.size - 3; y++) {
-    for (let x = 2; x < world.size - 3; x++) {
-      if (at(x, y) === ore && at(x + 1, y) === ore && at(x, y + 1) === ore && at(x + 1, y + 1) === ore) return { x, y };
-    }
-  }
-  throw new Error("no ore block");
-};
 
 // A world with a north-facing miner on iron and a chest at its output.
 const setup = () => {
   const world = createWorld({ milestones: ALL, seed: 5, kit: RICH });
-  const { x, y } = findBlock(world, ORE.IRON);
+  const { x, y } = oreBlock(world, ORE.IRON);
   const miner = place(world, "miner", x, y, 0);
   const out = outputTile(miner);
   const chest = place(world, "chest", out.x, out.y, 0);
@@ -61,7 +52,7 @@ test("a miner on ore with a chest in front fills the chest over time", () => {
 
 test("a miner not on ore says so and does nothing", () => {
   const world = createWorld({ milestones: ALL, seed: 5, kit: RICH });
-  const { x, y } = findBlock(world, ORE.NONE);
+  const { x, y } = oreBlock(world, ORE.NONE);
   const miner = place(world, "miner", x, y, 0);
   const out = outputTile(miner);
   const chest = place(world, "chest", out.x, out.y, 0);
@@ -109,7 +100,7 @@ test("removing a chest gives back its cost and its contents", () => {
 
 test("a miner that mines out its ore stops", () => {
   const { world, miner, chest } = setup();
-  for (let y = miner.y; y < miner.y + 2; y++) for (let x = miner.x; x < miner.x + 2; x++) world.map.amount[y * world.size + x] = 1;
+  for (let y = miner.y; y < miner.y + 2; y++) for (let x = miner.x; x < miner.x + 2; x++) chunkOf(world, x, y).amount[tileIndex(x, y)] = 1;
   const v = world.mapVersion;
   run(world, PERIOD * 6);
   assert.equal(total(chest.inventory), 4);

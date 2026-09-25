@@ -1,10 +1,10 @@
 // Tile lookups shared by the sim modules.
+import { inMap, idAt } from "./chunks.js";
 
-export const inMap = (world, x, y) =>
-  Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0 && x < world.size && y < world.size;
+export { inMap };
 
 // The building covering tile (x, y), or null.
 export function entityAt(world, x, y) {
-  if (!inMap(world, x, y)) return null;
-  return world.entities.get(world.grid[y * world.size + x]) || null;
+  if (!inMap(x, y)) return null;
+  return world.entities.get(idAt(world, x, y)) || null;
 }

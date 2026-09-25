@@ -3,12 +3,15 @@ import { powerNetwork, polesInReach, poleArea } from "../sim/power.js";
 
 // Power on the map: the wires between poles, always, and while placing or looking
 // at something electric, the ground the poles power (tinted) with the area and
-// wires a pole about to be built would get.
+// wires a pole about to be built would get. The tint covers a WINDOW × WINDOW
+// square round the camera, which moves along with it a chunk at a time.
 export const POLE_TOP = 1.5; // where wires meet a pole, above its tile's centre
 const SAG = 0.18; // how far a wire droops in the middle, per 7 tiles of span
 const SEGMENTS = 8;
 const AREA_ALPHA = 60; // built poles' areas
 const GHOST_ALPHA = 130; // the new pole's area
+const WINDOW = 192;
+const STEP = 32;
 
 // The points of a drooping wire from pole a to pole b, as line segment pairs.
 function wirePoints(a, b, out) {
@@ -21,7 +24,7 @@ function wirePoints(a, b, out) {
   for (let i = 0; i < SEGMENTS; i++) out.push(...at(i / SEGMENTS), ...at((i + 1) / SEGMENTS));
 }
 
-export function createPowerLayer(parent, size) {
+export function createPowerLayer(parent) {
   const wires = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial());
   wires.frustumCulled = false;
   parent.add(wires);
@@ -29,18 +32,20 @@ export function createPowerLayer(parent, size) {
   ghostWires.frustumCulled = false;
   parent.add(ghostWires);
 
-  // One texel per tile, like the ground, laid just above it.
-  const pixels = new Uint8Array(size * size * 4);
-  const tex = new THREE.DataTexture(pixels, size, size);
+  // One texel per tile, like the ground, laid just above it; its top-left tile is
+  // (ox, oy).
+  const pixels = new Uint8Array(WINDOW * WINDOW * 4);
+  const tex = new THREE.DataTexture(pixels, WINDOW, WINDOW);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.magFilter = THREE.NearestFilter;
   const areas = new THREE.Mesh(
-    new THREE.PlaneGeometry(size, size),
+    new THREE.PlaneGeometry(WINDOW, WINDOW),
     new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }),
   );
   areas.rotation.x = -Math.PI / 2;
-  areas.position.set(size / 2, 0.015, size / 2);
   areas.renderOrder = 1;
+  let ox = 0;
+  let oy = 0;
   areas.visible = false;
   parent.add(areas);
 
@@ -63,10 +68,10 @@ export function createPowerLayer(parent, size) {
     const hex = color.getHex(); // sRGB
     const [r, g, b] = [hex >> 16, (hex >> 8) & 255, hex & 255];
     const mark = (area, alpha) => {
-      for (let y = Math.max(0, area.y); y < Math.min(size, area.y + area.h); y++) {
-        for (let x = Math.max(0, area.x); x < Math.min(size, area.x + area.w); x++) {
+      for (let y = Math.max(oy, area.y); y < Math.min(oy + WINDOW, area.y + area.h); y++) {
+        for (let x = Math.max(ox, area.x); x < Math.min(ox + WINDOW, area.x + area.w); x++) {
           // Texture rows run bottom-up in v, which is north-to-south on the rotated plane.
-          const t = ((size - 1 - y) * size + x) * 4;
+          const t = ((WINDOW - 1 - (y - oy)) * WINDOW + (x - ox)) * 4;
           pixels[t] = r;
           pixels[t + 1] = g;
           pixels[t + 2] = b;
@@ -80,14 +85,18 @@ export function createPowerLayer(parent, size) {
   };
 
   return {
-    update(world) {
+    // `center` is the ground point the camera looks at.
+    update(world, center) {
       if (wiredVersion !== world.version) {
         wiredVersion = world.version;
         setLines(wires, powerNetwork(world).wires);
       }
       areas.visible = ghostWires.visible = !!overlay;
       if (!overlay) return;
-      const key = `${world.version} ${overlay.pole?.x} ${overlay.pole?.y}`;
+      ox = Math.floor(center.x / STEP) * STEP - WINDOW / 2;
+      oy = Math.floor(center.y / STEP) * STEP - WINDOW / 2;
+      areas.position.set(ox + WINDOW / 2, 0.015, oy + WINDOW / 2);
+      const key = `${world.version} ${overlay.pole?.x} ${overlay.pole?.y} ${ox} ${oy}`;
       if (key === paintedKey) return;
       paintedKey = key;
       paintAreas(world);

@@ -5,7 +5,7 @@ import { beltNetwork, canTake, put, BELT_LEN, MID } from "../src/sim/transport.j
 import { REACH, buried } from "../src/sim/underground.js";
 import { count, total } from "../src/sim/inventory.js";
 import { serialize, deserialize, SaveError } from "../src/sim/save.js";
-import { ALL } from "./helpers.js";
+import { ALL, clearArea } from "./helpers.js";
 
 const KIT = { "iron-plate": 5000, "iron-gear": 1000, "electronic-circuit": 1000, stone: 100 };
 const setup = () => createWorld({ milestones: ALL, seed: 3, kit: { ...KIT } });
@@ -14,17 +14,6 @@ const run = (world, ticks, each) => {
     each?.(i);
     step(world);
   }
-};
-// Finds a clear square of bare ground, n tiles across, so tests don't hit ore.
-const clearArea = (world, n) => {
-  for (let y = 4; y < world.size - n - 4; y += 2) {
-    for (let x = 4; x < world.size - n - 4; x += 2) {
-      let clear = true;
-      for (let j = 0; j < n && clear; j++) for (let i = 0; i < n && clear; i++) if (world.map.ore[(y + j) * world.size + x + i]) clear = false;
-      if (clear) return { x, y };
-    }
-  }
-  throw new Error("no clear area");
 };
 const items = (chest) => Object.keys(chest.inventory.items).sort();
 

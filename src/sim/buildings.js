@@ -51,6 +51,9 @@ export const BUILDINGS = {
   // Where milestones are delivered (see progress.js). There's only ever one.
   hub: { name: "HUB", w: 4, h: 4, cost: { "iron-plate": 10, stone: 10 } },
   pole: { name: "Power pole", w: 1, h: 1, cost: { "iron-plate": 1, "copper-cable": 2 }, reach: 7, area: 3 },
+  // Charts the map view (see radar.js): the chunks up to `range` chunks away, one
+  // at a time, each taking `scan` ticks of work.
+  radar: { name: "Radar", w: 2, h: 2, cost: { "iron-plate": 10, "iron-gear": 5, "electronic-circuit": 3 }, draw: 2000, range: 12, scan: 240 },
 };
 
 // Power in J/tick → kW, for showing.

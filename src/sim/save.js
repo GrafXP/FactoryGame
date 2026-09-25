@@ -1,8 +1,10 @@
-// Turning a world into save data and back. The data is plain objects plus the map's
-// typed arrays, which IndexedDB stores as they are (see ../storage.js).
+// Turning a world into save data and back. The data is plain objects plus typed
+// arrays, which IndexedDB stores as they are (see ../storage.js).
 //
-// Only real state is saved. Anything worked out from it is rebuilt on load: the tile
-// grid, the belt and power networks, the version counters the view watches. Hand-mining isn't
+// Only real state is saved. Anything worked out from it is rebuilt on load: the
+// buildings on each tile, the belt and power networks, the version counters the view
+// watches. Of the map, only the chunks that have been dug into are saved, since the
+// rest come back from the seed, and which chunks are charted. Hand-mining isn't
 // saved either, since it only lasts while a finger is down. The hand-crafting queue
 // is, since a craft under way has taken its ingredients, and so is progress
 // towards the HUB's milestones.
@@ -10,6 +12,9 @@
 // SAVE_VERSION goes up whenever the format changes. Add a step to MIGRATIONS that
 // turns a save of the old version into the next one, so old saves keep loading.
 import { createWorld, addEntity, canFit, initialState } from "./world.js";
+import { CHUNK, LIMIT, chunkKey, keyChunk, newChunk } from "./chunks.js";
+import { WATER } from "./map.js";
+import { SCAN, SCAN_ORDER } from "./radar.js";
 import { BUILDINGS, DIRS } from "./buildings.js";
 import { ITEMS } from "./items.js";
 import { BELT_LEN, isConveyor, isSplitter } from "./transport.js";
@@ -20,7 +25,7 @@ import { usesPower } from "./power.js";
 import { MILESTONES } from "./progress.js";
 
 export const SAVE_FORMAT = "factory-save";
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 
 // What a save from before power gets, so its stopped machines can be started
 // again: the parts for a coal generator and ten poles, and coal to burn.
@@ -59,6 +64,36 @@ export const MIGRATIONS = {
   // 6 added underground belts, splitters and sorters. A version 5 save has none,
   // so it loads as it is.
   5: (data) => data,
+  // 7 made the map endless, in chunks, with the start at (0, 0) and a map view that
+  // shows only charted land. A version 6 map was `size` × `size` with the start in
+  // its middle: it's kept as it was, moved so its middle is at (0, 0), and all of it
+  // is charted. The land round it is new.
+  6: ({ size, map, entities, ...data }) => {
+    const half = Math.floor(size / 2);
+    const chunks = [];
+    const charted = [];
+    for (let cy = Math.floor(-half / CHUNK); cy * CHUNK < size - half; cy++) {
+      for (let cx = Math.floor(-half / CHUNK); cx * CHUNK < size - half; cx++) {
+        const ore = new Uint8Array(CHUNK * CHUNK);
+        const amount = new Uint32Array(CHUNK * CHUNK);
+        for (let i = 0; i < CHUNK * CHUNK; i++) {
+          const x = cx * CHUNK + (i % CHUNK) + half;
+          const y = cy * CHUNK + Math.floor(i / CHUNK) + half;
+          if (x < 0 || y < 0 || x >= size || y >= size) continue;
+          ore[i] = map.ore[y * size + x];
+          amount[i] = map.amount[y * size + x];
+        }
+        chunks.push({ cx, cy, ore, amount });
+        charted.push(cx, cy);
+      }
+    }
+    return {
+      ...data,
+      map: { chunks },
+      charted: Int32Array.from(charted),
+      entities: entities.map((e) => ({ ...e, x: e.x - half, y: e.y - half })),
+    };
+  },
 };
 
 // A save that can't be loaded. The message is written for the player.
@@ -71,10 +106,16 @@ export function serialize(world) {
     format: SAVE_FORMAT,
     version: SAVE_VERSION,
     seed: world.seed,
-    size: world.size,
     tick: world.tick,
     nextId: world.nextId,
-    map: { ore: world.map.ore.slice(), amount: world.map.amount.slice() },
+    // The chunks that have been dug into, and which chunks are charted, both in key order.
+    map: {
+      chunks: [...world.chunks.entries()]
+        .filter(([, c]) => c.changed)
+        .sort(([a], [b]) => a - b)
+        .map(([, c]) => ({ cx: c.cx, cy: c.cy, ore: c.ore.slice(), amount: c.amount.slice() })),
+    },
+    charted: Int32Array.from([...world.charted].sort((a, b) => a - b).flatMap((k) => [keyChunk(k).cx, keyChunk(k).cy])),
     inventory: { ...world.inventory.items },
     craft: {
       queue: world.craft.queue.map(({ recipe, n }) => ({ recipe, n })),
@@ -107,6 +148,7 @@ function saveEntity(e) {
     Object.assign(out, { progress: e.progress, crafting: e.crafting, status: e.status });
   }
   if (e.type === "generator") Object.assign(out, { fuel: e.fuel && { item: e.fuel.item, n: e.fuel.n }, burn: e.burn, status: e.status });
+  if (e.type === "radar") Object.assign(out, { next: e.next, progress: e.progress, status: e.status });
   if (usesPower(e.type)) out.energy = e.energy;
   return out;
 }
@@ -144,20 +186,22 @@ function migrate(data, migrations, current) {
 }
 
 function load(data) {
-  const { seed, size, tick, nextId, map, inventory, entities, craft, progress } = data;
-  check(Number.isInteger(size) && size > 0, "bad map size");
+  const { seed, tick, nextId, map, charted, inventory, entities, craft, progress } = data;
   check(Number.isInteger(tick) && tick >= 0, "bad clock");
-  check(map?.ore instanceof Uint8Array && map.ore.length === size * size, "bad ore map");
-  check(map?.amount instanceof Uint32Array && map.amount.length === size * size, "bad ore amounts");
+  check(Array.isArray(map?.chunks), "bad map");
+  check(charted instanceof Int32Array && charted.length % 2 === 0, "bad charted map");
   check(Array.isArray(entities), "no buildings list");
 
-  const world = createWorld({
-    seed,
-    size,
-    kit: checkItems(inventory, "inventory"),
-    map: { size, ore: map.ore.slice(), amount: map.amount.slice() },
-  });
+  const world = createWorld({ seed, kit: checkItems(inventory, "inventory"), charted: false });
   world.tick = tick;
+  for (const c of map.chunks) {
+    const key = checkChunkAt(c?.cx, c?.cy);
+    check(!world.chunks.has(key), "a map chunk twice");
+    check(c.ore instanceof Uint8Array && c.ore.length === CHUNK * CHUNK && c.ore.every((k) => k <= WATER), "bad ore map");
+    check(c.amount instanceof Uint32Array && c.amount.length === CHUNK * CHUNK, "bad ore amounts");
+    world.chunks.set(key, newChunk(c.cx, c.cy, { ore: c.ore.slice(), amount: c.amount.slice() }, true));
+  }
+  for (let i = 0; i < charted.length; i += 2) world.charted.add(checkChunkAt(charted[i], charted[i + 1]));
   Object.assign(world.craft, checkCraft(craft));
   Object.assign(world.progress, checkProgress(progress)); // before the HUB is added, which refers to it
 
@@ -198,6 +242,11 @@ function load(data) {
       Object.assign(e, { hand: s.hand, swing: s.swing, status: String(s.status) });
     }
     if (s.type === "generator") Object.assign(e, checkGenerator(s, where));
+    if (s.type === "radar") {
+      check(Number.isInteger(s.next) && s.next >= 0 && s.next <= SCAN_ORDER.length, `${where}: bad scan`);
+      check(Number.isInteger(s.progress) && s.progress >= 0 && s.progress < SCAN, `${where}: bad scan`);
+      Object.assign(e, { next: s.next, progress: s.progress, status: String(s.status) });
+    }
     if (usesPower(s.type)) {
       const draw = BUILDINGS[s.type].draw;
       check(Number.isInteger(s.energy) && s.energy >= 0 && s.energy <= 2 * draw, `${where}: bad energy`);
@@ -233,6 +282,13 @@ function checkConveyors(world) {
 
 function check(ok, why) {
   if (!ok) throw new SaveError(`The save is damaged (${why}).`);
+}
+
+// The key of chunk (cx, cy), checking it's on the map.
+function checkChunkAt(cx, cy) {
+  const most = LIMIT / CHUNK;
+  check(Number.isInteger(cx) && Number.isInteger(cy) && Math.abs(cx) <= most && Math.abs(cy) <= most, "bad map chunk");
+  return chunkKey(cx, cy);
 }
 
 // { itemId: count } with known items and whole positive counts.

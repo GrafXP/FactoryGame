@@ -21,24 +21,13 @@ import {
   deliverAll,
 } from "../src/sim/progress.js";
 import { serialize, deserialize } from "../src/sim/save.js";
-import { charge } from "./helpers.js";
+import { charge, clearArea } from "./helpers.js";
 
 const run = (world, ticks) => {
   for (let i = 0; i < ticks; i++) {
     charge(world);
     step(world);
   }
-};
-// Finds a clear square of bare ground, n tiles across.
-const clearArea = (world, n) => {
-  for (let y = 4; y < world.size - n - 4; y += 2) {
-    for (let x = 4; x < world.size - n - 4; x += 2) {
-      let clear = true;
-      for (let j = 0; j < n && clear; j++) for (let i = 0; i < n && clear; i++) if (world.map.ore[(y + j) * world.size + x + i]) clear = false;
-      if (clear) return { x, y };
-    }
-  }
-  throw new Error("no clear area");
 };
 // Enough of everything to deliver any milestone and build anything.
 const RICH = Object.fromEntries(Object.keys(RECIPES).concat(["iron-plate", "copper-plate", "stone", "stone-brick", "coal"]).map((id) => [id, 5000]));

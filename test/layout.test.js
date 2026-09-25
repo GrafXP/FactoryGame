@@ -6,7 +6,8 @@ import { put, BELT_LEN } from "../src/sim/transport.js";
 import { buried } from "../src/sim/underground.js";
 import { count, total } from "../src/sim/inventory.js";
 import { entitiesIn, layoutOf, rotateLayout, layoutCost, planLayout, buildLayout, layoutFits, removeEntities } from "../src/sim/layout.js";
-import { charge, ALL } from "./helpers.js";
+import { LIMIT } from "../src/sim/chunks.js";
+import { charge, ALL, clearArea } from "./helpers.js";
 
 const KIT = { "iron-plate": 5000, "iron-gear": 1000, "electronic-circuit": 1000, stone: 1000, "copper-cable": 100 };
 const setup = (kit = KIT) => createWorld({ milestones: ALL, seed: 3, kit: { ...kit } });
@@ -15,17 +16,6 @@ const run = (world, ticks) => {
     charge(world);
     step(world);
   }
-};
-// Finds a clear w×h area of bare ground, so tests don't hit ore.
-const clearArea = (world, w, h = w) => {
-  for (let y = 4; y < world.size - h - 4; y += 2) {
-    for (let x = 4; x < world.size - w - 4; x += 2) {
-      let clear = true;
-      for (let j = 0; j < h && clear; j++) for (let i = 0; i < w && clear; i++) if (world.map.ore[(y + j) * world.size + x + i]) clear = false;
-      if (clear) return { x, y };
-    }
-  }
-  throw new Error("no clear area");
 };
 const types = (list) => list.map((e) => e.type);
 
@@ -229,5 +219,5 @@ test("a turned layout fits where the buildings it came from stand", () => {
   removeEntities(world, [blocker]);
   assert.equal(layoutFits(world, turned, turned.x, turned.y, ignore), null);
   assert.equal(layoutFits(world, turned, turned.x, turned.y), "Something is in the way", "unless they're counted as gone");
-  assert.equal(layoutFits(world, turned, -1, 0), "Off the map");
+  assert.equal(layoutFits(world, turned, LIMIT, 0), "Off the map");
 });

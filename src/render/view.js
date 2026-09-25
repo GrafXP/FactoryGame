@@ -3,6 +3,8 @@ import { ORE } from "../sim/map.js";
 import { MINE_TICKS } from "../sim/world.js";
 import { ORE_ITEM } from "../sim/items.js";
 import { beltNetwork } from "../sim/transport.js";
+import { CHUNK, LIMIT } from "../sim/chunks.js";
+import { createTerrain } from "./terrain.js";
 import { createBuildingLayer } from "./buildings.js";
 import { createStatusIcons } from "./status.js";
 import { createItemLayer } from "./items.js";
@@ -51,6 +53,15 @@ const PALETTES = {
     hubBase: 0x363d4a,
     hubTrim: 0xf2c94c,
     powerArea: 0x6cb4ff,
+    radar: 0x6d7a8c,
+    radarDish: 0xd9d4c7,
+    water: 0x1f6f8b,
+    // The map view: charted ground, buildings and belts as blocks, and the fog over
+    // what isn't charted.
+    mapGround: 0x2c313c,
+    mapBuilding: 0xe6e9ef,
+    mapBelt: 0xf2c94c,
+    fog: 0x0b0c10,
     items: {
       "iron-plate": 0xc8d4e3,
       "copper-plate": 0xf5a36c,
@@ -98,6 +109,13 @@ const PALETTES = {
     hubBase: 0x4a5260,
     hubTrim: 0xe0a800,
     powerArea: 0x1f6fd1,
+    radar: 0x7d8899,
+    radarDish: 0xf2eee4,
+    water: 0x4fb3d9,
+    mapGround: 0xd3d6dc,
+    mapBuilding: 0x2a2f3a,
+    mapBelt: 0xc99700,
+    fog: 0x7c8591,
     items: {
       "iron-plate": 0x7d8ea3,
       "copper-plate": 0xd9793a,
@@ -110,20 +128,18 @@ const PALETTES = {
     bad: 0xe0282e,
   },
 };
-const ORE_TINT = 0.55; // how strongly an ore colours its ground tile
 const MIN_ZOOM = 6;
-const CAMERA_OFFSET = new THREE.Vector3(0, 50, 30); // angled view, looking north
+// Zoomed out past MAP_ZOOM tiles across, the playfield turns into the map view.
+export const MAP_ZOOM = 64;
+const MAX_ZOOM = 512;
+export const DEFAULT_ZOOM = 24;
+const GRID = 160; // tiles across the grid lines, which follow the camera
+const CAMERA_DIR = new THREE.Vector3(0, 50, 30).normalize(); // angled view, looking north
 
-// Cheap per-tile hash for cosmetic jitter. Render-only, so it doesn't need the sim's rng.
-const jitter = (x, y, k) => {
-  const h = Math.sin(x * 127.1 + y * 311.7 + k * 74.7) * 43758.5453;
-  return h - Math.floor(h);
-};
-
-// Draws a world. Reads sim state each frame, never writes it.
+// Draws a world. Reads sim state each frame, never writes it. The camera starts over
+// the start of the map, (0, 0).
 export function createView(container, world, { theme = "dark" } = {}) {
   let COLORS = PALETTES[theme] || PALETTES.dark;
-  const { size, ore, amount } = world.map;
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -138,60 +154,27 @@ export function createView(container, world, { theme = "dark" } = {}) {
 
   // Orthographic camera: one world unit = one tile, tile (x, y) spans x..x+1, z..z+1.
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 500);
-  const center = new THREE.Vector3(size / 2, 0, size / 2);
-  const maxZoom = size;
-  let zoom = 24; // tiles visible across the shorter screen side
+  const center = new THREE.Vector3(0, 0, 0);
+  let zoom = DEFAULT_ZOOM; // tiles visible across the shorter screen side
+  const isMap = () => zoom > MAP_ZOOM;
 
-  // Ground: one texel per tile, so ore patches cost no extra geometry.
-  const groundPixels = new Uint8Array(size * size * 4);
-  const groundTex = new THREE.DataTexture(groundPixels, size, size);
-  groundTex.colorSpace = THREE.SRGBColorSpace;
-  groundTex.magFilter = THREE.NearestFilter;
-  const groundMat = new THREE.MeshStandardMaterial({ map: groundTex });
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(size, size), groundMat);
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.set(size / 2, 0, size / 2);
-  scene.add(ground);
-
-  const grid = new THREE.GridHelper(size, size);
+  // The ground, a chunk at a time (terrain.js), and grid lines over it.
+  const terrain = createTerrain(scene);
+  const grid = new THREE.GridHelper(GRID, GRID);
   grid.material.transparent = true;
-  grid.position.set(size / 2, 0.01, size / 2);
   scene.add(grid);
 
-  // A rock on every ore tile; richer tiles get bigger rocks.
-  const oreTiles = [];
-  for (let i = 0; i < ore.length; i++) if (ore[i]) oreTiles.push(i);
-  const rocks = new THREE.InstancedMesh(
-    new THREE.DodecahedronGeometry(1, 0),
-    new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 }),
-    oreTiles.length,
-  );
-  rocks.frustumCulled = false;
-  {
-    const m = new THREE.Matrix4();
-    const q = new THREE.Quaternion();
-    const e = new THREE.Euler();
-    const p = new THREE.Vector3();
-    const s = new THREE.Vector3();
-    oreTiles.forEach((i, n) => {
-      const x = i % size;
-      const y = (i / size) | 0;
-      const r = 0.16 + 0.14 * Math.min(1, amount[i] / 1500);
-      p.set(x + 0.5 + (jitter(x, y, 1) - 0.5) * 0.35, r * 0.4, y + 0.5 + (jitter(x, y, 2) - 0.5) * 0.35);
-      q.setFromEuler(e.set(jitter(x, y, 3) * 3, jitter(x, y, 4) * 6, 0));
-      s.set(r, r * (0.7 + jitter(x, y, 5) * 0.4), r);
-      rocks.setMatrixAt(n, m.compose(p, q, s));
-    });
-  }
-  scene.add(rocks);
-
-  const buildings = createBuildingLayer(scene);
-  const statusIcons = createStatusIcons(scene);
-  const items = createItemLayer(scene);
-  const machines = createMachineParts(scene);
-  const recipeIcons = createRecipeIcons(scene);
-  const power = createPowerLayer(scene, size);
-  const ghosts = createBuildingLayer(scene, { ghost: true });
+  // Everything but the ground: hidden in the map view, where buildings are blocks
+  // drawn into the ground.
+  const play = new THREE.Group();
+  scene.add(play);
+  const buildings = createBuildingLayer(play);
+  const statusIcons = createStatusIcons(play);
+  const items = createItemLayer(play);
+  const machines = createMachineParts(play);
+  const recipeIcons = createRecipeIcons(play);
+  const power = createPowerLayer(play);
+  const ghosts = createBuildingLayer(play, { ghost: true });
   let drawnVersion = -1;
 
   // Highlight for a tile or footprint: a translucent fill plus an outline.
@@ -217,7 +200,7 @@ export function createView(container, world, { theme = "dark" } = {}) {
     obj.renderOrder = 2;
   }
   selection.visible = false;
-  scene.add(selection);
+  play.add(selection);
 
   // The tile being hand-mined: an outline and a bar that fills up to the next item.
   const mineMark = new THREE.Group();
@@ -232,7 +215,7 @@ export function createView(container, world, { theme = "dark" } = {}) {
     obj.renderOrder = 2;
   }
   mineMark.visible = false;
-  scene.add(mineMark);
+  play.add(mineMark);
 
   // Lit tiles and footprints: where an underground exit can go while placing one,
   // or the buildings in a selection. The instanced mesh is swapped for a bigger
@@ -246,14 +229,14 @@ export function createView(container, world, { theme = "dark" } = {}) {
     let cap = 16;
     while (cap < n) cap *= 2;
     if (marks) {
-      scene.remove(marks);
+      play.remove(marks);
       marks.dispose();
     }
     marks = new THREE.InstancedMesh(markGeometry, markMaterial, cap);
     marks.renderOrder = 2;
     marks.frustumCulled = false;
     marks.count = 0;
-    scene.add(marks);
+    play.add(marks);
   };
   ensureMarks(0);
 
@@ -268,43 +251,10 @@ export function createView(container, world, { theme = "dark" } = {}) {
     mineLine.material.color.set(COLORS.accent);
   };
 
-  // Ground colours and rocks for the current ore layer. Runs again whenever a
-  // tile is mined out (world.mapVersion), which is rare, so it just redoes the lot.
-  let drawnOre = -1;
-  const noRock = new THREE.Matrix4().makeScale(0, 0, 0);
-  const paintOre = () => {
-    drawnOre = world.mapVersion;
-    const base = new THREE.Color(COLORS.ground);
-    const oreColors = {};
-    for (const k in COLORS.ore) oreColors[k] = new THREE.Color(COLORS.ore[k]);
-    const c = new THREE.Color();
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        const i = y * size + x;
-        c.copy(base);
-        if (ore[i]) c.lerp(oreColors[ore[i]], ORE_TINT);
-        c.multiplyScalar(0.96 + jitter(x, y, 0) * 0.08);
-        // Texture rows run bottom-up in v, which is north-to-south (-z) on the rotated plane.
-        const t = ((size - 1 - y) * size + x) * 4;
-        const hex = c.getHex(); // sRGB, clamped
-        groundPixels[t] = hex >> 16;
-        groundPixels[t + 1] = (hex >> 8) & 255;
-        groundPixels[t + 2] = hex & 255;
-        groundPixels[t + 3] = 255;
-      }
-    }
-    groundTex.needsUpdate = true;
-
-    oreTiles.forEach((i, n) => {
-      if (ore[i]) rocks.setColorAt(n, c.copy(oreColors[ore[i]]).multiplyScalar(0.9 + jitter(i, 0, 6) * 0.2));
-      else rocks.setMatrixAt(n, noRock); // mined out
-    });
-    rocks.instanceMatrix.needsUpdate = true;
-    if (rocks.instanceColor) rocks.instanceColor.needsUpdate = true;
-  };
-
+  let shownMap = null; // whether the map view was drawn last frame
   const applyTheme = () => {
-    scene.background = new THREE.Color(COLORS.bg);
+    shownMap = null; // sets the background again
+    terrain.setTheme(COLORS);
     hemi.color.set(COLORS.hemiSky);
     hemi.groundColor.set(COLORS.hemiGround);
     grid.material.color.set(COLORS.grid);
@@ -317,7 +267,6 @@ export function createView(container, world, { theme = "dark" } = {}) {
     for (const ore in ORE_ITEM) itemColors[ORE_ITEM[ore]] = COLORS.ore[ore];
     items.setTheme(itemColors);
     recipeIcons.setTheme(itemColors);
-    paintOre();
   };
   applyTheme();
 
@@ -331,13 +280,19 @@ export function createView(container, world, { theme = "dark" } = {}) {
     camera.right = half * Math.max(aspect, 1);
     camera.top = half / Math.min(aspect, 1);
     camera.bottom = -half / Math.min(aspect, 1);
-    camera.position.copy(center).add(CAMERA_OFFSET);
+    // Far enough back that all the ground in view is in front of the camera, however
+    // far out it's zoomed: the ground at the top and bottom edges of the screen is
+    // further and nearer than the middle by the half-height over the tilt's tangent.
+    const depth = (camera.top * CAMERA_DIR.z) / CAMERA_DIR.y;
+    camera.position.copy(center).addScaledVector(CAMERA_DIR, depth + 50);
+    camera.far = 2 * depth + 100;
     camera.lookAt(center);
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld();
     // Grid lines turn to noise when zoomed far out, so fade them.
     grid.material.opacity = THREE.MathUtils.clamp((50 - zoom) / 30, 0, 1) * 0.7;
     grid.visible = grid.material.opacity > 0;
+    grid.position.set(Math.round(center.x), 0.01, Math.round(center.z));
   };
 
   const resize = () => {
@@ -364,7 +319,32 @@ export function createView(container, world, { theme = "dark" } = {}) {
     return { x: hit.x, y: hit.z };
   };
 
-  // Camera moves used by the input controls. The centre stays on the map, so you can't lose it.
+  // The chunks the screen shows, from (cx0, cy0) to (cx1, cy1), with `margin` more each way.
+  const corners = [
+    [-1, -1],
+    [1, -1],
+    [-1, 1],
+    [1, 1],
+  ];
+  const visibleChunks = (margin = 0) => {
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    for (const [nx, ny] of corners) {
+      raycaster.setFromCamera(ndc.set(nx, ny), camera);
+      if (!raycaster.ray.intersectPlane(groundPlane, hit)) continue;
+      x0 = Math.min(x0, hit.x);
+      x1 = Math.max(x1, hit.x);
+      y0 = Math.min(y0, hit.z);
+      y1 = Math.max(y1, hit.z);
+    }
+    if (x0 > x1) return null;
+    const at = (v) => Math.floor(v / CHUNK);
+    return { cx0: at(x0) - margin, cy0: at(y0) - margin, cx1: at(x1) + margin, cy1: at(y1) + margin };
+  };
+
+  // Camera moves used by the input controls. The centre stays within LIMIT of the start.
   const cam = {
     groundAt,
     // Moves the camera to look at ground point (x, y).
@@ -372,14 +352,19 @@ export function createView(container, world, { theme = "dark" } = {}) {
       cam.panBy(x - center.x, y - center.z);
     },
     panBy(dx, dy) {
-      center.x = THREE.MathUtils.clamp(center.x + dx, 0, size);
-      center.z = THREE.MathUtils.clamp(center.z + dy, 0, size);
+      center.x = THREE.MathUtils.clamp(center.x + dx, -LIMIT, LIMIT);
+      center.z = THREE.MathUtils.clamp(center.z + dy, -LIMIT, LIMIT);
       updateCamera();
+    },
+    // Looks at ground point (x, y) from `tiles` across.
+    zoomTo(x, y, tiles) {
+      zoom = THREE.MathUtils.clamp(tiles, MIN_ZOOM, MAX_ZOOM);
+      cam.centerOn(x, y);
     },
     // Zooms by `factor` (>1 = zoom out) keeping the ground under (clientX, clientY) still.
     zoomAt(factor, clientX, clientY) {
       const before = groundAt(clientX, clientY);
-      zoom = THREE.MathUtils.clamp(zoom * factor, MIN_ZOOM, maxZoom);
+      zoom = THREE.MathUtils.clamp(zoom * factor, MIN_ZOOM, MAX_ZOOM);
       updateCamera();
       const after = groundAt(clientX, clientY);
       if (before && after) cam.panBy(before.x - after.x, before.y - after.y);
@@ -387,12 +372,32 @@ export function createView(container, world, { theme = "dark" } = {}) {
     get zoom() {
       return zoom;
     },
+    get center() {
+      return { x: center.x, y: center.z };
+    },
   };
 
   return {
     canvas: renderer.domElement,
     cam,
+    // Whether it's showing the map view rather than the playfield.
+    get mapMode() {
+      return isMap();
+    },
+    // The chunks on screen, for charting what the player looks at (null if the
+    // screen has no size yet).
+    visibleChunks: () => visibleChunks(0),
     render() {
+      const mapMode = isMap();
+      const range = visibleChunks(mapMode ? 0 : 1);
+      if (range) terrain.update(world, range, mapMode);
+      if (mapMode !== shownMap) {
+        shownMap = mapMode;
+        play.visible = !mapMode;
+        scene.background = new THREE.Color(mapMode ? COLORS.fog : COLORS.bg);
+      }
+      grid.visible = !mapMode && grid.material.opacity > 0;
+      if (mapMode) return renderer.render(scene, camera);
       if (drawnVersion !== world.version) {
         drawnVersion = world.version;
         // Belts are drawn straight or as a corner, depending on what feeds them, and
@@ -410,8 +415,7 @@ export function createView(container, world, { theme = "dark" } = {}) {
       drawBeltItems(world, items);
       machines.update(world, items);
       items.end();
-      if (drawnOre !== world.mapVersion) paintOre();
-      power.update(world);
+      power.update(world, cam.center);
       statusIcons.update(world);
       recipeIcons.update(world.entities.values());
       const m = world.mining;
@@ -463,7 +467,7 @@ export function createView(container, world, { theme = "dark" } = {}) {
     },
     dispose() {
       ro.disconnect();
-      groundTex.dispose();
+      terrain.dispose();
       statusIcons.dispose();
       items.dispose();
       machines.dispose();

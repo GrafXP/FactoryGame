@@ -2,7 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createWorld, place, removeAt, canPlace, entityAt, tileAt } from "../src/sim/world.js";
 import { beltLine } from "../src/sim/buildings.js";
-import { ALL } from "./helpers.js";
+import { WATER } from "../src/sim/map.js";
+import { LIMIT } from "../src/sim/chunks.js";
+import { ALL, findKind } from "./helpers.js";
 
 test("placing a building fills its footprint and keeps its facing", () => {
   const world = createWorld({ milestones: ALL, seed: 1 });
@@ -14,14 +16,16 @@ test("placing a building fills its footprint and keeps its facing", () => {
   assert.equal(tileAt(world, 11, 11).entity, miner);
 });
 
-test("buildings can't overlap or leave the map", () => {
+test("buildings can't overlap, go on water or leave the map", () => {
   const world = createWorld({ milestones: ALL, seed: 1 });
   place(world, "miner", 10, 10, 0);
   assert.equal(canPlace(world, "belt", 11, 11, 0), "Something is in the way");
   assert.equal(place(world, "miner", 11, 9, 0), null);
   assert.equal(canPlace(world, "chest", 12, 10, 0), null);
-  assert.equal(canPlace(world, "miner", world.size - 1, 0, 0), "Off the map");
-  assert.equal(canPlace(world, "belt", -1, 0, 0), "Off the map");
+  assert.equal(canPlace(world, "miner", LIMIT - 1, 0, 0), "Off the map");
+  assert.equal(canPlace(world, "belt", -20, -20, 0), null, "the map goes on past the start");
+  const water = findKind(world, WATER, 200);
+  assert.equal(canPlace(world, "belt", water.x, water.y, 0), "Can't build on water");
 });
 
 test("removing frees every tile of the building", () => {

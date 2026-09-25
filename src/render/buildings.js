@@ -139,6 +139,12 @@ function makeParts() {
       { geometry: box(0.08, 0.1, 0.08, -0.25, 1.58, 0), color: "poleTop" },
       { geometry: box(0.08, 0.1, 0.08, 0.25, 1.58, 0), color: "poleTop" },
     ],
+    // A plinth and a mast; the dish on top turns while it scans (render/machines.js).
+    radar: [
+      { geometry: box(1.8, 0.2, 1.8, 0, 0.1, 0), color: "hubBase" },
+      { geometry: box(0.9, 0.6, 0.9, 0, 0.5, 0), color: "radar" },
+      { geometry: new THREE.CylinderGeometry(0.08, 0.1, 0.6, 8).translate(0, 1.1, 0), color: "radarDish" },
+    ],
     // The base and the pivot; the arm swings in render/machines.js. The arrow on the
     // base points the way items go.
     inserter: [

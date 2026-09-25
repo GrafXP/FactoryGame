@@ -6,7 +6,7 @@ import { beltNetwork, canTake, put, BELT_LEN, BELT_SPEED, ITEM_GAP } from "../sr
 import { count, total } from "../src/sim/inventory.js";
 import { ORE } from "../src/sim/map.js";
 import { TICK_RATE } from "../src/sim/world.js";
-import { charge, ALL } from "./helpers.js";
+import { charge, ALL, clearArea, oreBlock } from "./helpers.js";
 
 const TILE_TICKS = BELT_LEN / BELT_SPEED; // ticks for an item to cross one tile
 const MAX_RATE = (TICK_RATE * BELT_SPEED) / ITEM_GAP; // items/s a belt carries at most
@@ -24,17 +24,6 @@ const run = (world, ticks, each) => {
 const lay = (world, path) => path.map(([x, y, rot]) => place(world, "belt", x, y, rot));
 // Keeps a belt topped up with iron ore, like an endless miner.
 const feed = (world, belt) => () => canTake(belt, "iron-ore") && put(belt, "iron-ore");
-// Finds a clear square of bare ground, n tiles across, so tests don't hit ore.
-const clearArea = (world, n) => {
-  for (let y = 4; y < world.size - n - 4; y += 2) {
-    for (let x = 4; x < world.size - n - 4; x += 2) {
-      let clear = true;
-      for (let j = 0; j < n && clear; j++) for (let i = 0; i < n && clear; i++) if (world.map.ore[(y + j) * world.size + x + i]) clear = false;
-      if (clear) return { x, y };
-    }
-  }
-  throw new Error("no clear area");
-};
 
 test("an item rides a straight belt into a chest", () => {
   const world = setup();
@@ -131,9 +120,8 @@ test("belts facing each other head-on don't pass items", () => {
 
 test("a miner drops its ore onto a belt, which carries it to a chest", () => {
   const world = setup();
-  const i = world.map.ore.findIndex((o, i) =>
-    o === ORE.IRON && world.map.ore[i + 1] === ORE.IRON && world.map.ore[i + world.size] === ORE.IRON && world.map.ore[i + world.size + 1] === ORE.IRON);
-  const miner = place(world, "miner", i % world.size, Math.floor(i / world.size), 0);
+  const { x, y } = oreBlock(world, ORE.IRON);
+  const miner = place(world, "miner", x, y, 0);
   const out = outputTile(miner);
   // Belt from the output tile two tiles west, into a chest.
   lay(world, [[out.x, out.y, 3], [out.x - 1, out.y, 3]]);

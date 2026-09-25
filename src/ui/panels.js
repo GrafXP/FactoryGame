@@ -11,6 +11,8 @@ import { MILESTONES, currentMilestone, recipeUnlocked, stillNeeded, deliverFrom,
 import { unlocksText } from "./goal.js";
 import { beltNetwork, setFilter } from "../sim/transport.js";
 import { REACH, buried } from "../sim/underground.js";
+import { RANGE, SCAN, radarTarget, radarCoverage } from "../sim/radar.js";
+import { CHUNK } from "../sim/map.js";
 import { TICK_RATE } from "../sim/world.js";
 import { itemIcon, icon } from "./icons.js";
 import { lower } from "./format.js";
@@ -108,6 +110,15 @@ function networkSummary(net) {
     <span class="bar"><i style="width: ${Math.min(100, s * 100)}%"></i></span>
     <p class="meta power" data-ok="${!why}">${verdict}</p>`;
 }
+
+const RADAR_STATUS = {
+  working: (r) => {
+    const t = radarTarget(r);
+    return `Scanning the land round ${t.cx * CHUNK + CHUNK / 2}, ${t.cy * CHUNK + CHUNK / 2}`;
+  },
+  "no-power": () => "Stopped: no power.",
+  done: () => `Done: everything within ${RANGE * CHUNK} tiles is on the map.`,
+};
 
 // A sorter's ways out, in the order its panel lists them, and what each filter means.
 const WAYS = [
@@ -389,6 +400,21 @@ const PANELS = {
         <p class="meta">${unlocks ? `Unlocks ${unlocks}.` : "The last milestone."} Belts and inserters can deliver here too; it only takes what the milestone still needs.</p>
         <ol class="milestones">${list}</ol>`;
     },
+  },
+  // What it's scanning, how much of its range is charted, and its power.
+  radar: {
+    key: (r, world) => `${r.status} ${r.next} ${world.chartVersion}`,
+    html: (r, world) => {
+      const { charted, total } = radarCoverage(world, r);
+      const secs = +(SCAN / TICK_RATE).toFixed(1);
+      return `${heading("Radar")}
+        <p class="status" data-status="${r.status}">${RADAR_STATUS[r.status](r)}</p>
+        <span class="bar"><i></i></span>
+        <div data-live="power"></div>
+        <p class="meta">${charted} of the ${total} chunks in its range are on the map. It scans the nearest first, ${secs} s each at full power, out to ${RANGE * CHUNK} tiles. Zoom far out to see the map.</p>`;
+    },
+    progress: (r) => r.progress / SCAN,
+    live: (r, world) => ({ power: powerLine(r, world) }),
   },
   pole: {
     key: () => "",

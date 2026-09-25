@@ -9,7 +9,7 @@ import { SMELTING, FUEL } from "../src/sim/recipes.js";
 import { count, total } from "../src/sim/inventory.js";
 import { ORE } from "../src/sim/map.js";
 import { serialize, deserialize } from "../src/sim/save.js";
-import { charge, ALL } from "./helpers.js";
+import { charge, ALL, clearArea, oreBlock } from "./helpers.js";
 
 const { stack: STACK, feed: FEED } = BUILDINGS.furnace;
 const PLATE_TICKS = SMELTING["iron-ore"].time;
@@ -22,17 +22,6 @@ const run = (world, ticks, each) => {
     charge(world);
     step(world);
   }
-};
-// Finds a clear square of bare ground, n tiles across, so tests don't hit ore.
-const clearArea = (world, n) => {
-  for (let y = 4; y < world.size - n - 4; y += 2) {
-    for (let x = 4; x < world.size - n - 4; x += 2) {
-      let clear = true;
-      for (let j = 0; j < n && clear; j++) for (let i = 0; i < n && clear; i++) if (world.map.ore[(y + j) * world.size + x + i]) clear = false;
-      if (clear) return { x, y };
-    }
-  }
-  throw new Error("no clear area");
 };
 
 // Ore belt → inserter → furnace → inserter → belt → chest, all facing east.
@@ -158,13 +147,7 @@ test("belts, miners and inserters only top a furnace up; ore and fuel go in thei
 
 test("a miner can feed a furnace directly", () => {
   const world = setup();
-  let at = null;
-  for (let y = 4; y < world.size - 6 && !at; y++) {
-    for (let x = 4; x < world.size - 6 && !at; x++) {
-      const ore = (dx, dy) => world.map.ore[(y + dy) * world.size + x + dx];
-      if ([ore(0, 0), ore(1, 0), ore(0, 1), ore(1, 1)].every((o) => o === ORE.IRON)) at = { x, y };
-    }
-  }
+  const at = oreBlock(world, ORE.IRON);
   const miner = place(world, "miner", at.x, at.y, 0);
   const out = outputTile(miner);
   const f = place(world, "furnace", out.x - 1, out.y - 1, 0);

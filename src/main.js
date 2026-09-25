@@ -2,7 +2,8 @@ import "./style.css";
 import { createGame } from "./game.js";
 import { TICK_RATE, MINE_TICKS } from "./sim/world.js";
 import { parseSeed } from "./sim/rng.js";
-import { BUILDINGS } from "./sim/buildings.js";
+import { BUILDINGS, kW } from "./sim/buildings.js";
+import { CHUNK } from "./sim/map.js";
 import { count } from "./sim/inventory.js";
 import { serialize, deserialize } from "./sim/save.js";
 import { readSave, writeSave } from "./storage.js";
@@ -229,6 +230,11 @@ function play(el) {
     stop?.();
   };
 }
+
+// The Radar's numbers, for the help page.
+const RADAR_TILES = BUILDINGS.radar.range * CHUNK;
+const RADAR_SECONDS = BUILDINGS.radar.scan / TICK_RATE;
+const RADAR_KW = kW(BUILDINGS.radar.draw);
 
 const TOOL_KEYS = { ...BUILDING_KEYS, x: "remove", c: "select", v: "paste" };
 const DEBUG_KEY = "factory:debug";
@@ -579,12 +585,12 @@ function help(el) {
       <dt>Paste</dt><dd>Copy or Cut picks up the selection as one ghost, placed like a building (touch: tap to put it down, then tap the ghost). It's green where each building fits and you can pay for it, red where not; pasting builds the green ones and says what was skipped. Assembler recipes and sorter settings come along, but not what the buildings held. Rotate turns it. It stays picked so you can paste again, and Select's Paste button (or V) brings back what you copied last.</dd>
       <dt>Undo</dt><dd>The arrow next to Pause (or Z) takes back the last build, removal, cut, paste or rotation, and again for the one before. Undoing a removal builds it again from your inventory.</dd>
       <dt>Moving around</dt><dd>A quick drag always moves the map, even with a tool picked. With a mouse, drag with the right button while laying belts.</dd>
-      <dt>Keys</dt><dd>B build menu, 9 HUB, 1 belt, 2 miner, 3 chest, 4 furnace, 5 inserter, 6 assembler, 7 power pole, 8 coal generator, X remove, C select, V paste, R rotate, Z (or Ctrl+Z) undo, Q pick the building under the cursor, Esc put the tool away. With a selection: Ctrl+C copy, Ctrl+X cut, Delete remove.</dd>
+      <dt>Keys</dt><dd>B build menu, 9 HUB, 1 belt, 2 miner, 3 chest, 4 furnace, 5 inserter, 6 assembler, 7 power pole, 8 coal generator, 0 radar, X remove, C select, V paste, R rotate, Z (or Ctrl+Z) undo, Q pick the building under the cursor, Esc put the tool away. With a selection: Ctrl+C copy, Ctrl+X cut, Delete remove.</dd>
     </dl>
     <h2>Goals</h2>
     <dl>
       <dt>The HUB</dt><dd>A new game can only build the HUB, furnaces and chests. Build the HUB first (Build → Base); the goal card under the resource bar says what to do next, and tapping it takes you to the HUB. There's only one, and taking it down loses no progress.</dd>
-      <dt>Milestones</dt><dd>Each milestone asks for a batch of items delivered to the HUB: tap the HUB and deliver from your inventory, or run a belt or inserter into it (it only takes what the milestone still needs). Reaching one unlocks new buildings and recipes: 1. Power and mining (miners, belts, generators, poles), 2. Logistics (inserters, underground belts, splitters, hand-crafting circuits), 3. Assembly (assemblers, sorters), and 4. Circuit production, the goal: 150 circuits, best made by a line of assemblers. Locked buildings show a padlock under Build, with the milestone that unlocks them.</dd>
+      <dt>Milestones</dt><dd>Each milestone asks for a batch of items delivered to the HUB: tap the HUB and deliver from your inventory, or run a belt or inserter into it (it only takes what the milestone still needs). Reaching one unlocks new buildings and recipes: 1. Power and mining (miners, belts, generators, poles), 2. Logistics (inserters, underground belts, splitters, radars, hand-crafting circuits), 3. Assembly (assemblers, sorters), and 4. Circuit production, the goal: 150 circuits, best made by a line of assemblers. Locked buildings show a padlock under Build, with the milestone that unlocks them.</dd>
     </dl>
     <h2>Items</h2>
     <dl>
@@ -608,8 +614,12 @@ function help(el) {
       <dt>Continue</dt><dd>The home page's Continue carries on where you left off. New game starts a fresh map and replaces the save, so it asks first. There's one save per browser.</dd>
     </dl>
     <h2>The map</h2>
-    <p class="hint">Ore patches: iron is blue, copper orange, coal black and stone pale sand. There's one of each near the start.
-    Add <code>?seed=42</code> (any number or word) to the /play address to start a new game on that map; the same seed always gives the same map.</p>
+    <dl>
+      <dt>Endless</dt><dd>The map goes on in every direction. There's a patch of each ore round the start (iron is blue, copper orange, coal black and stone pale sand) and a lake a little further out. Further away, patches are spread out, and bigger and richer the further they are from the start. Nothing can be built on water.</dd>
+      <dt>Map view</dt><dd>Zoom far out (pinch, or scroll) and the playfield turns into the map: flat colours, ore brighter where more is left, buildings as blocks. It only shows charted land: what you've looked at on the playfield, and what radars have scanned. The rest is fog. Tap the map to zoom in there.</dd>
+      <dt>Radar</dt><dd>Scans the land round it for the map, a chunk (32 × 32 tiles) at a time, nearest first, out to ${RADAR_TILES} tiles. Each chunk takes ${RADAR_SECONDS} s at full power, and it uses ${RADAR_KW} kW while it scans; the dish turns while it works. Tap it to see how far it has got.</dd>
+      <dt>Seeds</dt><dd>Add <code>?seed=42</code> (any number or word) to the /play address to start a new game on that map; the same seed always gives the same map.</dd>
+    </dl>
     <h2>Fullscreen</h2>
     <p class="hint" id="fs-note"></p>
     <button id="fs" class="wide"></button>

@@ -1,10 +1,12 @@
 // Simulation state. Pure data + logic: no three.js, no DOM, so it can be saved,
 // loaded and run headless.
-import { generateMap, ORE, ORE_NAMES } from "./map.js";
+import { ORE, ORE_NAMES, WATER, isOre } from "./map.js";
 import { BUILDINGS, footprint, outputTile } from "./buildings.js";
 import { ORE_ITEM, START_KIT, describe } from "./items.js";
 import { createInventory, add, give, missing, take, move, moveAll, total } from "./inventory.js";
 import { inMap, entityAt } from "./grid.js";
+import { chunkOf, tileIndex, setIdAt, chartArea } from "./chunks.js";
+import { radarState, stepRadar } from "./radar.js";
 import { stepBelts, takesItems, canTake, put, splitterState, ANY_FILTERS } from "./transport.js";
 import { undergroundState, undergroundWhy, pairUp, unpair, buried } from "./underground.js";
 import { furnaceState, furnaceContents, stepFurnace } from "./furnace.js";
@@ -18,21 +20,23 @@ import { progressState, lockedWhy } from "./progress.js";
 export { entityAt };
 
 export const TICK_RATE = 60;
-export const MAP_SIZE = 128;
 export const MINE_TICKS = 30; // hand-mining yields one item every half second
+// A new game starts with the chunks this many each way of the start (0, 0) charted.
+export const START_CHARTED = 2;
 
-// A new world. `map` skips generating one, for loading a save (see save.js).
-// `milestones` starts it with that many milestones done (progress.js), e.g. all of
-// them for tests that build anything.
-export function createWorld({ seed = 1, size = MAP_SIZE, kit = START_KIT, map, milestones = 0 } = {}) {
-  return {
+// A new world, on the endless map for `seed` (chunks.js). The land round the start
+// is charted, unless `charted` is false (a save brings its own). `milestones`
+// starts it with that many milestones done (progress.js), e.g. all of them for tests
+// that build anything.
+export function createWorld({ seed = 1, kit = START_KIT, milestones = 0, charted = true } = {}) {
+  const world = {
     tick: 0,
     seed,
-    size,
-    map: map || generateMap(seed, size),
+    chunks: new Map(), // chunk key → chunk: the land and what's built on it (chunks.js)
+    charted: new Set(), // keys of the chunks the map view shows
+    chartVersion: 0, // bumped when a chunk is charted
     mapVersion: 0, // bumped when an ore tile runs out, so the view repaints the ground
     entities: new Map(), // id → { id, type, x, y, rot, ...state }; x, y is the top-left tile
-    grid: new Int32Array(size * size), // entity id on each tile, 0 = empty
     nextId: 1,
     version: 0, // bumped whenever entities change, so the view knows to redraw them
     inventory: createInventory(kit), // the player's
@@ -40,6 +44,8 @@ export function createWorld({ seed = 1, size = MAP_SIZE, kit = START_KIT, map, m
     craft: craftState(), // the player's hand-crafting queue (crafting.js)
     progress: progressState(milestones), // milestones done and deliveries (progress.js)
   };
+  if (charted) chartArea(world, -START_CHARTED, -START_CHARTED, START_CHARTED - 1, START_CHARTED - 1);
+  return world;
 }
 
 export function step(world) {
@@ -52,16 +58,27 @@ export function step(world) {
     else if (e.type === "furnace") stepFurnace(e);
     else if (e.type === "assembler") stepAssembler(world, e);
     else if (e.type === "inserter") stepInserter(world, e);
+    else if (e.type === "radar") stepRadar(world, e);
   }
   stepBelts(world);
 }
 
-// What's on tile (x, y), or null outside the map.
+// What's on tile (x, y), or null off the map: its ore (ORE.NONE for plain ground
+// or water), whether it's water, its name, how much ore is left and its building.
 export function tileAt(world, x, y) {
-  if (!inMap(world, x, y)) return null;
-  const { size, ore, amount } = world.map;
-  const i = y * size + x;
-  return { x, y, ore: ore[i], oreName: ORE_NAMES[ore[i]], amount: amount[i], entity: entityAt(world, x, y) };
+  if (!inMap(x, y)) return null;
+  const c = chunkOf(world, x, y);
+  const i = tileIndex(x, y);
+  const kind = c.ore[i];
+  return {
+    x,
+    y,
+    ore: isOre(kind) ? kind : ORE.NONE,
+    water: kind === WATER,
+    oreName: ORE_NAMES[kind],
+    amount: c.amount[i],
+    entity: entityAt(world, x, y),
+  };
 }
 
 // Why a building's footprint doesn't fit at (x, y), or null if it does.
@@ -71,8 +88,11 @@ export function canFit(world, type, x, y, rot) {
   const { w, h } = footprint(type, rot);
   for (let ty = y; ty < y + h; ty++) {
     for (let tx = x; tx < x + w; tx++) {
-      if (!inMap(world, tx, ty)) return "Off the map";
-      if (world.grid[ty * world.size + tx]) return "Something is in the way";
+      if (!inMap(tx, ty)) return "Off the map";
+      const c = chunkOf(world, tx, ty);
+      const i = tileIndex(tx, ty);
+      if (c.ore[i] === WATER) return "Can't build on water";
+      if (c.ids[i]) return "Something is in the way";
     }
   }
   return null;
@@ -179,6 +199,7 @@ export function initialState(type, opts = {}) {
   if (type === "inserter") return { ...inserterState(), ...power };
   if (type === "assembler") return { ...assemblerState(), ...power };
   if (type === "generator") return generatorState();
+  if (type === "radar") return { ...radarState(), ...power };
   return {};
 }
 
@@ -189,14 +210,15 @@ export function initialState(type, opts = {}) {
 // waits with the finished item rather than dropping it, so a stopped miner loses
 // nothing. `item` is what it's digging.
 function stepMiner(world, m) {
-  const i = oreUnder(world, m);
-  if (i < 0) {
+  const under = oreUnder(world, m);
+  if (!under) {
     m.status = "no-resource";
     m.progress = 0;
     m.item = null;
     return;
   }
-  const item = (m.item = ORE_ITEM[world.map.ore[i]]);
+  const [c, i] = under;
+  const item = (m.item = ORE_ITEM[c.ore[i]]);
   const out = outputTile(m);
   const target = entityAt(world, out.x, out.y);
   if (!target || !takesItems(target)) {
@@ -215,33 +237,39 @@ function stepMiner(world, m) {
   } else {
     m.status = "working";
     m.progress = 0;
-    dig(world, i);
+    dig(world, c, i);
     put(target, item);
   }
 }
 
-// Index of the first ore tile under a building, or -1 if there's none.
+// The first ore tile under a building, as [chunk, index], or null if there's none.
 function oreUnder(world, e) {
   const { w, h } = footprint(e.type, e.rot);
   for (let y = e.y; y < e.y + h; y++) {
-    for (let x = e.x; x < e.x + w; x++) if (world.map.ore[y * world.size + x]) return y * world.size + x;
+    for (let x = e.x; x < e.x + w; x++) {
+      const c = chunkOf(world, x, y);
+      const i = tileIndex(x, y);
+      if (isOre(c.ore[i])) return [c, i];
+    }
   }
-  return -1;
+  return null;
 }
 
 // Ore left under a building, e.g. to show on a miner's panel.
 export function oreLeftUnder(world, e) {
   const { w, h } = footprint(e.type, e.rot);
   let n = 0;
-  for (let y = e.y; y < e.y + h; y++) for (let x = e.x; x < e.x + w; x++) n += world.map.amount[y * world.size + x];
+  for (let y = e.y; y < e.y + h; y++) for (let x = e.x; x < e.x + w; x++) n += chunkOf(world, x, y).amount[tileIndex(x, y)];
   return n;
 }
 
-// Takes one unit of ore from tile i. A tile that runs out turns to plain ground.
-function dig(world, i) {
-  const { ore, amount } = world.map;
-  if (--amount[i] === 0) {
-    ore[i] = ORE.NONE;
+// Takes one unit of ore from tile i of chunk c. A tile that runs out turns to
+// plain ground.
+function dig(world, c, i) {
+  c.changed = true;
+  if (--c.amount[i] === 0) {
+    c.ore[i] = ORE.NONE;
+    c.version++;
     world.mapVersion++;
   }
 }
@@ -266,20 +294,20 @@ function stepMining(world) {
   const m = world.mining;
   if (!m || ++m.progress < MINE_TICKS) return;
   m.progress = 0;
-  const i = m.y * world.size + m.x;
-  const { ore } = world.map;
-  if (!ore[i] || world.grid[i]) {
+  const c = chunkOf(world, m.x, m.y);
+  const i = tileIndex(m.x, m.y);
+  if (!isOre(c.ore[i]) || c.ids[i]) {
     world.mining = null; // the tile changed under us
     return;
   }
   add(world.inventory, m.item);
-  dig(world, i);
-  if (!ore[i]) world.mining = null;
+  dig(world, c, i);
+  if (!c.ore[i]) world.mining = null;
 }
 
 function fill(world, entity, id) {
   const { w, h } = footprint(entity.type, entity.rot);
   for (let ty = entity.y; ty < entity.y + h; ty++) {
-    for (let tx = entity.x; tx < entity.x + w; tx++) world.grid[ty * world.size + tx] = id;
+    for (let tx = entity.x; tx < entity.x + w; tx++) setIdAt(world, tx, ty, id);
   }
 }

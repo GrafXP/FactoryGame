@@ -1,5 +1,6 @@
 import { createWorld, step, tileAt, TICK_RATE } from "./sim/world.js";
-import { createView } from "./render/view.js";
+import { createView, DEFAULT_ZOOM } from "./render/view.js";
+import { chartArea, forgetChunks } from "./sim/chunks.js";
 import { createControls } from "./render/controls.js";
 import { createBuilder } from "./build.js";
 import { footprint } from "./sim/buildings.js";
@@ -7,10 +8,16 @@ import { footprint } from "./sim/buildings.js";
 const TICK_MS = 1000 / TICK_RATE;
 const MAX_TICKS_PER_FRAME = 10; // after a long stall, drop time instead of freezing to catch up
 const STATS_MS = 500; // how often FPS/UPS are reported
+const FORGET_MS = 10000; // how often land far from the camera is let go of
+const KEEP_CHUNKS = 256; // below this many chunks, nothing is let go of
 
 // Owns the world and the view and runs the sim at a fixed tick rate,
 // independent of the display's frame rate. Plays `world` (a loaded save) if given,
-// otherwise a new world from `seed`.
+// otherwise a new world from `seed`, starting over its HUB if it has one.
+//
+// What the player looks at on the playfield gets charted, as the land round a
+// Factorio character does, so the map view shows it. The map view is for looking:
+// a tap on it zooms in there, and nothing is built from it.
 export function createGame(
   container,
   { theme = "dark", world = null, seed, onTick, onStats, onInspect, onTileHover, onBuildChange, onMessage } = {},
@@ -18,14 +25,38 @@ export function createGame(
   world ||= createWorld({ seed });
   const view = createView(container, world, { theme });
   const builder = createBuilder(world, view, { onChange: onBuildChange, onMessage, onInspect });
+  const centerOn = (e, zoom) => {
+    const { w, h } = footprint(e.type, e.rot);
+    view.cam.zoomTo(e.x + w / 2, e.y + h / 2, zoom);
+  };
+  const hub = [...world.entities.values()].find((e) => e.type === "hub");
+  if (hub) centerOn(hub, DEFAULT_ZOOM);
+
+  let chartedView = "";
+  let toldMap = false;
+  const chartView = () => {
+    if (view.mapMode) {
+      if (!toldMap) onMessage?.("The map: only land you've seen or a radar has scanned shows. Tap it to zoom in there.");
+      toldMap = true;
+      return;
+    }
+    const r = view.visibleChunks();
+    const key = r && `${r.cx0} ${r.cy0} ${r.cx1} ${r.cy1}`;
+    if (!r || key === chartedView) return;
+    chartedView = key;
+    chartArea(world, r.cx0, r.cy0, r.cx1, r.cy1);
+  };
 
   const disposeControls = createControls(view.canvas, view.cam, {
     onPoint(p) {
-      builder.point(p);
+      builder.point(view.mapMode ? null : p);
       onTileHover?.(p && tileAt(world, Math.floor(p.x), Math.floor(p.y)));
     },
-    onTap: builder.tap,
-    canPaint: builder.canPaint,
+    onTap(p, pointerType) {
+      if (view.mapMode) view.cam.zoomTo(p.x, p.y, DEFAULT_ZOOM);
+      else builder.tap(p, pointerType);
+    },
+    canPaint: (p) => !view.mapMode && builder.canPaint(p),
     onPaint: { start: builder.paintStart, move: builder.paintMove, end: builder.paintEnd, cancel: builder.paintCancel },
   });
 
@@ -36,6 +67,7 @@ export function createGame(
   let frames = 0;
   let ticks = 0;
   let statsFrom = last;
+  let forgotAt = last;
 
   const frame = (now) => {
     raf = requestAnimationFrame(frame);
@@ -52,6 +84,12 @@ export function createGame(
       if (n) onTick?.(world);
     }
     last = now;
+    chartView();
+    if (now - forgotAt > FORGET_MS && world.chunks.size > KEEP_CHUNKS) {
+      forgotAt = now;
+      const r = view.visibleChunks();
+      if (r) forgetChunks(world, r.cx0 - 2, r.cy0 - 2, r.cx1 + 2, r.cy1 + 2);
+    }
     view.render();
 
     frames++;
@@ -78,10 +116,10 @@ export function createGame(
       running = true;
     },
     setTheme: view.setTheme,
-    // Moves the camera to look at building e and shows its panel.
+    // Moves the camera to look at building e (out of the map view, if need be) and
+    // shows its panel.
     focus(e) {
-      const { w, h } = footprint(e.type, e.rot);
-      view.cam.centerOn(e.x + w / 2, e.y + h / 2);
+      centerOn(e, view.mapMode ? DEFAULT_ZOOM : view.cam.zoom);
       builder.inspect(e);
     },
     dispose() {

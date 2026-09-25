@@ -9,7 +9,7 @@ import { powerNetwork, polesInReach, satisfaction } from "../src/sim/power.js";
 import { RECIPES, FUEL_ENERGY } from "../src/sim/recipes.js";
 import { add, count } from "../src/sim/inventory.js";
 import { serialize, deserialize } from "../src/sim/save.js";
-import { ALL } from "./helpers.js";
+import { ALL, clearArea } from "./helpers.js";
 
 const GEAR = RECIPES["iron-gear"];
 const DRAW = BUILDINGS.assembler.draw;
@@ -24,17 +24,6 @@ const setup = () =>
   });
 const run = (world, ticks) => {
   for (let i = 0; i < ticks; i++) step(world);
-};
-// Finds a clear square of bare ground, n tiles across, so tests don't hit ore.
-const clearArea = (world, n) => {
-  for (let y = 4; y < world.size - n - 4; y += 2) {
-    for (let x = 4; x < world.size - n - 4; x += 2) {
-      let clear = true;
-      for (let j = 0; j < n && clear; j++) for (let i = 0; i < n && clear; i++) if (world.map.ore[(y + j) * world.size + x + i]) clear = false;
-      if (clear) return { x, y };
-    }
-  }
-  throw new Error("no clear area");
 };
 const gearMaker = (world, x, y) => {
   const a = place(world, "assembler", x, y, 0);

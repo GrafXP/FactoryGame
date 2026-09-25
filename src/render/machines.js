@@ -11,12 +11,14 @@ const netCapacity = (net) => Math.max(1, net?.avg.capacity || 0);
 // The moving parts of machines, redrawn every frame: inserter arms swinging
 // between their pickup and drop sides with the item they carry, the fire in a
 // working furnace's or generator's mouth, the cog on an assembler, which turns
-// once per craft, and a generator's flywheel. The still parts are in buildings.js.
+// once per craft, a generator's flywheel and a radar's dish, which turns while it
+// scans. The still parts are in buildings.js.
 const ARM = 0.42; // pivot to hand
 const ARM_Y = 0.44;
 const HELD_Y = ARM_Y - 0.13;
 const FLYWHEEL = new THREE.Vector3(1.38, 0.65, 0); // from a generator's centre, facing north
 const FLYWHEEL_SPEED = 0.25; // radians a tick at full load
+const DISH_SPEED = 0.03; // radians a tick while a radar scans
 
 export function createMachineParts(parent) {
   // Modelled pointing south (+z) from the pivot: that's the pickup side of a
@@ -32,10 +34,16 @@ export function createMachineParts(parent) {
     genFire: { geometry: new THREE.BoxGeometry(0.5, 0.32, 0.03).translate(-0.85, 0.2, 0.9), color: null },
     // Turning about its axle, which runs east-west when the generator faces north.
     flywheel: { geometry: gearGeometry(8, 0.38, 0.48, 0.1, 0.1).translate(0, -0.05, 0).rotateZ(Math.PI / 2), color: "generatorWheel" },
+    // A shallow bowl tipped back on top of the mast, looking out to one side.
+    dish: {
+      geometry: new THREE.CylinderGeometry(0.7, 0.12, 0.22, 16, 1, true).rotateX(-Math.PI / 3).translate(0, 1.5, 0.05),
+      color: "radarDish",
+      side: THREE.DoubleSide,
+    },
   };
   for (const k of Object.values(kinds)) {
     k.material = k.color
-      ? new THREE.MeshStandardMaterial({ roughness: 0.7 })
+      ? new THREE.MeshStandardMaterial({ roughness: 0.7, side: k.side ?? THREE.FrontSide })
       : new THREE.MeshBasicMaterial({ color: 0xff8a1f }); // unlit, so it glows
     k.mesh = null;
   }
@@ -65,6 +73,7 @@ export function createMachineParts(parent) {
   const turned = new THREE.Quaternion();
   const offset = new THREE.Vector3();
   const wheels = new Map(); // generator → { angle, tick }: its flywheel, run on by the load since `tick`
+  const dishes = new Map(); // radar → its dish's angle
 
   return {
     // `items` is the item layer, for what the inserters hold.
@@ -73,12 +82,15 @@ export function createMachineParts(parent) {
       let furnaces = 0;
       let assemblers = 0;
       let generators = 0;
+      let radars = 0;
       for (const e of world.entities.values()) {
         if (e.type === "inserter") inserters++;
         else if (e.type === "furnace") furnaces++;
         else if (e.type === "assembler") assemblers++;
         else if (e.type === "generator") generators++;
+        else if (e.type === "radar") radars++;
       }
+      ensure(kinds.dish, radars);
       ensure(kinds.arm, inserters);
       ensure(kinds.hand, inserters);
       ensure(kinds.fire, furnaces);
@@ -91,6 +103,7 @@ export function createMachineParts(parent) {
       let c = 0;
       let g = 0;
       let gf = 0;
+      let d = 0;
       const net = powerNetwork(world);
       for (const e of world.entities.values()) {
         if (e.type === "inserter") {
@@ -130,9 +143,19 @@ export function createMachineParts(parent) {
             const flicker = 0.75 + 0.25 * Math.sin(world.tick * 0.35 + e.id * 1.7);
             kinds.genFire.mesh.setMatrixAt(gf++, m.compose(pos, q, scale.set(1, flicker, 1)));
           }
+        } else if (e.type === "radar") {
+          // It turns while it scans, and stops where it is otherwise.
+          let dish = dishes.get(e);
+          if (!dish) dishes.set(e, (dish = { angle: e.id, tick: world.tick }));
+          if (e.status === "working") dish.angle = (dish.angle + DISH_SPEED * (world.tick - dish.tick)) % (Math.PI * 2);
+          dish.tick = world.tick;
+          const { w, h } = footprint(e.type, e.rot);
+          q.setFromAxisAngle(up, -dish.angle);
+          kinds.dish.mesh.setMatrixAt(d++, m.compose(pos.set(e.x + w / 2, 0, e.y + h / 2), q, one));
         }
       }
       for (const gen of wheels.keys()) if (!world.entities.has(gen.id)) wheels.delete(gen);
+      for (const r of dishes.keys()) if (!world.entities.has(r.id)) dishes.delete(r);
       for (const [k, n] of [
         [kinds.arm, a],
         [kinds.hand, a],
@@ -140,6 +163,7 @@ export function createMachineParts(parent) {
         [kinds.cog, c],
         [kinds.genFire, gf],
         [kinds.flywheel, g],
+        [kinds.dish, d],
       ]) {
         k.mesh.count = n;
         k.mesh.instanceMatrix.needsUpdate = true;

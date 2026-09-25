@@ -7,7 +7,7 @@ import { setRecipe, fillAssembler, emptyAssembler } from "../src/sim/assembler.j
 import { RECIPES } from "../src/sim/recipes.js";
 import { add, count, total } from "../src/sim/inventory.js";
 import { serialize, deserialize } from "../src/sim/save.js";
-import { charge, ALL } from "./helpers.js";
+import { charge, ALL, clearArea } from "./helpers.js";
 
 const STACK = BUILDINGS.assembler.stack;
 const GEAR = RECIPES["iron-gear"];
@@ -23,17 +23,6 @@ const run = (world, ticks) => {
     charge(world);
     step(world);
   }
-};
-// Finds a clear square of bare ground, n tiles across, so tests don't hit ore.
-const clearArea = (world, n) => {
-  for (let y = 4; y < world.size - n - 4; y += 2) {
-    for (let x = 4; x < world.size - n - 4; x += 2) {
-      let clear = true;
-      for (let j = 0; j < n && clear; j++) for (let i = 0; i < n && clear; i++) if (world.map.ore[(y + j) * world.size + x + i]) clear = false;
-      if (clear) return { x, y };
-    }
-  }
-  throw new Error("no clear area");
 };
 const assemblerOn = (recipe) => {
   const world = setup();

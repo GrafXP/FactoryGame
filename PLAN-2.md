@@ -106,17 +106,37 @@ last build, remove or paste.
 - [ ] Removing a selection gives back everything in it, including what's on its belts.
 - [ ] A paste that's partly blocked builds the parts that fit and says what was skipped.
 
-### Phase 13: A bigger world
-The 128×128 map gets cramped once there are sub-factories. It grows to **512×512**,
+### Phase 13: A bigger world ✅ (done)
+The 128×128 map gets cramped once there are sub-factories. The map becomes **endless**,
 split into 32×32 chunks that are generated from the seed when first seen and
 rendered (ground texture, rocks) per chunk, so only what's on screen costs anything.
 Only chunks you've changed go in the save. New terrain: **water** (lakes you can't
-build on, needed by phase 16) and further, richer ore fields. Zooming far out turns
-into a **map view**: flat colours, ore patches with what's left, buildings as blocks.
-A saved game from before loads as a 128×128 corner of the new map.
-- [ ] Panning across the whole map stays smooth, and an empty map loads as fast as today.
-- [ ] Zooming all the way out shows the map view, and you can tell where the ore is.
-- [ ] A save with a big factory in one corner stays about as small as today's.
+build on, needed by phase 16), ore patches further apart than before, and further
+out, bigger and richer ore fields. Zooming far out turns into a **map view**: flat
+colours, ore patches with what's left, buildings as blocks. The map view has a **fog
+of war**, as in Factorio: it only shows charted land, which is what you've looked at
+on the playfield and what a **radar** has scanned. The playfield always shows
+everything, and you can build anywhere. A saved game from before loads with its old
+map in the middle of the new one.
+- Done as: `sim/chunks.js` keeps the chunks (ore or water per tile, what's left,
+  the building on it) and the charted ones; `map.js` generates a chunk from the seed
+  alone, so chunks come out the same in any order. The start is (0, 0). Four starting
+  patches sit 30–40 tiles out, at least 15 tiles apart, with a lake 85–100 out. Beyond
+  them each 96×96 square holds at most one patch (none within 90 tiles of the start),
+  growing bigger and richer out to 800 tiles, and lakes come from noise beyond 70
+  tiles. Chunks far from the camera that are untouched and empty are let go of. The
+  map view starts past 64 tiles across (up to 512), draws charted chunks flat and
+  leaves the fog as the background; a tap zooms in there. What's on screen on the
+  playfield is charted (game.js), as are the 4×4 chunks round the start. The **Radar**
+  (2×2, 120 kW, unlocked by Logistics, key 0) scans chunks nearest first out to 12
+  chunks (384 tiles), 4 s each, skipping charted ones, and is done when its range is
+  charted. The power overlay became a window that follows the camera. Save format 7:
+  dug-into chunks and the charted list; a version 6 map is moved so its middle is the
+  start, and all of it is charted.
+- [ ] Panning a long way stays smooth, and an empty map loads as fast as before.
+- [ ] Zooming all the way out shows the map view, you can tell where the ore is, and land you haven't seen is fog.
+- [ ] A radar charts the land round it over time, and the map view shows it.
+- [ ] A save with a big factory in one corner stays about as small as before.
 
 ### Phase 14: Performance pass
 Measure first: a benchmark (`?bench=big`) that builds a 3,000-building factory with
@@ -232,9 +252,9 @@ Dragging a line of Mk2 belts over a Mk1 line upgrades the lot. Unlocked by a HUB
 
 ## Open questions
 
-- **Map size**: a fixed 512×512, or endless chunks? Endless is the same code with
-  no edge. The catch is saves that grow without limit and a map view that has to
-  find its bounds. The plan assumes fixed, since it's simpler to test.
+- ~~**Map size**: a fixed 512×512, or endless chunks?~~ Endless (phase 13). Saves
+  stay small since only dug-into chunks are kept, and the map view shows what's
+  charted, so it has no bounds to find.
 - **Planned buildings**: should they build themselves from the inventory (as
   planned), or wait for a tap?
 - **Merger**: is side-loading enough, or do players expect a merger building?

@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 import { createWorld, step, place, entityAt, startMining } from "../src/sim/world.js";
 import { outputTile } from "../src/sim/buildings.js";
 import { count, total } from "../src/sim/inventory.js";
-import { ORE } from "../src/sim/map.js";
+import { ORE, CHUNK } from "../src/sim/map.js";
+import { chunkOf, tileIndex, isCharted } from "../src/sim/chunks.js";
 import { serialize, deserialize, SaveError, SAVE_VERSION } from "../src/sim/save.js";
-import { charge, ALL } from "./helpers.js";
+import { charge, ALL, oreBlock } from "./helpers.js";
 
 const run = (world, ticks) => {
   for (let i = 0; i < ticks; i++) {
@@ -16,22 +17,29 @@ const run = (world, ticks) => {
 // What IndexedDB does to a save: a structured clone.
 const roundTrip = (world) => deserialize(structuredClone(serialize(world)));
 
-// Top-left of a 2×2 block that's all `ore`.
-const findBlock = (world, ore) => {
-  const at = (x, y) => world.map.ore[y * world.size + x];
-  for (let y = 8; y < world.size - 8; y++) {
-    for (let x = 8; x < world.size - 8; x++) {
-      if (at(x, y) === ore && at(x + 1, y) === ore && at(x, y + 1) === ore && at(x + 1, y + 1) === ore) return { x, y };
+// The same save as it would have been before format 7: a 128×128 map with the
+// start in its middle, and the buildings where they'd have been on it.
+const HALF = 64;
+const asVersion6 = (data, world) => {
+  const size = 2 * HALF;
+  const ore = new Uint8Array(size * size);
+  const amount = new Uint32Array(size * size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const c = chunkOf(world, x - HALF, y - HALF);
+      ore[y * size + x] = c.ore[tileIndex(x - HALF, y - HALF)];
+      amount[y * size + x] = c.amount[tileIndex(x - HALF, y - HALF)];
     }
   }
-  throw new Error("no ore block");
+  const { map, charted, ...rest } = data;
+  return { ...rest, version: 6, size, map: { ore, amount }, entities: data.entities.map((e) => ({ ...e, x: e.x + HALF, y: e.y + HALF })) };
 };
 
 // A running factory: an east-facing miner on iron feeding a belt that turns a corner
 // into a chest, with a second belt merging in from the side.
 const factory = () => {
   const world = createWorld({ milestones: ALL, seed: 5, kit: { "iron-plate": 1000, "copper-plate": 100, "iron-gear": 1000, "electronic-circuit": 1000, stone: 100 } });
-  const { x, y } = findBlock(world, ORE.IRON);
+  const { x, y } = oreBlock(world, ORE.IRON);
   const miner = place(world, "miner", x, y, 1);
   const out = outputTile(miner);
   const belts = [];
@@ -74,7 +82,7 @@ test("loading rebuilds the tile grid and keeps buildings, contents and mined ore
   assert.ok(total(c.inventory) > 0);
   assert.equal(count(c.inventory, "iron-ore"), count(chest.inventory, "iron-ore"));
   assert.deepEqual(entityAt(loaded, belts[2].x, belts[2].y).items, belts[2].items);
-  assert.deepEqual(loaded.map.amount, world.map.amount);
+  assert.deepEqual(chunkOf(loaded, miner.x, miner.y).amount, chunkOf(world, miner.x, miner.y).amount);
   assert.equal(loaded.tick, world.tick);
 
   // New buildings get fresh ids, and the saved world isn't tied to the loaded one.
@@ -85,7 +93,7 @@ test("loading rebuilds the tile grid and keeps buildings, contents and mined ore
 
 test("hand-mining isn't saved", () => {
   const world = createWorld({ milestones: ALL, seed: 5 });
-  const { x, y } = findBlock(world, ORE.IRON);
+  const { x, y } = oreBlock(world, ORE.IRON);
   assert.equal(startMining(world, x, y), null);
   assert.equal(roundTrip(world).mining, null);
 });
@@ -107,13 +115,41 @@ test("an older save is migrated step by step", () => {
   assert.equal(count(world.inventory, "stone"), count(createWorld({ milestones: ALL, seed: 2 }).inventory, "stone") + 5);
 });
 
+test("only the chunks that have been dug into go in the save", () => {
+  const { world, miner } = factory();
+  run(world, 300);
+  const data = serialize(world);
+  assert.ok(world.chunks.size > 1);
+  assert.deepEqual(
+    data.map.chunks.map((c) => [c.cx, c.cy]),
+    [[Math.floor(miner.x / CHUNK), Math.floor(miner.y / CHUNK)]],
+    "just the chunk the miner is digging",
+  );
+  assert.equal(data.charted.length, 2 * world.charted.size);
+});
+
+test("a version 6 save keeps its map, moved so its middle is the start, and all of it charted", () => {
+  const { world, miner, chest } = factory();
+  run(world, 300);
+  const loaded = deserialize(structuredClone(asVersion6(serialize(world), world)));
+  assert.equal(loaded.charted.size, 16);
+  assert.ok(isCharted(loaded, -2, -2) && isCharted(loaded, 1, 1));
+  assert.equal(entityAt(loaded, miner.x, miner.y)?.id, miner.id);
+  assert.equal(entityAt(loaded, chest.x, chest.y)?.type, "chest");
+  for (const [x, y] of [[-64, -64], [miner.x, miner.y], [63, 63]]) {
+    const [a, b] = [chunkOf(loaded, x, y), chunkOf(world, x, y)];
+    assert.deepEqual([a.ore, a.amount], [b.ore, b.amount]);
+    assert.ok(a.changed, "kept in the save from now on");
+  }
+});
+
 test("a version 1 save (before furnaces) still loads", () => {
   const { world } = factory();
   run(world, 300);
-  const v1 = { ...serialize(world), version: 1 };
-  // Loading it as it was, apart from what came with power and milestones (see
-  // power.test.js and progress.test.js).
-  const withoutLater = ({ inventory, progress, entities, ...rest }) => ({ ...rest, entities: entities.map(({ energy, ...e }) => e) });
+  const v1 = { ...asVersion6(serialize(world), world), version: 1 };
+  // Loading it as it was, apart from what came with power, milestones and the
+  // endless map (see power.test.js and progress.test.js, and the test above).
+  const withoutLater = ({ inventory, progress, entities, map, ...rest }) => ({ ...rest, entities: entities.map(({ energy, ...e }) => e) });
   assert.deepEqual(withoutLater(serialize(deserialize(structuredClone(v1)))), withoutLater(serialize(world)));
 });
 
@@ -133,7 +169,9 @@ test("things that aren't saves, or are damaged, fail with a SaveError", () => {
   run(world, 300);
   const good = serialize(world);
   const damaged = [
-    { ...good, map: { ...good.map, ore: new Uint8Array(3) } },
+    { ...good, map: { chunks: [{ cx: 0, cy: 0, ore: new Uint8Array(3), amount: new Uint32Array(CHUNK * CHUNK) }] } },
+    { ...good, map: { chunks: [{ cx: 0.5, cy: 0, ore: new Uint8Array(CHUNK * CHUNK), amount: new Uint32Array(CHUNK * CHUNK) }] } },
+    { ...good, charted: [0, 0] },
     { ...good, entities: [...good.entities, { ...good.entities[0], id: 999 }] }, // overlaps
     { ...good, entities: [{ ...good.entities[0], type: "teleporter" }] },
     { ...good, inventory: { unobtainium: 3 } },

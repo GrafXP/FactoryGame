@@ -12,7 +12,8 @@
 // underground exits come last, so their entrances are there to pair with.
 import { BUILDINGS, DIRS, footprint } from "./buildings.js";
 import { canFit, place, removeAt, refundOf } from "./world.js";
-import { inMap } from "./grid.js";
+import { WATER } from "./map.js";
+import { inMap, chunkOf, tileIndex, idAt } from "./chunks.js";
 import { missing } from "./inventory.js";
 import { partnerFor, REACH } from "./underground.js";
 import { setRecipe } from "./assembler.js";
@@ -21,9 +22,9 @@ import { lockedWhy, recipeUnlocked } from "./progress.js";
 // The buildings with a tile in rect { x, y, w, h }, in the order they were built.
 export function entitiesIn(world, { x, y, w, h }) {
   const ids = new Set();
-  for (let ty = Math.max(0, y); ty < Math.min(world.size, y + h); ty++) {
-    for (let tx = Math.max(0, x); tx < Math.min(world.size, x + w); tx++) {
-      const id = world.grid[ty * world.size + tx];
+  for (let ty = y; ty < y + h; ty++) {
+    for (let tx = x; tx < x + w; tx++) {
+      const id = inMap(tx, ty) && idAt(world, tx, ty);
       if (id) ids.add(id);
     }
   }
@@ -130,8 +131,10 @@ export function layoutFits(world, layout, x, y, ignore = new Set()) {
     const { w, h } = footprint(p.type, p.rot);
     for (let ty = y + p.y; ty < y + p.y + h; ty++) {
       for (let tx = x + p.x; tx < x + p.x + w; tx++) {
-        if (!inMap(world, tx, ty)) return "Off the map";
-        const id = world.grid[ty * world.size + tx];
+        if (!inMap(tx, ty)) return "Off the map";
+        const c = chunkOf(world, tx, ty);
+        const id = c.ids[tileIndex(tx, ty)];
+        if (c.ore[tileIndex(tx, ty)] === WATER) return "Can't build on water";
         if (id && !ignore.has(id)) return "Something is in the way";
       }
     }
