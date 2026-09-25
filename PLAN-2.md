@@ -138,7 +138,7 @@ map in the middle of the new one.
 - [ ] A radar charts the land round it over time, and the map view shows it.
 - [ ] A save with a big factory in one corner stays about as small as before.
 
-### Phase 14: Performance pass
+### Phase 14: Performance pass ✅ (done)
 Measure first: a benchmark (`?bench=big`) that builds a 3,000-building factory with
 15,000 belt items headless and in the browser, reporting ms per tick and per frame.
 Then fix what the numbers point at. Likely candidates:
@@ -150,8 +150,34 @@ Then fix what the numbers point at. Likely candidates:
   and the renderer reads a per-frame snapshot.
 
 The target is the one at the top of this plan, checked on a real phone.
+- Done as: `sim/bench.js` builds the benchmark straight into a world: 48 modules (miners
+  on painted ore, a furnace column, a line of gear assemblers, generators fed by coal
+  miners, poles) on cleared ground make 3,120 buildings, and belt loops packed tight
+  bring it to 6,288 belts carrying 15,000 items once they've filled. The chests at the
+  belts' ends are emptied every tick, so it runs flat out. (A belt holds 4 items, so
+  3,000 buildings and 15,000 items only fit with the belts on top.) `npm run bench` runs
+  it headless and reports ms a tick, and the tick after building something;
+  `/play?bench=big` (or `small`) plays it in the browser, never saved, with the debug
+  readout on. That readout now always has draw calls, ms a tick and ms a frame.
+  Measured on a laptop with an Intel UHD 620: a tick went from 2.9 to 0.75 ms (headless),
+  and drawing a frame from 22–37 ms (23–41 fps) to 2–3 ms at 60 fps, 3–5 ms zoomed right
+  out. The sim: step() goes through the machines only, with each one's neighbours worked
+  out once per layout (`world.machines`); power keeps each consumer's draw and the loose
+  generators instead of looking through every building each tick; the belt network has
+  each conveyor's length and way out in one list (`steps`). The view draws only what's
+  on screen (`render/visible.js` keeps the buildings by chunk): buildings, belt items,
+  moving parts and icons. Instanced meshes send the GPU only the part in use and are
+  hidden when empty (three binds a mesh's shaders even to draw nothing), and the status
+  and recipe icons are one instanced draw from an atlas (`render/billboards.js`). Building
+  in a big factory worked out every network again, about 40 ms; the belt and power
+  networks now have their own counters (`world.beltVersion`, `powerVersion`), so a belt
+  doesn't redo power nor a pole the belts, and each takes about 7 ms at this size. All of
+  it is worked out from the layout, not saved, and the sim does exactly what it did
+  before, tick for tick (checked against the old code on the benchmark and on random
+  factories), so the save format didn't change. Machines don't sleep: an idle one is a
+  few checks now, and the numbers didn't point at them. Nor was a Web Worker needed.
 - [ ] The benchmark factory runs at 60 UPS on a mid-range phone.
-- [ ] A loaded save still runs tick-for-tick like the saved one (sleeping machines wake the same way).
+- [ ] A loaded save still runs tick-for-tick like the saved one.
 
 ### Phase 15: Production statistics
 You can't balance what you can't see. A **Stats** panel lists each item's production

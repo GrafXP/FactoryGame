@@ -87,8 +87,8 @@ export function createPowerLayer(parent) {
   return {
     // `center` is the ground point the camera looks at.
     update(world, center) {
-      if (wiredVersion !== world.version) {
-        wiredVersion = world.version;
+      if (wiredVersion !== world.powerVersion) {
+        wiredVersion = world.powerVersion;
         setLines(wires, powerNetwork(world).wires);
       }
       areas.visible = ghostWires.visible = !!overlay;
@@ -96,7 +96,7 @@ export function createPowerLayer(parent) {
       ox = Math.floor(center.x / STEP) * STEP - WINDOW / 2;
       oy = Math.floor(center.y / STEP) * STEP - WINDOW / 2;
       areas.position.set(ox + WINDOW / 2, 0.015, oy + WINDOW / 2);
-      const key = `${world.version} ${overlay.pole?.x} ${overlay.pole?.y} ${ox} ${oy}`;
+      const key = `${world.powerVersion} ${overlay.pole?.x} ${overlay.pole?.y} ${ox} ${oy}`;
       if (key === paintedKey) return;
       paintedKey = key;
       paintAreas(world);

@@ -43,6 +43,7 @@ export function pairUp(world, e) {
   e.pair = p.id;
   p.pair = e.id;
   world.version++;
+  world.beltVersion++; // the entrance now runs under to the exit
 }
 
 // The tiles ahead of an unpaired entrance where its exit can go (free ones only),

@@ -47,12 +47,11 @@ const takeFrom = (f, slot, n = 1) => {
   if ((f[slot].n -= n) === 0) f[slot] = null;
 };
 
-// Takes one item from the output for an inserter, if `accepts` wants it.
-export function furnaceTakeOne(f, accepts) {
-  const out = f.output;
-  if (!out || !accepts(out.item)) return null;
+// Takes one item from the output, which has something in it, for an inserter.
+export function furnaceTakeOne(f) {
+  const item = f.output.item;
   takeFrom(f, "output");
-  return out.item;
+  return item;
 }
 
 // How many of `item` the player could still put in: slots fill up to a full stack.

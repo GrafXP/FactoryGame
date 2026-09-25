@@ -78,20 +78,25 @@ export function put(e, item) {
   else add(e.inventory, item);
 }
 
-// Takes one item that `accepts(item)` says yes to out of building e, for an inserter,
-// and returns it (or null). Conveyors give up their frontmost such item on their
-// own tile (not one that's underground), chests any,
-// furnaces and assemblers only what they've made, generators and the HUB nothing.
-export function takeOne(e, accepts) {
+// Takes one item that building `target` can take right now out of building e, for
+// an inserter, and returns it (or null). Conveyors give up their frontmost such
+// item on their own tile (not one that's underground), chests any, furnaces and
+// assemblers only what they've made, generators and the HUB nothing.
+export function takeOne(e, target) {
   if (isConveyor(e)) {
-    const i = e.items.findIndex((it) => it.pos <= BELT_LEN && accepts(it.item));
-    return i < 0 ? null : e.items.splice(i, 1)[0].item;
+    const items = e.items;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].pos <= BELT_LEN && canTake(target, items[i].item)) return items.splice(i, 1)[0].item;
+    }
+    return null;
   }
-  if (e.type === "furnace") return furnaceTakeOne(e, accepts);
-  if (e.type === "assembler") return assemblerTakeOne(e, accepts);
+  if (e.type === "furnace" || e.type === "assembler") {
+    if (!e.output || !canTake(target, e.output.item)) return null;
+    return e.type === "furnace" ? furnaceTakeOne(e) : assemblerTakeOne(e);
+  }
   if (!e.inventory) return null;
   for (const id in ITEMS) {
-    if (count(e.inventory, id) && accepts(id)) {
+    if (count(e.inventory, id) && canTake(target, id)) {
       take(e.inventory, { [id]: 1 });
       return id;
     }
@@ -108,7 +113,8 @@ function insertAt(belt, item, pos) {
 }
 
 // How the conveyors connect, worked out from the layout and cached until it changes
-// (world.version). It's derived, so it isn't part of the saved state.
+// (world.beltVersion, which goes up when a conveyor or something that takes items
+// is built or removed). It's derived, so it isn't part of the saved state.
 //   next:  where each conveyor but a splitter hands its items, as { to, mode }:
 //          "belt" enters the next conveyor at its start, "side" drops onto its
 //          middle (a side-load), "put" hands the item to a chest or other building.
@@ -118,21 +124,30 @@ function insertAt(belt, item, pos) {
 //   shape: for belts, "straight", or "left"/"right" for a corner fed only from that side.
 //   order: conveyors downstream first, so each moves after the ones it feeds and a
 //          packed line moves as one instead of opening gaps.
+//   steps: `order` with what stepBelts needs of each, { b, len, next, exits }, so
+//          it doesn't look them up every tick.
+// `next` and `len` are only made when they're first asked for; the sim uses `steps`.
 export function beltNetwork(world) {
-  if (world.beltNet?.version === world.version) return world.beltNet;
+  if (world.beltNet?.version === world.beltVersion) return world.beltNet;
+  // Worked out again for every change to a big factory, so it's all flat arrays by
+  // each conveyor's place in `conveyors`.
   const conveyors = [];
-  for (const e of world.entities.values()) if (isConveyor(e)) conveyors.push(e);
-
-  const len = new Map();
-  for (const c of conveyors) {
-    const exit = c.type === "underground" && c.end === "in" && world.entities.get(c.pair);
-    len.set(c, exit ? (Math.abs(exit.x - c.x) + Math.abs(exit.y - c.y)) * BELT_LEN : BELT_LEN);
+  let top = 0;
+  for (const e of world.entities.values()) {
+    if (!isConveyor(e)) continue;
+    conveyors.push(e);
+    top = Math.max(top, e.id);
   }
+  const n = conveyors.length;
+  const at = new Int32Array(top + 1); // conveyor id → its place + 1
+  for (let i = 0; i < n; i++) at[conveyors[i].id] = i + 1;
+  const place = (c) => at[c.id] - 1;
 
   // Where an item leaving conveyor c going `dir` ends up. Items only enter a
   // conveyor from behind (the start of its lane) or, for belts and underground
   // ends, from the side; conveyors facing each other head-on don't connect.
-  const inputs = new Map(); // belt → which sides feed it
+  const inputs = new Uint8Array(n); // how many sides feed each belt
+  const firstInput = new Array(n); // and which side the first one found is
   const link = (c, dir) => {
     if (c.type === "underground" && c.end === "in") {
       const exit = world.entities.get(c.pair);
@@ -146,71 +161,106 @@ export function beltNetwork(world) {
     const turn = (dir - f.rot + 4) % 4; // 0 from behind, 1 from its left, 3 from its right
     if (f.type === "belt") {
       const side = turn === 0 ? "back" : turn === 1 ? "left" : "right";
-      if (!inputs.has(f)) inputs.set(f, []);
-      inputs.get(f).push(side);
+      if (!inputs[place(f)]++) firstInput[place(f)] = side;
       return { to: f, side };
     }
     if (turn === 0) return isSplitter(f) || f.end === "in" ? { to: f, mode: "belt" } : null;
     return f.type === "underground" ? { to: f, mode: "side" } : null;
   };
-  const raw = new Map(); // conveyor → [links], one for most, three for a splitter
-  for (const c of conveyors) raw.set(c, isSplitter(c) ? SPLIT_TURNS.map((t) => link(c, (c.rot + t) % 4)) : [link(c, c.rot)]);
+  // Each conveyor's links: one for most, three for a splitter, at raw[3 * i + k].
+  const lens = new Array(n);
+  const split = new Uint8Array(n);
+  const raw = new Array(3 * n).fill(null);
+  for (let i = 0; i < n; i++) {
+    const c = conveyors[i];
+    const exit = c.type === "underground" && c.end === "in" && world.entities.get(c.pair);
+    lens[i] = exit ? (Math.abs(exit.x - c.x) + Math.abs(exit.y - c.y)) * BELT_LEN : BELT_LEN;
+    split[i] = isSplitter(c) ? 1 : 0;
+  }
+  for (let i = 0; i < n; i++) {
+    const c = conveyors[i];
+    if (!split[i]) raw[3 * i] = link(c, c.rot);
+    else for (let k = 0; k < 3; k++) raw[3 * i + k] = link(c, (c.rot + SPLIT_TURNS[k]) % 4);
+  }
 
+  const shapes = new Array(n);
   const shape = new Map();
-  for (const c of conveyors) {
-    if (c.type !== "belt") continue;
-    const ins = inputs.get(c) || [];
-    shape.set(c, ins.length === 1 && ins[0] !== "back" ? ins[0] : "straight");
+  for (let i = 0; i < n; i++) {
+    if (conveyors[i].type !== "belt") continue;
+    shapes[i] = inputs[i] === 1 && firstInput[i] !== "back" ? firstInput[i] : "straight";
+    shape.set(conveyors[i], shapes[i]);
   }
   // Into a straight belt's side is a side-load; into a corner, the way round it.
-  const resolve = (l) => l && (l.mode ? l : { to: l.to, mode: l.side === "back" || shape.get(l.to) !== "straight" ? "belt" : "side" });
-  const next = new Map();
+  const resolve = (l) => l && (l.mode ? l : { to: l.to, mode: l.side === "back" || shapes[place(l.to)] !== "straight" ? "belt" : "side" });
+  const nexts = new Array(n).fill(null);
+  const outs = new Array(n).fill(null);
   const exits = new Map();
-  for (const [c, links] of raw) {
-    if (isSplitter(c)) exits.set(c, links.map(resolve));
-    else if (links[0]) next.set(c, resolve(links[0]));
+  for (let i = 0; i < n; i++) {
+    if (split[i]) exits.set(conveyors[i], (outs[i] = [resolve(raw[3 * i]), resolve(raw[3 * i + 1]), resolve(raw[3 * i + 2])]));
+    else if (raw[3 * i]) nexts[i] = resolve(raw[3 * i]);
   }
 
   // Downstream first: a depth-first walk that adds each conveyor after everything
-  // it feeds. Loops work too; one join in a loop may open a gap.
-  const kids = new Map();
-  for (const [c, links] of raw) kids.set(c, links.filter((l) => l && isConveyor(l.to)).map((l) => l.to));
+  // it feeds (the conveyors its links go to, in order). Loops work too; one join in
+  // a loop may open a gap.
   const order = [];
-  const seen = new Set();
-  for (const c of conveyors) {
-    if (seen.has(c)) continue;
-    seen.add(c);
-    const stack = [[c, 0]];
-    while (stack.length) {
-      const top = stack[stack.length - 1];
-      const under = kids.get(top[0]);
-      if (top[1] < under.length) {
-        const k = under[top[1]++];
-        if (!seen.has(k)) {
-          seen.add(k);
-          stack.push([k, 0]);
-        }
+  const steps = [];
+  const seen = new Uint8Array(n);
+  const stack = new Int32Array(n); // conveyors under way
+  const tried = new Uint8Array(n); // how many of each one's links have been followed
+  for (let s = 0; s < n; s++) {
+    if (seen[s]) continue;
+    seen[s] = 1;
+    stack[0] = s;
+    tried[0] = 0;
+    let depth = 1;
+    while (depth) {
+      const i = stack[depth - 1];
+      if (tried[depth - 1] < (split[i] ? 3 : 1)) {
+        const l = raw[3 * i + tried[depth - 1]++];
+        if (!l || !isConveyor(l.to)) continue;
+        const k = place(l.to);
+        if (seen[k]) continue;
+        seen[k] = 1;
+        stack[depth] = k;
+        tried[depth] = 0;
+        depth++;
       } else {
-        order.push(top[0]);
-        stack.pop();
+        order.push(conveyors[i]);
+        steps.push({ b: conveyors[i], len: lens[i], next: nexts[i], exits: outs[i] });
+        depth--;
       }
     }
   }
 
-  world.beltNet = { version: world.version, next, exits, len, shape, order };
+  let next = null;
+  let len = null;
+  world.beltNet = {
+    version: world.beltVersion,
+    exits,
+    shape,
+    order,
+    steps,
+    get next() {
+      return (next ||= new Map(steps.filter((s) => s.next).map((s) => [s.b, s.next])));
+    },
+    get len() {
+      return (len ||= new Map(steps.map((s) => [s.b, s.len])));
+    },
+  };
   return world.beltNet;
 }
 
 export function stepBelts(world) {
-  const net = beltNetwork(world);
-  for (const c of net.order) moveBelt(c, net);
+  const { steps } = beltNetwork(world);
+  for (let i = 0; i < steps.length; i++) moveBelt(steps[i]);
 }
 
 // Whether `item` could go out along link l, behind `pending` items already on
 // their way there.
 function hasRoom(l, item, pending) {
   if (l.mode === "belt") {
-    const rear = l.to.items.at(-1);
+    const rear = l.to.items[l.to.items.length - 1];
     return !rear || rear.pos >= ITEM_GAP * (pending + 1);
   }
   return l.mode === "side" ? !pending && roomAt(l.to, MID) : canTake(l.to, item);
@@ -240,28 +290,30 @@ function chooseExit(s, it, exits) {
   return null;
 }
 
-function moveBelt(b, net) {
+// Moves conveyor s.b's items along (s is its entry in the network's steps).
+function moveBelt(s) {
+  const { b, len, exits } = s;
   const items = b.items;
-  if (!items.length) {
+  const n = items.length;
+  if (!n) {
     if (b.status && b.status !== "working") b.status = "working"; // an empty splitter isn't stuck
     return;
   }
-  const len = net.len.get(b);
-  const exits = isSplitter(b) && net.exits.get(b);
   // A way out that's gone since an item picked it: it picks again.
   if (exits) for (const it of items) if (it.exit !== undefined && !exits[it.exit]) delete it.exit;
-  const out = exits ? items[0].exit !== undefined && exits[items[0].exit] : net.next.get(b);
+  const out = exits ? items[0].exit !== undefined && exits[items[0].exit] : s.next;
 
   // The front item may run onto the next conveyor as far as that one's last item
   // allows; anything else waits at this one's front edge until it can be handed over.
   const first = items[0];
   const was = first.pos;
   let limit = len;
-  if (out?.mode === "belt") {
-    const rear = out.to.items.at(-1);
-    limit = len + (rear ? rear.pos - ITEM_GAP : BELT_SPEED);
+  if (out && out.mode === "belt") {
+    const ahead = out.to.items;
+    limit = len + (ahead.length ? ahead[ahead.length - 1].pos - ITEM_GAP : BELT_SPEED);
   }
-  for (const it of items) {
+  for (let k = 0; k < n; k++) {
+    const it = items[k];
     let to = Math.min(it.pos + BELT_SPEED, limit);
     if (exits && it.exit === undefined && to >= MID) {
       const i = chooseExit(b, it, exits);

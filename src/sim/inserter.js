@@ -8,7 +8,6 @@
 // (nothing to pick up), "waiting" (holding an item the target has no room for
 // yet), "no-power" or "no-output" (nothing in front takes items).
 import { BUILDINGS, DIRS } from "./buildings.js";
-import { entityAt } from "./grid.js";
 import { takesItems, canTake, put, takeOne } from "./transport.js";
 import { hasPower, usePower } from "./power.js";
 
@@ -22,9 +21,8 @@ export function inserterEnds(e) {
   return { from: { x: e.x - dx, y: e.y - dy }, to: { x: e.x + dx, y: e.y + dy } };
 }
 
-export function stepInserter(world, ins) {
-  const { from, to } = inserterEnds(ins);
-  const target = entityAt(world, to.x, to.y);
+// `source` and `target` are the buildings behind and in front of it, or null.
+export function stepInserter(world, ins, source, target) {
   const hasTarget = !!target && takesItems(target);
 
   if (ins.hand) {
@@ -54,8 +52,7 @@ export function stepInserter(world, ins) {
     return;
   }
   if (!hasPower(world, ins)) return;
-  const source = entityAt(world, from.x, from.y);
-  const item = source && takeOne(source, (id) => canTake(target, id));
+  const item = source && takeOne(source, target);
   ins.hand = item || null;
   ins.status = item ? "working" : "idle";
 }

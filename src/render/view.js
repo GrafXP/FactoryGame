@@ -6,12 +6,14 @@ import { beltNetwork } from "../sim/transport.js";
 import { CHUNK, LIMIT } from "../sim/chunks.js";
 import { createTerrain } from "./terrain.js";
 import { createBuildingLayer } from "./buildings.js";
-import { createStatusIcons } from "./status.js";
+import { drawStatusIcons } from "./status.js";
 import { createItemLayer } from "./items.js";
 import { drawBeltItems, beltItemCount } from "./belt-items.js";
 import { createMachineParts } from "./machines.js";
 import { createRecipeIcons } from "./recipe-icons.js";
 import { createPowerLayer } from "./power.js";
+import { createBillboards } from "./billboards.js";
+import { createVisible } from "./visible.js";
 
 // Ore colours are picked so the four ores differ in hue *and* lightness in both
 // themes: iron blue, copper orange, coal black, stone pale sand. Ore items are drawn
@@ -165,17 +167,17 @@ export function createView(container, world, { theme = "dark" } = {}) {
   scene.add(grid);
 
   // Everything but the ground: hidden in the map view, where buildings are blocks
-  // drawn into the ground.
+  // drawn into the ground. Only what's on screen is drawn (visible.js).
   const play = new THREE.Group();
   scene.add(play);
+  const visible = createVisible();
   const buildings = createBuildingLayer(play);
-  const statusIcons = createStatusIcons(play);
   const items = createItemLayer(play);
   const machines = createMachineParts(play);
-  const recipeIcons = createRecipeIcons(play);
+  const icons = createBillboards(play); // status (status.js) and recipe icons
+  const recipeIcons = createRecipeIcons();
   const power = createPowerLayer(play);
   const ghosts = createBuildingLayer(play, { ghost: true });
-  let drawnVersion = -1;
 
   // Highlight for a tile or footprint: a translucent fill plus an outline.
   const selection = new THREE.Group();
@@ -236,6 +238,7 @@ export function createView(container, world, { theme = "dark" } = {}) {
     marks.renderOrder = 2;
     marks.frustumCulled = false;
     marks.count = 0;
+    marks.visible = false;
     play.add(marks);
   };
   ensureMarks(0);
@@ -266,6 +269,7 @@ export function createView(container, world, { theme = "dark" } = {}) {
     const itemColors = { ...COLORS.items };
     for (const ore in ORE_ITEM) itemColors[ORE_ITEM[ore]] = COLORS.ore[ore];
     items.setTheme(itemColors);
+    icons.clear();
     recipeIcons.setTheme(itemColors);
   };
   applyTheme();
@@ -319,14 +323,16 @@ export function createView(container, world, { theme = "dark" } = {}) {
     return { x: hit.x, y: hit.z };
   };
 
-  // The chunks the screen shows, from (cx0, cy0) to (cx1, cy1), with `margin` more each way.
+  // The ground the screen shows, from (x0, y0) to (x1, y1) in tiles (null if the
+  // screen has no size yet).
   const corners = [
     [-1, -1],
     [1, -1],
     [-1, 1],
     [1, 1],
   ];
-  const visibleChunks = (margin = 0) => {
+  const onScreen = { x0: 0, y0: 0, x1: 0, y1: 0 };
+  const screenRect = () => {
     let x0 = Infinity;
     let y0 = Infinity;
     let x1 = -Infinity;
@@ -340,8 +346,14 @@ export function createView(container, world, { theme = "dark" } = {}) {
       y1 = Math.max(y1, hit.z);
     }
     if (x0 > x1) return null;
+    return Object.assign(onScreen, { x0, y0, x1, y1 });
+  };
+  // The chunks the screen shows, from (cx0, cy0) to (cx1, cy1), with `margin` more each way.
+  const visibleChunks = (margin = 0) => {
+    const r = screenRect();
+    if (!r) return null;
     const at = (v) => Math.floor(v / CHUNK);
-    return { cx0: at(x0) - margin, cy0: at(y0) - margin, cx1: at(x1) + margin, cy1: at(y1) + margin };
+    return { cx0: at(r.x0) - margin, cy0: at(r.y0) - margin, cx1: at(r.x1) + margin, cy1: at(r.y1) + margin };
   };
 
   // Camera moves used by the input controls. The centre stays within LIMIT of the start.
@@ -380,6 +392,10 @@ export function createView(container, world, { theme = "dark" } = {}) {
   return {
     canvas: renderer.domElement,
     cam,
+    // How many draw calls the last frame took.
+    get drawCalls() {
+      return renderer.info.render.calls;
+    },
     // Whether it's showing the map view rather than the playfield.
     get mapMode() {
       return isMap();
@@ -397,27 +413,30 @@ export function createView(container, world, { theme = "dark" } = {}) {
         scene.background = new THREE.Color(mapMode ? COLORS.fog : COLORS.bg);
       }
       grid.visible = !mapMode && grid.material.opacity > 0;
-      if (mapMode) return renderer.render(scene, camera);
-      if (drawnVersion !== world.version) {
-        drawnVersion = world.version;
+      const onGround = screenRect();
+      if (mapMode || !onGround) return renderer.render(scene, camera);
+      const { list, changed } = visible.update(world, onGround);
+      if (changed) {
         // Belts are drawn straight or as a corner, depending on what feeds them, and
         // underground belts as an entrance or an exit.
         const { shape } = beltNetwork(world);
         const models = { left: "belt-left", right: "belt-right" };
         buildings.set(
-          [...world.entities.values()].map((e) =>
+          list.map((e) =>
             e.type === "belt" ? { ...e, model: models[shape.get(e)] } : e.type === "underground" ? { ...e, model: `underground-${e.end}` } : e,
           ),
         );
       }
       // Loose items: on belts, and one at most in each inserter's hand.
-      items.begin(beltItemCount(world) + world.entities.size);
-      drawBeltItems(world, items);
-      machines.update(world, items);
+      items.begin(beltItemCount(list) + list.length);
+      drawBeltItems(world, items, list);
+      machines.update(world, items, list);
       items.end();
       power.update(world, cam.center);
-      statusIcons.update(world);
-      recipeIcons.update(world.entities.values());
+      icons.begin();
+      recipeIcons.update(list, icons);
+      drawStatusIcons(world, list, icons);
+      icons.end();
       const m = world.mining;
       mineMark.visible = !!m;
       if (m) {
@@ -440,6 +459,7 @@ export function createView(container, world, { theme = "dark" } = {}) {
         marks.setMatrixAt(i, m.compose(pos, q, scale));
       });
       marks.count = list.length;
+      marks.visible = list.length > 0;
       marks.instanceMatrix.needsUpdate = true;
     },
     // Outlines rect { x, y, w, h } in tiles; kind "select" (accent), "remove" (red)
@@ -468,10 +488,9 @@ export function createView(container, world, { theme = "dark" } = {}) {
     dispose() {
       ro.disconnect();
       terrain.dispose();
-      statusIcons.dispose();
       items.dispose();
       machines.dispose();
-      recipeIcons.dispose();
+      icons.dispose();
       power.dispose();
       scene.traverse((obj) => {
         obj.geometry?.dispose();

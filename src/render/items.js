@@ -37,16 +37,11 @@ export function createItemLayer(parent) {
       slot.mesh.dispose();
     }
     slot.mesh = new THREE.InstancedMesh(slot.geometry, material, cap);
+    slot.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);
     slot.mesh.frustumCulled = false;
     parent.add(slot.mesh);
   };
   for (const s of slots) ensure(s, 0);
-
-  const m = new THREE.Matrix4();
-  const q = new THREE.Quaternion();
-  const pos = new THREE.Vector3();
-  const up = new THREE.Vector3(0, 1, 0);
-  const one = new THREE.Vector3(1, 1, 1);
 
   return {
     // Starts a frame that will draw at most n items.
@@ -58,18 +53,49 @@ export function createItemLayer(parent) {
     },
     // One item centred at (x, y, z), turned `angle` radians about the vertical.
     // Rocks get `spin` on top, so a row of ore doesn't look like one repeated rock.
+    // There are thousands a frame, so the matrix and colour go straight into the
+    // buffers.
     add(item, x, y, z, angle, spin = 0) {
       const s = byShape[ITEMS[item]?.shape || "rock"];
-      q.setFromAxisAngle(up, s.shape === "rock" ? angle + spin : angle);
-      s.mesh.setMatrixAt(s.n, m.compose(pos.set(x, y, z), q, one));
-      s.mesh.setColorAt(s.n, colors[item] || fallback);
+      const a = s.shape === "rock" ? angle + spin : angle;
+      const cos = Math.cos(a);
+      const sin = Math.sin(a);
+      const e = s.mesh.instanceMatrix.array;
+      const o = s.n * 16;
+      // Column by column: the turn about y (as Matrix4.makeRotationY), then the move.
+      e[o] = cos;
+      e[o + 1] = 0;
+      e[o + 2] = -sin;
+      e[o + 3] = 0;
+      e[o + 4] = 0;
+      e[o + 5] = 1;
+      e[o + 6] = 0;
+      e[o + 7] = 0;
+      e[o + 8] = sin;
+      e[o + 9] = 0;
+      e[o + 10] = cos;
+      e[o + 11] = 0;
+      e[o + 12] = x;
+      e[o + 13] = y;
+      e[o + 14] = z;
+      e[o + 15] = 1;
+      const color = colors[item] || fallback;
+      const rgb = s.mesh.instanceColor.array;
+      rgb[s.n * 3] = color.r;
+      rgb[s.n * 3 + 1] = color.g;
+      rgb[s.n * 3 + 2] = color.b;
       s.n++;
     },
+    // Ends the frame, sending the GPU only the part of each buffer that's in use.
     end() {
       for (const s of slots) {
         s.mesh.count = s.n;
+        s.mesh.visible = s.n > 0; // three binds a mesh's shaders even to draw nothing
+        if (!s.n) continue;
+        s.mesh.instanceMatrix.addUpdateRange(0, s.n * 16);
         s.mesh.instanceMatrix.needsUpdate = true;
-        if (s.mesh.instanceColor) s.mesh.instanceColor.needsUpdate = true;
+        s.mesh.instanceColor.addUpdateRange(0, s.n * 3);
+        s.mesh.instanceColor.needsUpdate = true;
       }
     },
     // itemColors: item id → hex colour.

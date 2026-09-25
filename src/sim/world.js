@@ -10,7 +10,7 @@ import { radarState, stepRadar } from "./radar.js";
 import { stepBelts, takesItems, canTake, put, splitterState, ANY_FILTERS } from "./transport.js";
 import { undergroundState, undergroundWhy, pairUp, unpair, buried } from "./underground.js";
 import { furnaceState, furnaceContents, stepFurnace } from "./furnace.js";
-import { inserterState, stepInserter } from "./inserter.js";
+import { inserterState, inserterEnds, stepInserter } from "./inserter.js";
 import { assemblerState, assemblerContents, stepAssembler } from "./assembler.js";
 import { craftState, stepCraft } from "./crafting.js";
 import { generatorState } from "./generator.js";
@@ -39,6 +39,8 @@ export function createWorld({ seed = 1, kit = START_KIT, milestones = 0, charted
     entities: new Map(), // id → { id, type, x, y, rot, ...state }; x, y is the top-left tile
     nextId: 1,
     version: 0, // bumped whenever entities change, so the view knows to redraw them
+    beltVersion: 0, // bumped when a building the belt network is made of changes (see changed())
+    powerVersion: 0, // likewise for the power network
     inventory: createInventory(kit), // the player's
     mining: null, // { x, y, item, progress } while the player is hand-mining a tile
     craft: craftState(), // the player's hand-crafting queue (crafting.js)
@@ -53,14 +55,46 @@ export function step(world) {
   stepMining(world);
   stepCraft(world);
   stepPower(world);
-  for (const e of world.entities.values()) {
-    if (e.type === "miner") stepMiner(world, e);
+  for (const m of machines(world)) {
+    const e = m.e;
+    if (e.type === "miner") stepMiner(world, e, m);
     else if (e.type === "furnace") stepFurnace(e);
     else if (e.type === "assembler") stepAssembler(world, e);
-    else if (e.type === "inserter") stepInserter(world, e);
+    else if (e.type === "inserter") stepInserter(world, e, m.from, m.to);
     else if (e.type === "radar") stepRadar(world, e);
   }
   stepBelts(world);
+}
+
+// The buildings that do something each tick, in the order they were built (the
+// order step() has always gone in, so a loaded world runs like the saved one), with
+// what each one needs of its neighbours: the building on a miner's output tile and
+// the tiles under it, as [chunk, index, ...]; an inserter's source and target.
+// Belts move in stepBelts, and chests and poles do nothing on their own. Worked out
+// from the layout and cached until it changes (world.version), like the belt
+// network; it isn't saved.
+const STEPPED = new Set(["miner", "furnace", "assembler", "inserter", "radar"]);
+function machines(world) {
+  if (world.machines?.version === world.version) return world.machines.list;
+  const list = [];
+  for (const e of world.entities.values()) {
+    if (!STEPPED.has(e.type)) continue;
+    const m = { e, from: null, to: null, ground: null };
+    if (e.type === "miner") {
+      const out = outputTile(e);
+      m.to = entityAt(world, out.x, out.y);
+      m.ground = [];
+      const { w, h } = footprint(e.type, e.rot);
+      for (let y = e.y; y < e.y + h; y++) for (let x = e.x; x < e.x + w; x++) m.ground.push(chunkOf(world, x, y), tileIndex(x, y));
+    } else if (e.type === "inserter") {
+      const { from, to } = inserterEnds(e);
+      m.from = entityAt(world, from.x, from.y);
+      m.to = entityAt(world, to.x, to.y);
+    }
+    list.push(m);
+  }
+  world.machines = { version: world.version, list };
+  return list;
 }
 
 // What's on tile (x, y), or null off the map: its ore (ORE.NONE for plain ground
@@ -126,8 +160,19 @@ export function addEntity(world, entity) {
   if (entity.type === "hub") entity.progress = world.progress; // where deliveries go
   world.entities.set(entity.id, entity);
   fill(world, entity, entity.id);
-  world.version++;
+  changed(world, entity);
   return entity;
+}
+
+// Notes that building e has been built or removed: world.version goes up, and so do
+// the counters of the networks worked out from it, so building a belt doesn't work
+// out the power network again, nor building a pole the belt network. Belts connect
+// to conveyors and whatever takes items (transport.js); power to poles, generators
+// and whatever uses power (power.js).
+function changed(world, e) {
+  world.version++;
+  if (takesItems(e)) world.beltVersion++;
+  if (e.type === "pole" || e.type === "generator" || usesPower(e.type)) world.powerVersion++;
 }
 
 // Removes whatever building covers (x, y) and returns it, or null if there was none.
@@ -138,6 +183,7 @@ export function removeAt(world, x, y) {
   const under = entity.type === "underground" ? unpair(world, entity) : [];
   world.entities.delete(entity.id);
   fill(world, entity, 0);
+  changed(world, entity);
   give(world.inventory, refundOf(entity));
   for (const it of under) give(world.inventory, { [it.item]: 1 });
   // Emptied, so a panel still showing it can't hand out its contents twice.
@@ -147,7 +193,6 @@ export function removeAt(world, x, y) {
   if (entity.type === "assembler") Object.assign(entity, assemblerState());
   if (entity.type === "generator") entity.fuel = null;
   if (entity.hand) entity.hand = null;
-  world.version++;
   return entity;
 }
 
@@ -208,19 +253,25 @@ export function initialState(type, opts = {}) {
 // (no ore left under it), "no-output" (nothing in front takes items), "no-power" or
 // "full" (it has dug an item and the thing in front has no room for it yet). It
 // waits with the finished item rather than dropping it, so a stopped miner loses
-// nothing. `item` is what it's digging.
-function stepMiner(world, m) {
-  const under = oreUnder(world, m);
-  if (!under) {
+// nothing. `item` is what it's digging. `at` is its entry in machines(): what's on
+// its output tile, and the ground under it.
+function stepMiner(world, m, at) {
+  const { ground, to: target } = at;
+  let c = null;
+  let i = 0;
+  for (let k = 0; k < ground.length; k += 2) {
+    if (!isOre(ground[k].ore[ground[k + 1]])) continue;
+    c = ground[k];
+    i = ground[k + 1];
+    break;
+  }
+  if (!c) {
     m.status = "no-resource";
     m.progress = 0;
     m.item = null;
     return;
   }
-  const [c, i] = under;
   const item = (m.item = ORE_ITEM[c.ore[i]]);
-  const out = outputTile(m);
-  const target = entityAt(world, out.x, out.y);
   if (!target || !takesItems(target)) {
     m.status = "no-output";
     return;
@@ -240,19 +291,6 @@ function stepMiner(world, m) {
     dig(world, c, i);
     put(target, item);
   }
-}
-
-// The first ore tile under a building, as [chunk, index], or null if there's none.
-function oreUnder(world, e) {
-  const { w, h } = footprint(e.type, e.rot);
-  for (let y = e.y; y < e.y + h; y++) {
-    for (let x = e.x; x < e.x + w; x++) {
-      const c = chunkOf(world, x, y);
-      const i = tileIndex(x, y);
-      if (isOre(c.ore[i])) return [c, i];
-    }
-  }
-  return null;
 }
 
 // Ore left under a building, e.g. to show on a miner's panel.

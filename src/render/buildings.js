@@ -211,8 +211,13 @@ export function createBuildingLayer(parent, { ghost = false } = {}) {
         if (ghost) slot.mesh.setColorAt(i, c.set(p.ok ? colors.ok : colors.bad));
       });
       slot.mesh.count = list.length;
+      slot.mesh.visible = list.length > 0; // three binds a mesh's shaders even to draw nothing
+      if (!list.length) continue;
+      slot.mesh.instanceMatrix.addUpdateRange(0, list.length * 16);
       slot.mesh.instanceMatrix.needsUpdate = true;
-      if (slot.mesh.instanceColor) slot.mesh.instanceColor.needsUpdate = true;
+      if (!slot.mesh.instanceColor) continue;
+      slot.mesh.instanceColor.addUpdateRange(0, list.length * 3);
+      slot.mesh.instanceColor.needsUpdate = true;
     }
   };
 

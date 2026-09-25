@@ -1,4 +1,3 @@
-import * as THREE from "three";
 import { footprint } from "../sim/buildings.js";
 import { powerNetwork, satisfaction, usesPower } from "../sim/power.js";
 
@@ -29,8 +28,7 @@ function crossOut(g) {
 }
 
 // Icons floating over machines that are stopped or slowed, so a glance shows what
-// needs help.
-// Drawn once onto small canvases; sprites always face the camera.
+// needs help. They're painted into the icon atlas (billboards.js) on first use.
 const ICONS = {
   // No ore left under a miner: a rock, crossed out.
   "no-resource": (g) => {
@@ -109,55 +107,29 @@ function iconOf(e, world) {
   return net && satisfaction(net) < LOW_POWER ? "low-power" : undefined;
 }
 
-function iconTexture(draw) {
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = 64;
-  const g = canvas.getContext("2d");
-  // A dark disc behind the icon keeps it readable on any ground, in both themes.
-  g.fillStyle = "rgba(15, 17, 22, 0.75)";
-  g.beginPath();
-  g.arc(32, 32, 31, 0, Math.PI * 2);
-  g.fill();
-  draw(g);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
+// Each icon painted on its dark disc, which keeps it readable on any ground, in
+// both themes, and its key in the atlas (billboards.js).
+const PAINT = {};
+const KEY = {};
+for (const [name, draw] of Object.entries(ICONS)) {
+  KEY[name] = `status:${name}`;
+  PAINT[name] = (g) => {
+    g.fillStyle = "rgba(15, 17, 22, 0.75)";
+    g.beginPath();
+    g.arc(32, 32, 31, 0, Math.PI * 2);
+    g.fill();
+    draw(g);
+  };
 }
 
-export function createStatusIcons(parent) {
-  const materials = {};
-  for (const name in ICONS) {
-    materials[name] = new THREE.SpriteMaterial({ map: iconTexture(ICONS[name]), depthTest: false, depthWrite: false });
+// Adds an icon to `icons` (billboards.js) over every building in `list` whose
+// status needs one.
+export function drawStatusIcons(world, list, icons) {
+  for (const e of list) {
+    if (!e.status) continue;
+    const icon = iconOf(e, world);
+    if (!icon) continue;
+    const { w, h } = footprint(e.type, e.rot);
+    icons.add(icons.cell(KEY[icon], PAINT[icon]), e.x + w / 2, 1.6, e.y + h / 2, 0.9);
   }
-  const pool = []; // sprites are reused frame to frame; there are rarely many
-
-  return {
-    // Shows an icon over every entity whose status needs one.
-    update(world) {
-      let n = 0;
-      for (const e of world.entities.values()) {
-        const icon = iconOf(e, world);
-        if (!icon) continue;
-        let sprite = pool[n];
-        if (!sprite) {
-          sprite = pool[n] = new THREE.Sprite();
-          sprite.scale.set(0.9, 0.9, 1);
-          sprite.renderOrder = 3;
-          parent.add(sprite);
-        }
-        const { w, h } = footprint(e.type, e.rot);
-        sprite.material = materials[icon];
-        sprite.position.set(e.x + w / 2, 1.6, e.y + h / 2);
-        sprite.visible = true;
-        n++;
-      }
-      for (let i = n; i < pool.length; i++) pool[i].visible = false;
-    },
-    dispose() {
-      for (const m of Object.values(materials)) {
-        m.map.dispose();
-        m.dispose();
-      }
-    },
-  };
 }

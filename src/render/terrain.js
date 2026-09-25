@@ -134,6 +134,7 @@ export function createTerrain(parent) {
       k++;
     }
     v.rocks.count = k;
+    v.rocks.visible = k > 0;
     v.rocks.instanceMatrix.needsUpdate = true;
     if (v.rocks.instanceColor) v.rocks.instanceColor.needsUpdate = true;
   };
@@ -146,7 +147,7 @@ export function createTerrain(parent) {
     }
     v.tex.needsUpdate = true;
     v.mesh.material = mapMode ? v.flat : v.lit;
-    if (v.rocks) v.rocks.visible = !mapMode;
+    if (v.rocks) v.rocks.visible = !mapMode && v.rocks.count > 0;
     v.painted = v.chunk.version;
     v.mapMode = mapMode;
     v.theme = theme;

@@ -6,6 +6,7 @@ import { BUILDINGS, kW } from "./sim/buildings.js";
 import { CHUNK } from "./sim/map.js";
 import { count } from "./sim/inventory.js";
 import { serialize, deserialize } from "./sim/save.js";
+import { BENCHES, benchWorld, benchCounts, drain } from "./sim/bench.js";
 import { readSave, writeSave } from "./storage.js";
 import { getTheme, getThemePref, setThemePref, onThemeChange } from "./theme.js";
 import { fullscreenSupported, isFullscreen, toggleFullscreen, onFullscreenChange } from "./fullscreen.js";
@@ -175,12 +176,32 @@ const AUTOSAVE_MS = 30000;
 // new game (home asks first), and ?seed=… picks its map; /play?seed=… with a save
 // asks which to play. Once a game is running the address goes back to plain /play,
 // so reloading continues it.
+//
+// /play?bench=big plays the benchmark factory (sim/bench.js) with the timings
+// showing. It's never saved, so the saved game is left alone, and reloading runs it
+// again.
 function play(el) {
   const params = new URLSearchParams(location.search);
   const seedParam = params.get("seed");
+  const bench = params.get("bench");
   const $ = html(el, `<div class="game"><div class="overlay" id="loader"><p>Loading…</p></div></div>`);
   let stop = null;
   let gone = false;
+
+  if (bench !== null) {
+    if (!Object.hasOwn(BENCHES, bench)) {
+      $("#loader").innerHTML = `<h2>No such benchmark</h2><p>Try ${Object.keys(BENCHES)
+        .map((b) => `<a href="/play?bench=${b}">${b}</a>`)
+        .join(" or ")}.</p>`;
+      return () => {};
+    }
+    $("#loader p").textContent = "Building the benchmark factory…";
+    const timer = setTimeout(() => (stop = playWorld(el, { ...benchWorld(bench), bench })), 50); // after "Building…" shows
+    return () => {
+      clearTimeout(timer);
+      stop?.();
+    };
+  }
 
   const start = (opts) => {
     history.replaceState(null, "", "/play");
@@ -239,14 +260,16 @@ const RADAR_KW = kW(BUILDINGS.radar.draw);
 const TOOL_KEYS = { ...BUILDING_KEYS, x: "remove", c: "select", v: "paste" };
 const DEBUG_KEY = "factory:debug";
 
-// The game page itself, playing a loaded `world` or a new one from `seed`.
+// The game page itself, playing a loaded `world` or a new one from `seed`, or with
+// `bench` (its name), the benchmark factory `world`, whose `sinks` are drained
+// after every tick, never saving it.
 //
 // Top: Back, the clock, Undo and Pause, under them the resource bar (tap it for the
 // inventory), and under that the goal card (ui/goal.js; tap it for the HUB). A
 // banner drops in when a milestone is reached. Bottom: the build controls
 // (ui/build-menu.js), with toasts and readouts stacked above them. Right: panels for the tapped building and the
 // inventory. Pause holds the settings: theme, fullscreen, debug info.
-function playWorld(el, { world, seed, isNew = false }) {
+function playWorld(el, { world, seed, isNew = false, bench = null, sinks = [] }) {
   const $ = html(
     el,
     `<div class="game" id="game">
@@ -279,6 +302,7 @@ function playWorld(el, { world, seed, isNew = false }) {
       </div>
       <div class="debug" id="debug" hidden>
         <div id="dbg-perf">– fps · – ups</div>
+        <div id="dbg-time">– ms a tick · – ms a frame</div>
         <div id="dbg-seed"></div>
         <div id="dbg-tile">Tap a tile</div>
       </div>
@@ -296,8 +320,9 @@ function playWorld(el, { world, seed, isNew = false }) {
     </div>`,
   );
 
-  // Debug readout (off unless switched on in the pause menu, or with `): FPS/UPS,
-  // the seed, and the hovered tile (mouse), else the tapped one.
+  // Debug readout (off unless switched on in the pause menu, or with `, and always
+  // on in a benchmark): FPS/UPS, how long a tick and drawing a frame take, the seed
+  // (or the benchmark's size), and the hovered tile (mouse), else the tapped one.
   let tapped = null;
   let hovered = null;
   const showTile = () => {
@@ -306,9 +331,10 @@ function playWorld(el, { world, seed, isNew = false }) {
       ? "Tap a tile"
       : `${t.x}, ${t.y} · ${t.oreName}${t.amount ? ` ×${t.amount}` : ""}${t.entity ? ` · ${BUILDINGS[t.entity.type].name}` : ""}`;
   };
-  const setDebug = (on) => {
+  const setDebug = (on, remember = true) => {
     $("#debug").hidden = !on;
     $("#debug-toggle").textContent = on ? "Hide debug info" : "Show debug info";
+    if (!remember) return;
     try {
       localStorage.setItem(DEBUG_KEY, on ? "1" : "0");
     } catch {}
@@ -317,7 +343,7 @@ function playWorld(el, { world, seed, isNew = false }) {
   try {
     debugOn = localStorage.getItem(DEBUG_KEY) === "1";
   } catch {}
-  setDebug(debugOn);
+  setDebug(debugOn || !!bench, false);
 
   let toastTimer = 0;
   const toast = (text) => {
@@ -393,8 +419,11 @@ function playWorld(el, { world, seed, isNew = false }) {
     theme: getTheme(),
     world,
     seed,
-    onStats: ({ fps, ups }) => {
-      $("#dbg-perf").textContent = `${Math.round(fps)} fps · ${Math.round(ups)} ups`;
+    afterStep: bench ? () => drain(sinks) : undefined,
+    onStats: ({ fps, ups, tickMs, frameMs, drawCalls }) => {
+      $("#dbg-perf").textContent = `${Math.round(fps)} fps · ${Math.round(ups)} ups · ${drawCalls} draws`;
+      $("#dbg-time").textContent = `${tickMs.toFixed(2)} ms a tick · ${frameMs.toFixed(2)} ms a frame`;
+      if (bench) showBench();
     },
     onInspect: (t) => {
       tapped = t;
@@ -432,7 +461,13 @@ function playWorld(el, { world, seed, isNew = false }) {
   menu = createBuildMenu({ bar: $("#buildbar"), info: $("#toolinfo"), sheet: $("#sheet") }, game.builder, { craft: craftParts });
   syncInventory(game.world);
   crafting.sync(game.world);
-  $("#dbg-seed").textContent = `seed ${game.world.seed}`;
+  // A benchmark shows how big it is instead of the seed.
+  const showBench = () => {
+    const { buildings, belts, items } = benchCounts(game.world);
+    $("#dbg-seed").textContent = `bench=${bench} · ${buildings - belts} + ${belts} belts · ${items} items`;
+  };
+  if (bench) showBench();
+  else $("#dbg-seed").textContent = `seed ${game.world.seed}`;
 
   // The line under the clock: Running or Paused, or briefly "Saved".
   let statusTimer = 0;
@@ -467,14 +502,16 @@ function playWorld(el, { world, seed, isNew = false }) {
   // Autosave every AUTOSAVE_MS, when the app is hidden or the page closes, and on
   // leaving /play. Skipped when nothing has changed since the last save. A new game
   // is saved straight away, since it replaces the old save. A write can finish after
-  // the page has gone, and then there's nothing left to tell.
+  // the page has gone, and then there's nothing left to tell. A benchmark is never
+  // saved, so it doesn't replace the saved game.
   let savedKey = "";
   let saveFailed = false;
   let left = false;
+  if (bench) $("[data-action=quit]").textContent = "Quit";
   const save = () => {
     const w = game.world;
     const key = `${w.tick} ${w.version} ${w.inventory.version}`;
-    if (key === savedKey) return;
+    if (bench || key === savedKey) return;
     writeSave(serialize(w)).then(
       () => {
         savedKey = key;
@@ -572,7 +609,7 @@ function help(el) {
     <dl>
       <dt>Top</dt><dd>Back to the menu, the game clock, Undo and Pause. Under them, the resource bar shows everything you carry; tap it (or press I) for the inventory with full names.</dd>
       <dt>Bottom</dt><dd>Build opens every building, sorted into tabs, with what each one does, what it costs and how many you can afford. Next to it are quick slots for the buildings you picked last, then Select and Remove. The small number on a building is how many you can afford.</dd>
-      <dt>Pause</dt><dd>Resume, light/dark mode, fullscreen, debug info (FPS and the tapped tile), and Save and quit.</dd>
+      <dt>Pause</dt><dd>Resume, light/dark mode, fullscreen, debug info (how fast the game runs, and the tapped tile), and Save and quit.</dd>
     </dl>
     <h2>Building</h2>
     <dl>
@@ -619,6 +656,11 @@ function help(el) {
       <dt>Map view</dt><dd>Zoom far out (pinch, or scroll) and the playfield turns into the map: flat colours, ore brighter where more is left, buildings as blocks. It only shows charted land: what you've looked at on the playfield, and what radars have scanned. The rest is fog. Tap the map to zoom in there.</dd>
       <dt>Radar</dt><dd>Scans the land round it for the map, a chunk (32 × 32 tiles) at a time, nearest first, out to ${RADAR_TILES} tiles. Each chunk takes ${RADAR_SECONDS} s at full power, and it uses ${RADAR_KW} kW while it scans; the dish turns while it works. Tap it to see how far it has got.</dd>
       <dt>Seeds</dt><dd>Add <code>?seed=42</code> (any number or word) to the /play address to start a new game on that map; the same seed always gives the same map.</dd>
+    </dl>
+    <h2>Speed</h2>
+    <dl>
+      <dt>Debug info</dt><dd>Pause → Show debug info (or \`) shows frames and ticks a second (60 of each is full speed), how many draw calls a frame takes, and how long a tick of the game and drawing a frame take.</dd>
+      <dt>Benchmark</dt><dd><a href="/play?bench=big">/play?bench=big</a> builds a factory of 3,120 buildings with 15,000 items on its belts, running flat out, and shows the debug info, to see how a big factory runs on this device. It's never saved, so your own game is left as it was. <code>?bench=small</code> is a quick one.</dd>
     </dl>
     <h2>Fullscreen</h2>
     <p class="hint" id="fs-note"></p>

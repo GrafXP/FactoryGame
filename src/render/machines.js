@@ -8,7 +8,7 @@ import { powerNetwork } from "../sim/power.js";
 // What a network's generators could make, averaged, for scaling the flywheels.
 const netCapacity = (net) => Math.max(1, net?.avg.capacity || 0);
 
-// The moving parts of machines, redrawn every frame: inserter arms swinging
+// The moving parts of the machines in view, redrawn every frame: inserter arms swinging
 // between their pickup and drop sides with the item they carry, the fire in a
 // working furnace's or generator's mouth, the cog on an assembler, which turns
 // once per craft, a generator's flywheel and a radar's dish, which turns while it
@@ -76,14 +76,15 @@ export function createMachineParts(parent) {
   const dishes = new Map(); // radar → its dish's angle
 
   return {
-    // `items` is the item layer, for what the inserters hold.
-    update(world, items) {
+    // `items` is the item layer, for what the inserters hold, and `list` the
+    // buildings in view (visible.js).
+    update(world, items, list) {
       let inserters = 0;
       let furnaces = 0;
       let assemblers = 0;
       let generators = 0;
       let radars = 0;
-      for (const e of world.entities.values()) {
+      for (const e of list) {
         if (e.type === "inserter") inserters++;
         else if (e.type === "furnace") furnaces++;
         else if (e.type === "assembler") assemblers++;
@@ -105,7 +106,7 @@ export function createMachineParts(parent) {
       let gf = 0;
       let d = 0;
       const net = powerNetwork(world);
-      for (const e of world.entities.values()) {
+      for (const e of list) {
         if (e.type === "inserter") {
           // Round through the inserter's right-hand side, from pickup to drop.
           const angle = (e.swing / SWING) * Math.PI - (e.rot * Math.PI) / 2;
@@ -166,6 +167,9 @@ export function createMachineParts(parent) {
         [kinds.dish, d],
       ]) {
         k.mesh.count = n;
+        k.mesh.visible = n > 0; // three binds a mesh's shaders even to draw nothing
+        if (!n) continue;
+        k.mesh.instanceMatrix.addUpdateRange(0, n * 16);
         k.mesh.instanceMatrix.needsUpdate = true;
       }
     },

@@ -38,10 +38,9 @@ export function assemblerAdd(a, item, n = 1) {
   a.inputs[item] = (a.inputs[item] || 0) + n;
 }
 
-// Takes one item from the output for an inserter, if `accepts` wants it.
-export function assemblerTakeOne(a, accepts) {
+// Takes one item from the output, which has something in it, for an inserter.
+export function assemblerTakeOne(a) {
   const out = a.output;
-  if (!out || !accepts(out.item)) return null;
   if (--out.n === 0) a.output = null;
   return out.item;
 }
