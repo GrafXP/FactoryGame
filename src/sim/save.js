@@ -10,16 +10,17 @@
 // SAVE_VERSION goes up whenever the format changes. Add a step to MIGRATIONS that
 // turns a save of the old version into the next one, so old saves keep loading.
 import { createWorld, addEntity, canFit, initialState } from "./world.js";
-import { BUILDINGS } from "./buildings.js";
+import { BUILDINGS, DIRS } from "./buildings.js";
 import { ITEMS } from "./items.js";
-import { BELT_LEN } from "./transport.js";
+import { BELT_LEN, isConveyor, isSplitter } from "./transport.js";
+import { REACH } from "./underground.js";
 import { SMELTING, FUEL, FUEL_ENERGY, RECIPES } from "./recipes.js";
 import { SWING } from "./inserter.js";
 import { usesPower } from "./power.js";
 import { MILESTONES } from "./progress.js";
 
 export const SAVE_FORMAT = "factory-save";
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 
 // What a save from before power gets, so its stopped machines can be started
 // again: the parts for a coal generator and ten poles, and coal to burn.
@@ -55,6 +56,9 @@ export const MIGRATIONS = {
   // A save from before was built without them, so it gets everything unlocked and
   // only the last milestone, the goal, still to do.
   4: (data) => ({ ...data, progress: { milestone: MILESTONES.length - 1, delivered: {} } }),
+  // 6 added underground belts, splitters and sorters. A version 5 save has none,
+  // so it loads as it is.
+  5: (data) => data,
 };
 
 // A save that can't be loaded. The message is written for the player.
@@ -88,7 +92,10 @@ function saveEntity(e) {
   const out = { id: e.id, type: e.type, x: e.x, y: e.y, rot: e.rot };
   if (e.type === "miner") Object.assign(out, { progress: e.progress, status: e.status, item: e.item });
   if (e.type === "chest") out.items = { ...e.inventory.items };
-  if (e.type === "belt") out.items = e.items.map(({ item, pos }) => ({ item, pos }));
+  if (isConveyor(e)) out.items = e.items.map(({ item, pos, exit }) => (exit === undefined ? { item, pos } : { item, pos, exit }));
+  if (e.type === "underground") Object.assign(out, { end: e.end, pair: e.pair });
+  if (isSplitter(e)) Object.assign(out, { turn: e.turn, status: e.status });
+  if (e.type === "sorter") out.filters = [...e.filters];
   if (e.type === "furnace") {
     const slot = (s) => s && { item: s.item, n: s.n };
     Object.assign(out, { input: slot(e.input), fuel: slot(e.fuel), output: slot(e.output) });
@@ -168,7 +175,21 @@ function load(data) {
       Object.assign(e, { progress: s.progress, status: String(s.status), item: s.item });
     }
     if (s.type === "chest") Object.assign(e.inventory.items, checkItems(s.items, where));
-    if (s.type === "belt") e.items = checkBeltItems(s.items, where);
+    if (isConveyor(s)) e.items = checkBeltItems(s.items, where, isSplitter(s));
+    if (s.type === "underground") {
+      check(s.end === "in" || s.end === "out", `${where}: bad end`);
+      check(s.pair === null || Number.isInteger(s.pair), `${where}: bad pair`);
+      Object.assign(e, { end: s.end, pair: s.pair });
+    }
+    if (isSplitter(s)) {
+      check(Number.isInteger(s.turn) && s.turn >= 0 && s.turn < 3, `${where}: bad turn`);
+      Object.assign(e, { turn: s.turn, status: String(s.status) });
+    }
+    if (s.type === "sorter") {
+      const ok = (f) => f === "any" || f === "overflow" || Object.hasOwn(ITEMS, f);
+      check(Array.isArray(s.filters) && s.filters.length === 3 && s.filters.every(ok), `${where}: bad filters`);
+      e.filters = [...s.filters];
+    }
     if (s.type === "furnace") Object.assign(e, checkFurnace(s, where));
     if (s.type === "assembler") Object.assign(e, checkAssembler(s, where));
     if (s.type === "inserter") {
@@ -186,7 +207,28 @@ function load(data) {
     maxId = Math.max(maxId, s.id);
   }
   world.nextId = Math.max(nextId | 0, maxId + 1);
+  checkConveyors(world);
   return world;
+}
+
+// Underground ends are paired both ways, in line and in reach, and every item is on
+// its conveyor: within a tile, or for a paired entrance, before its exit.
+function checkConveyors(world) {
+  for (const e of world.entities.values()) {
+    if (!isConveyor(e)) continue;
+    const where = `building ${e.id}`;
+    let len = BELT_LEN;
+    if (e.type === "underground" && e.pair !== null) {
+      const p = world.entities.get(e.pair);
+      check(p?.type === "underground" && p.pair === e.id && p.end !== e.end && p.rot === e.rot, `${where}: bad pair`);
+      const [entrance, exit] = e.end === "in" ? [e, p] : [p, e];
+      const [dx, dy] = DIRS[e.rot];
+      const d = Math.abs(exit.x - entrance.x) + Math.abs(exit.y - entrance.y);
+      check(d >= 1 && d <= REACH && exit.x === entrance.x + dx * d && exit.y === entrance.y + dy * d, `${where}: pair out of line`);
+      if (e.end === "in") len = d * BELT_LEN;
+    }
+    check(e.items.every((it) => it.pos <= len), `${where}: item off the belt`);
+  }
 }
 
 function check(ok, why) {
@@ -274,14 +316,18 @@ function checkCraft(c) {
   return { queue, progress: c.progress, busy: c.busy };
 }
 
-// A belt's items, front first, each on the belt.
-function checkBeltItems(items, where) {
+// A conveyor's items, front first. A splitter's may have picked a way out
+// (`exit`). How far along they can be is checked once the pairs are known
+// (checkConveyors).
+function checkBeltItems(items, where, split) {
   check(Array.isArray(items), `${where}: bad belt items`);
   let prev = Infinity;
-  return items.map(({ item, pos } = {}) => {
+  return items.map(({ item, pos, exit } = {}) => {
     check(Object.hasOwn(ITEMS, item), `${where}: unknown item "${item}"`);
-    check(Number.isInteger(pos) && pos >= 0 && pos <= BELT_LEN && pos <= prev, `${where}: item off the belt`);
+    check(Number.isInteger(pos) && pos >= 0 && pos <= prev, `${where}: item off the belt`);
     prev = pos;
-    return { item, pos };
+    if (exit === undefined) return { item, pos };
+    check(split && [0, 1, 2].includes(exit), `${where}: bad way out`);
+    return { item, pos, exit };
   });
 }

@@ -66,6 +66,9 @@ export const itemIcon = (id) =>
 // Line icons for buildings and buttons, drawn in the current text colour.
 const PATHS = {
   belt: "M3 7h18v10H3zM8 12h7M12 9l3 3-3 3",
+  underground: "M3 17h5v-5h8v5h5M8 12V9h8v3M12 14v4",
+  splitter: "M4 12h6M10 12l4-6h6M10 12h10M10 12l4 6h6M17 4l3 2-3 2M17 10l3 2-3 2M17 16l3 2-3 2",
+  sorter: "M4 12h6M10 12l4-6h6M10 12h10M10 12l4 6h6M3 7h3v3H3z",
   miner: "M5 10h14v10H5zM9 10V5h6v5M12 14v3",
   chest: "M4 10h16v9H4zM4 10l2-4h12l2 4M10 14h4",
   furnace: "M4 20V9h16v11zM14 9V4h4v5M9 20v-4a3 3 0 0 1 6 0v4",

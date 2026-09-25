@@ -37,6 +37,18 @@ function makeParts() {
       .translate(-0.5 * s + 0.5 * Math.SQRT1_2 * s, 0.09, -0.5 + 0.5 * Math.SQRT1_2);
   };
 
+  function splitterParts(hub) {
+    const small = (turn, x, z) =>
+      new THREE.ShapeGeometry(chevron).scale(0.55, 0.55, 1).rotateX(-Math.PI / 2).rotateY(turn).translate(x, 0.09, z);
+    return [
+      { geometry: box(0.96, 0.08, 0.96, 0, 0.04, 0), color: "belt" },
+      { geometry: small(0, 0, -0.3), color: "beltArrow" },
+      { geometry: small(Math.PI / 2, -0.3, 0), color: "beltArrow" },
+      { geometry: small(-Math.PI / 2, 0.3, 0), color: "beltArrow" },
+      { geometry: new THREE.CylinderGeometry(0.17, 0.2, 0.06, 8).translate(0, 0.11, 0), color: hub },
+    ];
+  }
+
   return {
     belt: [
       { geometry: box(0.9, 0.08, 1, 0, 0.04, 0), color: "belt" },
@@ -50,6 +62,27 @@ function makeParts() {
       { geometry: corner("right"), color: "belt" },
       { geometry: cornerArrow("right"), color: "beltArrow" },
     ],
+    // An underground entrance: a hood over its front half, where items go down. The
+    // exit is the same with the hood over its back half, where they come up.
+    "underground-in": [
+      { geometry: box(0.9, 0.08, 1, 0, 0.04, 0), color: "belt" },
+      { geometry: arrow.clone().translate(0, 0, 0.26), color: "beltArrow" },
+      { geometry: box(0.98, 0.5, 0.5, 0, 0.25, -0.25), color: "underground" },
+      { geometry: box(0.98, 0.07, 0.5, 0, 0.535, -0.25), color: "beltArrow" },
+      { geometry: box(0.7, 0.32, 0.02, 0, 0.2, 0.005), color: "furnaceMouth" },
+    ],
+    "underground-out": [
+      { geometry: box(0.9, 0.08, 1, 0, 0.04, 0), color: "belt" },
+      { geometry: arrow.clone().translate(0, 0, -0.3), color: "beltArrow" },
+      { geometry: box(0.98, 0.5, 0.5, 0, 0.25, 0.25), color: "underground" },
+      { geometry: box(0.98, 0.07, 0.5, 0, 0.535, 0.25), color: "beltArrow" },
+      { geometry: box(0.7, 0.32, 0.02, 0, 0.2, -0.005), color: "furnaceMouth" },
+    ],
+    // A square of belt with an arrow to each way out and a hub in the middle, where
+    // items pick their way; sorters have a blue hub and show their filters
+    // (render/recipe-icons.js).
+    splitter: splitterParts("splitter"),
+    sorter: splitterParts("sorter"),
     miner: [
       { geometry: box(1.7, 0.7, 1.7, 0, 0.35, 0), color: "miner" },
       { geometry: new THREE.CylinderGeometry(0.35, 0.45, 0.35, 8).translate(0, 0.87, 0.15), color: "minerTop" },

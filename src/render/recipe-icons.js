@@ -3,14 +3,24 @@ import { footprint } from "../sim/buildings.js";
 import { facesOf } from "../ui/icons.js";
 
 // An icon of what each assembler makes, on the front-left corner of its roof (clear
-// of the turning cog), so a line of machines can be read at a glance. The item is
-// drawn from the same shapes as its icon in the UI (ui/icons.js), in its colour
-// for the current theme, on a dark disc.
+// of the turning cog), so a line of machines can be read at a glance, and small
+// ones by each way out of a sorter showing its filter (an item, or » for overflow;
+// nothing for "any"). Items are drawn from the same shapes as their icons in the UI
+// (ui/icons.js), in their colour for the current theme, on a dark disc.
 const SIZE = 64;
 const Y = 1.55;
 const INSET = 0.6; // from the footprint's west and south edges
+const FILTER_Y = 0.42;
+const FILTER_OUT = 0.34; // from a sorter's centre towards each way out
+const FILTER_SIZE = 0.36;
+// Each way out of a sorter facing north, [front, left, right], as (x, y) offsets.
+const FILTER_AT = [
+  [0, -1],
+  [-1, 0],
+  [1, 0],
+];
 
-function drawItem(faces, hex) {
+function disc() {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = SIZE;
   const g = canvas.getContext("2d");
@@ -18,6 +28,28 @@ function drawItem(faces, hex) {
   g.beginPath();
   g.arc(SIZE / 2, SIZE / 2, SIZE / 2 - 1, 0, Math.PI * 2);
   g.fill();
+  return { canvas, g };
+}
+
+function texture(canvas) {
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// A sorter's overflow way: a white ».
+function drawOverflow() {
+  const { canvas, g } = disc();
+  g.fillStyle = "#ffffff";
+  g.font = "bold 44px system-ui, sans-serif";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.fillText("»", SIZE / 2, SIZE / 2 + 2);
+  return texture(canvas);
+}
+
+function drawItem(faces, hex) {
+  const { canvas, g } = disc();
   const base = new THREE.Color(hex);
   const tint = { "": base, lit: base.clone().lerp(new THREE.Color(0xffffff), 0.28), shade: base.clone().multiplyScalar(0.68) };
   tint.dark = base.clone().multiplyScalar(0.3);
@@ -33,9 +65,7 @@ function drawItem(faces, hex) {
     g.fill(path, "evenodd");
     g.stroke(path);
   }
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
+  return texture(canvas);
 }
 
 export function createRecipeIcons(parent) {
@@ -46,7 +76,8 @@ export function createRecipeIcons(parent) {
   const material = (item) => {
     let mat = materials.get(item);
     if (!mat) {
-      mat = new THREE.SpriteMaterial({ map: drawItem(facesOf(item), colors[item] ?? 0xffffff), depthTest: false, depthWrite: false });
+      const map = item === "overflow" ? drawOverflow() : drawItem(facesOf(item), colors[item] ?? 0xffffff);
+      mat = new THREE.SpriteMaterial({ map, depthTest: false, depthWrite: false });
       materials.set(item, mat);
     }
     return mat;
@@ -62,20 +93,31 @@ export function createRecipeIcons(parent) {
   return {
     update(entities) {
       let n = 0;
-      for (const e of entities) {
-        if (e.type !== "assembler" || !e.recipe) continue;
+      const show = (item, x, y, z, size) => {
         let sprite = pool[n];
         if (!sprite) {
           sprite = pool[n] = new THREE.Sprite();
-          sprite.scale.set(0.85, 0.85, 1);
           sprite.renderOrder = 3;
           parent.add(sprite);
         }
-        const { h } = footprint(e.type, e.rot);
-        sprite.material = material(e.recipe);
-        sprite.position.set(e.x + INSET, Y, e.y + h - INSET);
+        sprite.material = material(item);
+        sprite.scale.set(size, size, 1);
+        sprite.position.set(x, y, z);
         sprite.visible = true;
         n++;
+      };
+      for (const e of entities) {
+        if (e.type === "assembler" && e.recipe) {
+          const { h } = footprint(e.type, e.rot);
+          show(e.recipe, e.x + INSET, Y, e.y + h - INSET, 0.85);
+        } else if (e.type === "sorter") {
+          e.filters.forEach((f, i) => {
+            if (f === "any") return;
+            let [dx, dy] = FILTER_AT[i];
+            for (let r = 0; r < e.rot; r++) [dx, dy] = [-dy, dx]; // a quarter turn clockwise
+            show(f, e.x + 0.5 + dx * FILTER_OUT, FILTER_Y, e.y + 0.5 + dy * FILTER_OUT, FILTER_SIZE);
+          });
+        }
       }
       for (let i = n; i < pool.length; i++) pool[i].visible = false;
     },

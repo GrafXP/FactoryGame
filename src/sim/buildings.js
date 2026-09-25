@@ -15,6 +15,11 @@
 // tiles of it.
 export const BUILDINGS = {
   belt: { name: "Belt", w: 1, h: 1, cost: { "iron-plate": 1 } },
+  // Each end of an underground belt is built on its own: the exit goes up to
+  // `reach` tiles ahead of the entrance (see underground.js).
+  underground: { name: "Underground belt", w: 1, h: 1, cost: { "iron-plate": 4, "iron-gear": 1 }, reach: 5 },
+  splitter: { name: "Splitter", w: 1, h: 1, cost: { "iron-plate": 5, "iron-gear": 2, "electronic-circuit": 1 } },
+  sorter: { name: "Sorter", w: 1, h: 1, cost: { "iron-plate": 5, "iron-gear": 2, "electronic-circuit": 3 } },
   miner: { name: "Miner", w: 2, h: 2, cost: { "iron-gear": 3, "iron-plate": 3, stone: 6 }, period: 60, draw: 1500 },
   chest: { name: "Chest", w: 1, h: 1, cost: { "iron-plate": 4 }, capacity: 50 },
   furnace: { name: "Furnace", w: 2, h: 2, cost: { stone: 10 }, stack: 50, feed: 5 },

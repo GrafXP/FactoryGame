@@ -9,6 +9,8 @@ import { fuelGenerator, emptyGenerator, generatorRoom } from "../sim/generator.j
 import { powerNetwork, satisfaction } from "../sim/power.js";
 import { MILESTONES, currentMilestone, recipeUnlocked, stillNeeded, deliverFrom, deliverAll } from "../sim/progress.js";
 import { unlocksText } from "./goal.js";
+import { beltNetwork, setFilter } from "../sim/transport.js";
+import { REACH, buried } from "../sim/underground.js";
 import { TICK_RATE } from "../sim/world.js";
 import { itemIcon, icon } from "./icons.js";
 import { lower, itemRows } from "./format.js";
@@ -106,6 +108,24 @@ function networkSummary(net) {
     <p class="meta power" data-ok="${!why}">${verdict}</p>`;
 }
 
+// A sorter's ways out, in the order its panel lists them, and what each filter means.
+const WAYS = [
+  [1, "Left"],
+  [0, "Front"],
+  [2, "Right"],
+];
+const filterText = (f) =>
+  f === "any" ? "<span>Any item</span>" : f === "overflow" ? "<span>Overflow</span>" : `${itemIcon(f)}<span>${ITEMS[f].name}</span>`;
+const SORTER_STATUS = {
+  working: () => "Sorting",
+  waiting: (s) => `Waiting: the ways out that take ${lower(s.items[0]?.item || "iron-ore", 2)} are full.`,
+  "no-exit": (s) => `Stuck: no way out takes ${lower(s.items[0]?.item || "iron-ore", 2)}. Set one to it, to Any, or to Overflow.`,
+};
+const sorterStatus = (s) => (s.status !== "working" && s.items[0] && s.items[0].exit === undefined ? s.status : "working");
+
+// Distance between an underground end and its partner.
+const span = (e, p) => Math.abs(p.x - e.x) + Math.abs(p.y - e.y);
+
 // "2 iron plates → 1 iron gear, every 2 s"
 const recipeText = (id) => {
   const r = RECIPES[id];
@@ -136,7 +156,8 @@ const takeOutput = (out) =>
   `<button class="wide" data-action="empty" data-slot="output"${out ? "" : " disabled"}>${out ? `Take ${out.n} ${lower(out.item, out.n)}` : "Nothing made yet"}</button>`;
 
 // Each panel: the key its markup depends on, the markup, and the progress bar's fill.
-// `view` is the panel's own state: `picking` while choosing an assembler's recipe.
+// `view` is the panel's own state: `picking` while choosing an assembler's recipe,
+// `exit` (0 front, 1 left, 2 right) while choosing a sorter's filter.
 const PANELS = {
   chest: {
     key: (c) => c.inventory.version,
@@ -232,6 +253,59 @@ const PANELS = {
     },
     live: (g, world) => ({ net: networkSummary(powerNetwork(world).netOf.get(g)) }),
   },
+  underground: {
+    key: (e, world) => `${e.end} ${e.pair} ${e.end === "in" ? buried(e).length : 0}`,
+    html: (e, world) => {
+      const p = e.pair && world.entities.get(e.pair);
+      let text;
+      if (e.end === "in") {
+        text = p
+          ? `Takes items under to its exit, ${span(e, p)} tiles ahead. ${buried(e).length} underground now.`
+          : `No exit yet. Pick Underground belt and tap this entrance, then tap one of the lit tiles ahead of it (up to ${REACH}).`;
+      } else {
+        text = p
+          ? `Brings items up from its entrance, ${span(e, p)} tiles behind.`
+          : `Its entrance is gone. An entrance built up to ${REACH} tiles behind it, facing the same way, pairs with it.`;
+      }
+      return `${heading(e.end === "in" ? "Underground entrance" : "Underground exit")}
+        <p class="status" data-status="${p ? "working" : "no-output"}">${text}</p>
+        <p class="meta">Removing either end gives back what's underground.</p>`;
+    },
+  },
+  splitter: {
+    key: () => "",
+    html: () => `${heading("Splitter")}
+      <p class="meta">Sends items out front, left and right in turn. A way out with nothing on it, or no room, is skipped, so with two belts on it, it splits half and half.</p>`,
+  },
+  // Each way out's filter, with a picker for it: any item, one kind, or overflow.
+  sorter: {
+    key: (s, world, view) => {
+      const exits = beltNetwork(world).exits.get(s) || [];
+      return `${view.exit} ${s.filters.join()} ${sorterStatus(s)} ${s.items[0]?.item} ${exits.map((l) => !!l).join()}`;
+    },
+    html: (s, world, view) => {
+      if (view.exit !== null) {
+        const name = WAYS.find(([i]) => i === view.exit)[1].toLowerCase();
+        const opts = ["any", "overflow", ...Object.keys(ITEMS)]
+          .map((f) => `<button class="recipe-pick" data-action="filter" data-value="${f}" aria-pressed="${s.filters[view.exit] === f}">${filterText(f)}</button>`)
+          .join("");
+        return `${heading("Sorter")}
+          <p>What goes out the ${name}? Overflow takes what no other way wants, or has room for.</p>
+          <div class="recipe-picks filters">${opts}</div>
+          <button class="wide secondary" data-action="filter-keep">Keep it as it is</button>`;
+      }
+      const exits = beltNetwork(world).exits.get(s) || [];
+      const rows = WAYS.map(
+        ([i, label]) => `<li><em>${label}</em>${filterText(s.filters[i])}${exits[i] ? "" : `<small>nothing there</small>`}
+          <button class="take" data-action="filter-pick" data-exit="${i}">Set</button></li>`,
+      ).join("");
+      const st = sorterStatus(s);
+      return `${heading("Sorter")}
+        <p class="status" data-status="${st}">${SORTER_STATUS[st](s)}</p>
+        <ul class="items slots">${rows}</ul>
+        <p class="meta">An item goes out the ways set to it, or if there are none, those set to Any; if they're full, it takes the overflow.</p>`;
+    },
+  },
   // The milestone under way: what it needs and what's been delivered, buttons to
   // deliver from the inventory, what it unlocks, and the milestones in order.
   hub: {
@@ -279,7 +353,7 @@ export function createEntityPanel(el, { close, changed, toast }) {
   let shown = null;
   let shownKey = "";
   let world = null;
-  const view = { picking: false };
+  const view = { picking: false, exit: null };
   const live = new WeakMap(); // [data-live] part → the markup it shows
 
   const sync = (w) => {
@@ -337,6 +411,11 @@ export function createEntityPanel(el, { close, changed, toast }) {
         if (Object.keys(back).length) toast(`Got back ${describe(back)}`);
       }
     } else if (action === "pick" || action === "keep") view.picking = action === "pick";
+    else if (action === "filter-pick") view.exit = Number(btn.dataset.exit);
+    else if (action === "filter") {
+      setFilter(shown, view.exit, btn.dataset.value);
+      view.exit = null;
+    } else if (action === "filter-keep") view.exit = null;
     else return;
     if (moved && Object.keys(moved).length) toast(`Took ${describe(moved)}`);
     sync(world);
@@ -349,6 +428,7 @@ export function createEntityPanel(el, { close, changed, toast }) {
       shown = e && PANELS[e.type] ? e : null;
       shownKey = "";
       view.picking = false;
+      view.exit = null;
       el.hidden = !shown;
       if (shown) sync(w);
     },

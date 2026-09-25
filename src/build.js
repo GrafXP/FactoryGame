@@ -4,6 +4,7 @@ import { affordable, missing } from "./sim/inventory.js";
 import { describe } from "./sim/items.js";
 import { usesPower } from "./sim/power.js";
 import { lockedWhy } from "./sim/progress.js";
+import { exitSpots } from "./sim/underground.js";
 
 // Buildings that show which ground the poles power while you place them or look at them.
 const onPower = (type) => type === "pole" || type === "generator" || usesPower(type);
@@ -16,6 +17,12 @@ const onPower = (type) => type === "pole" || type === "generator" || usesPower(t
 // the ghost, so touch builds in two taps: the first leaves the ghost where you
 // tapped, a tap on the ghost builds it, and a tap anywhere else moves it. Removing
 // works the same way: the first tap marks a building, a second tap on it removes it.
+//
+// Underground belts go in two steps: after an entrance is built, the tiles ahead of
+// it where its exit can go light up, and a tap on one builds the exit there (one
+// tap, touch too, since the lit tile shows where it goes). Tapping an entrance that
+// has no exit lights its tiles again. Tapping anywhere else, rotating or changing
+// tools goes back to placing entrances.
 export function createBuilder(world, view, { onChange, onMessage, onInspect } = {}) {
   let tool = null;
   let rot = 0;
@@ -30,6 +37,15 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
   let paint = null; // { start: tile, end: tile } while dragging a belt line
   let gesture = null; // "belt" or "mine" while a press-and-hold is under way
   let inspected = null; // tile shown with the inspect tool
+  let entrance = null; // an underground entrance waiting for its exit
+
+  const fits = (type, r) => (x, y) => !canFit(world, type, x, y, r);
+  // Where the waiting entrance's exit can go, or [] if it's no longer waiting.
+  const spots = () => {
+    if (entrance && (!world.entities.has(entrance.id) || entrance.pair)) entrance = null;
+    return entrance ? exitSpots(world, entrance, fits("underground", entrance.rot)) : [];
+  };
+  const spotAt = (t) => spots().find((s) => s.x === t.x && s.y === t.y);
 
   const tileOf = (p) => ({ x: Math.floor(p.x), y: Math.floor(p.y) });
   const rectOf = (e) => ({ x: e.x, y: e.y, ...footprint(e.type, e.rot) });
@@ -46,7 +62,11 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
     }
     const at = pointer || pending;
     if (!at || !BUILDINGS[tool]) return [];
-    return [{ type: tool, rot, ...anchorAt(tool, at) }];
+    if (tool === "underground" && entrance) {
+      const spot = spotAt(tileOf(at));
+      return spot ? [{ type: tool, rot: entrance.rot, model: "underground-out", ...spot }] : [];
+    }
+    return [{ type: tool, rot, ...anchorAt(tool, at), ...(tool === "underground" ? { model: "underground-in" } : {}) }];
   };
 
   // Whether ground point p is on the waiting touch ghost.
@@ -59,6 +79,7 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
   };
 
   const refresh = () => {
+    view.setMarks(tool === "underground" ? spots() : null);
     // Ghosts are green where they fit, for as many as the inventory can pay for.
     const list = planned();
     let budget = list.length ? affordable(world.inventory, BUILDINGS[list[0].type].cost) : 0;
@@ -110,6 +131,7 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
       pending = null;
       marked = null;
       inspected = null;
+      entrance = null;
       onInspect?.(null);
       changed();
     },
@@ -128,6 +150,7 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
     },
     rotate() {
       rot = (rot + 1) % 4;
+      entrance = null;
       changed();
     },
     // Belts are dragged out in lines; with no tool, holding on bare ore mines it.
@@ -146,6 +169,24 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
     tap(p, pointerType) {
       const t = tileOf(p);
       const twoTap = pointerType === "touch" || pointerType === "pen";
+      if (tool === "underground" && entrance) {
+        const spot = spotAt(t);
+        if (spot) {
+          const short = missing(world.inventory, BUILDINGS.underground.cost);
+          if (short) onMessage?.(`Can't build: missing ${describe(short)}`);
+          else place(world, "underground", spot.x, spot.y, entrance.rot, { end: "out" });
+          pending = null;
+          return refresh();
+        }
+        entrance = null; // somewhere else: back to placing entrances
+      }
+      const lone = tool === "underground" && entityAt(world, t.x, t.y);
+      if (lone?.type === "underground" && lone.end === "in" && !lone.pair) {
+        entrance = lone; // an entrance without an exit: light up where it can go
+        pending = null;
+        hint("Tap a lit tile to place the exit");
+        return refresh();
+      }
       if (tool === "remove") {
         const e = entityAt(world, t.x, t.y);
         if (!e) {
@@ -155,7 +196,7 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
           marked = e;
           hint("Tap it again to remove it");
         } else {
-          const back = refundOf(e);
+          const back = refundOf(e, world);
           removeAt(world, t.x, t.y);
           marked = null;
           onMessage?.(`Got back ${describe(back)}`);
@@ -170,8 +211,12 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
         if (short) onMessage?.(`Can't build: missing ${describe(short)}`);
         else if (why) onMessage?.(`Can't build here: ${why.toLowerCase()}`);
         else {
-          place(world, tool, x, y, rot);
+          const built = place(world, tool, x, y, rot);
           pending = null;
+          if (built?.type === "underground" && !built.pair) {
+            entrance = built;
+            if (spots().length) hint("Tap a lit tile to place the exit");
+          }
         }
       } else {
         inspected = tileAt(world, t.x, t.y);

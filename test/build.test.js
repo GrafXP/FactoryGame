@@ -7,8 +7,8 @@ import { ALL } from "./helpers.js";
 // A builder wired to a fake view that records the ghosts it's asked to draw.
 const setup = () => {
   const world = createWorld({ milestones: ALL, seed: 1 });
-  const out = { ghosts: [], messages: [], power: null };
-  const view = { setGhosts: (g) => (out.ghosts = g), setHighlight() {}, setPowerOverlay: (p) => (out.power = p) };
+  const out = { ghosts: [], messages: [], power: null, marks: null };
+  const view = { setGhosts: (g) => (out.ghosts = g), setHighlight() {}, setPowerOverlay: (p) => (out.power = p), setMarks: (m) => (out.marks = m) };
   const builder = createBuilder(world, view, { onMessage: (m) => out.messages.push(m) });
   return { world, builder, out };
 };
@@ -117,4 +117,42 @@ test("placing something electric shows where the poles reach, and a new pole's o
   assert.deepEqual(out.power, { pole: null });
   builder.setTool("chest");
   assert.equal(out.power, null, "a chest doesn't need power");
+});
+
+test("after an underground entrance, the tiles for its exit light up and a tap on one builds it", () => {
+  const { world, builder, out } = setup();
+  builder.setTool("underground");
+  builder.rotate(); // east
+  builder.tap(at(20, 12), "touch");
+  builder.tap(at(20, 12), "touch");
+  const entrance = entityAt(world, 20, 12);
+  assert.equal(entrance?.end, "in");
+  assert.deepEqual(out.marks.map((m) => m.x), [21, 22, 23, 24, 25]);
+  assert.ok(out.marks.every((m) => m.y === 12));
+  builder.tap(at(24, 12), "touch"); // one tap on a lit tile
+  const exit = entityAt(world, 24, 12);
+  assert.equal(exit?.end, "out");
+  assert.equal(exit.pair, entrance.id);
+  assert.deepEqual(out.marks, [], "and it's back to placing entrances");
+});
+
+test("tapping off the lit tiles goes back to placing entrances", () => {
+  const { world, builder, out } = setup();
+  builder.setTool("underground");
+  builder.tap(at(20, 12), "mouse");
+  assert.equal(out.marks.length, 5);
+  builder.tap(at(30, 30), "mouse");
+  assert.equal(entityAt(world, 30, 30)?.end, "in", "a new entrance");
+  assert.equal(entityAt(world, 20, 12).pair, null);
+});
+
+test("tapping an entrance without an exit lights up its exit tiles again", () => {
+  const { world, builder, out } = setup();
+  builder.setTool("underground");
+  builder.tap(at(20, 12), "mouse");
+  builder.tap(at(30, 30), "mouse"); // another entrance; the first is left without an exit
+  builder.tap(at(20, 12), "mouse");
+  assert.deepEqual(out.marks.map((m) => [m.x, m.y]), [[20, 11], [20, 10], [20, 9], [20, 8], [20, 7]]);
+  builder.tap(at(20, 9), "mouse");
+  assert.equal(entityAt(world, 20, 9).pair, entityAt(world, 20, 12).id);
 });

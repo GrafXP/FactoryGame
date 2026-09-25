@@ -98,6 +98,7 @@ const ICON_FOR = {
   "no-recipe": "no-recipe",
   "no-power": "no-power",
   unconnected: "unconnected",
+  "no-exit": "blocked", // a sorter holding an item no way out will take
 };
 
 // The icon over entity e, if it needs one.

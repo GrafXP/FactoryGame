@@ -5,7 +5,8 @@ import { BUILDINGS, footprint, outputTile } from "./buildings.js";
 import { ORE_ITEM, START_KIT, describe } from "./items.js";
 import { createInventory, add, give, missing, take, moveAll } from "./inventory.js";
 import { inMap, entityAt } from "./grid.js";
-import { stepBelts, takesItems, canTake, put } from "./transport.js";
+import { stepBelts, takesItems, canTake, put, splitterState, ANY_FILTERS } from "./transport.js";
+import { undergroundState, undergroundWhy, pairUp, unpair, buried } from "./underground.js";
 import { furnaceState, furnaceContents, stepFurnace } from "./furnace.js";
 import { inserterState, stepInserter } from "./inserter.js";
 import { assemblerState, assemblerContents, stepAssembler } from "./assembler.js";
@@ -77,20 +78,26 @@ export function canFit(world, type, x, y, rot) {
   return null;
 }
 
-// Why a building can't be placed at (x, y): it's locked, it doesn't fit, or the
-// player can't pay for it.
-export function canPlace(world, type, x, y, rot) {
-  const why = lockedWhy(world, type) || canFit(world, type, x, y, rot);
+// Why a building can't be placed at (x, y): it's locked, it doesn't fit, it's an
+// underground exit with no entrance, or the player can't pay for it. `opts` are
+// for initialState, e.g. { end: "out" } for an underground exit.
+export function canPlace(world, type, x, y, rot, opts = {}) {
+  const why =
+    lockedWhy(world, type) ||
+    canFit(world, type, x, y, rot) ||
+    (type === "underground" && undergroundWhy(world, x, y, rot & 3, opts.end || "in"));
   if (why) return why;
   const short = missing(world.inventory, BUILDINGS[type].cost);
   return short ? `Missing ${describe(short)}` : null;
 }
 
 // Places a building, paying its cost, and returns it. Returns null if it can't be placed.
-export function place(world, type, x, y, rot = 0) {
-  if (canPlace(world, type, x, y, rot)) return null;
+export function place(world, type, x, y, rot = 0, opts = {}) {
+  if (canPlace(world, type, x, y, rot, opts)) return null;
   take(world.inventory, BUILDINGS[type].cost);
-  return addEntity(world, { id: world.nextId++, type, x, y, rot: rot & 3, ...initialState(type) });
+  const e = addEntity(world, { id: world.nextId++, type, x, y, rot: rot & 3, ...initialState(type, opts) });
+  if (type === "underground") pairUp(world, e);
+  return e;
 }
 
 // Puts a finished entity into the world without paying for it. Loading a save uses
@@ -108,9 +115,11 @@ export function addEntity(world, entity) {
 export function removeAt(world, x, y) {
   const entity = entityAt(world, x, y);
   if (!entity) return null;
+  const under = entity.type === "underground" ? unpair(world, entity) : [];
   world.entities.delete(entity.id);
   fill(world, entity, 0);
   give(world.inventory, refundOf(entity));
+  for (const it of under) give(world.inventory, { [it.item]: 1 });
   // Emptied, so a panel still showing it can't hand out its contents twice.
   if (entity.inventory) entity.inventory.items = {};
   if (entity.items) entity.items = [];
@@ -123,7 +132,8 @@ export function removeAt(world, x, y) {
 }
 
 // What removing a building gives back: its cost plus whatever it holds or carries.
-export function refundOf(entity) {
+// Given the world, that includes what's underground behind an underground exit.
+export function refundOf(entity, world = null) {
   const items = { ...BUILDINGS[entity.type].cost };
   const add = (id, n = 1) => (items[id] = (items[id] || 0) + n);
   for (const id in entity.inventory?.items) add(id, entity.inventory.items[id]);
@@ -132,6 +142,8 @@ export function refundOf(entity) {
   if (entity.type === "assembler") for (const [id, n] of Object.entries(assemblerContents(entity))) add(id, n);
   if (entity.type === "generator" && entity.fuel) add(entity.fuel.item, entity.fuel.n);
   if (entity.hand) add(entity.hand);
+  const entrance = world && entity.type === "underground" && entity.end === "out" && world.entities.get(entity.pair);
+  if (entrance) for (const it of buried(entrance)) add(it.item);
   return items;
 }
 
@@ -141,14 +153,18 @@ export function takeAll(world, chest) {
 }
 
 // State a new building starts with. Miners track their dig and why they're stopped,
-// chests hold items, belts carry them (see transport.js); furnaces, inserters,
-// assemblers and generators are in their own files. Machines that run on power
-// start with an empty store of energy (see power.js).
-export function initialState(type) {
+// chests hold items, conveyors carry them (see transport.js and underground.js);
+// furnaces, inserters, assemblers and generators are in their own files. Machines
+// that run on power start with an empty store of energy (see power.js). `opts`
+// says which end an underground belt is ({ end: "in" | "out" }).
+export function initialState(type, opts = {}) {
   const power = usesPower(type) ? { energy: 0 } : {};
   if (type === "miner") return { progress: 0, status: "working", item: null, ...power };
   if (type === "chest") return { inventory: createInventory() };
   if (type === "belt") return { items: [] };
+  if (type === "underground") return undergroundState(opts.end);
+  if (type === "splitter") return splitterState();
+  if (type === "sorter") return { ...splitterState(), filters: [...ANY_FILTERS] };
   if (type === "furnace") return furnaceState();
   if (type === "inserter") return { ...inserterState(), ...power };
   if (type === "assembler") return { ...assemblerState(), ...power };

@@ -25,6 +25,9 @@ const PALETTES = {
     ore: { [ORE.IRON]: 0x8fb3dd, [ORE.COPPER]: 0xe8834f, [ORE.COAL]: 0x0c0d10, [ORE.STONE]: 0xd8c49a },
     belt: 0x3b3f4a,
     beltArrow: 0xf2c94c,
+    underground: 0x5b6170,
+    splitter: 0xf2c94c,
+    sorter: 0x6cb4ff,
     miner: 0x6d7a8c,
     minerTop: 0xf2c94c,
     chest: 0x9a6a3c,
@@ -69,6 +72,9 @@ const PALETTES = {
     ore: { [ORE.IRON]: 0x3f6fa8, [ORE.COPPER]: 0xc4561f, [ORE.COAL]: 0x2a2a2e, [ORE.STONE]: 0xf0e6cc },
     belt: 0x55596a,
     beltArrow: 0xffd23f,
+    underground: 0x6a7080,
+    splitter: 0xe0a800,
+    sorter: 0x1f6fd1,
     miner: 0x7d8899,
     minerTop: 0xe0a800,
     chest: 0xa8743f,
@@ -228,12 +234,25 @@ export function createView(container, world, { theme = "dark" } = {}) {
   mineMark.visible = false;
   scene.add(mineMark);
 
+  // Lit tiles: where an underground exit can go while placing one.
+  const MAX_MARKS = 16;
+  const marks = new THREE.InstancedMesh(
+    new THREE.PlaneGeometry(0.86, 0.86).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.4, depthWrite: false, depthTest: false }),
+    MAX_MARKS,
+  );
+  marks.renderOrder = 2;
+  marks.frustumCulled = false;
+  marks.count = 0;
+  scene.add(marks);
+
   let highlightKind = "select";
   const paintHighlight = () => {
     const color = highlightKind === "remove" ? COLORS.bad : COLORS.accent;
     selFill.material.color.set(color);
     selLine.material.color.set(color);
     mineFill.material.color.set(COLORS.accent);
+    marks.material.color.set(COLORS.accent);
     mineLine.material.color.set(COLORS.accent);
   };
 
@@ -364,10 +383,15 @@ export function createView(container, world, { theme = "dark" } = {}) {
     render() {
       if (drawnVersion !== world.version) {
         drawnVersion = world.version;
-        // Belts are drawn straight or as a corner, depending on what feeds them.
+        // Belts are drawn straight or as a corner, depending on what feeds them, and
+        // underground belts as an entrance or an exit.
         const { shape } = beltNetwork(world);
         const models = { left: "belt-left", right: "belt-right" };
-        buildings.set([...world.entities.values()].map((e) => (e.type === "belt" ? { ...e, model: models[shape.get(e)] } : e)));
+        buildings.set(
+          [...world.entities.values()].map((e) =>
+            e.type === "belt" ? { ...e, model: models[shape.get(e)] } : e.type === "underground" ? { ...e, model: `underground-${e.end}` } : e,
+          ),
+        );
       }
       // Loose items: on belts, and one at most in each inserter's hand.
       items.begin(beltItemCount(world) + world.entities.size);
@@ -385,6 +409,14 @@ export function createView(container, world, { theme = "dark" } = {}) {
         mineFill.scale.x = Math.max(0.001, m.progress / MINE_TICKS);
       }
       renderer.render(scene, camera);
+    },
+    // Lights up tiles [{ x, y }] (or none, for null).
+    setMarks(tiles) {
+      const list = (tiles || []).slice(0, MAX_MARKS);
+      const m = new THREE.Matrix4();
+      list.forEach((t, i) => marks.setMatrixAt(i, m.makeTranslation(t.x + 0.5, 0.035, t.y + 0.5)));
+      marks.count = list.length;
+      marks.instanceMatrix.needsUpdate = true;
     },
     // Outlines rect { x, y, w, h } in tiles; kind "select" (accent) or "remove" (red).
     setHighlight(rect, kind = "select") {

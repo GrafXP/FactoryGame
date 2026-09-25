@@ -37,7 +37,7 @@ decisions still holds.
 
 ## Phases
 
-### Phase 11: Underground belts, splitters and sorters
+### Phase 11: Underground belts, splitters and sorters ✅ (done)
 The logistics every layout needs: crossing one belt line with another, splitting a
 line, and sorting mixed items. None of it needs power or the HUB, so it can come
 before phases 9 and 10 if you want it sooner.
@@ -62,6 +62,17 @@ before phases 9 and 10 if you want it sooner.
   (gap + 1 tiles), so `BELT_LEN` becomes a per-belt length. A splitter is a one-tile
   belt whose items pick their exit at the middle; `beltNetwork` gets a
   splitter mode. Items are drawn going round to the exit they picked, like a corner.
+- Done as: `underground` is one building type with `end` "in"/"out"; each end is
+  built on its own and pairs as it's built (`pair` holds the other's id; an exit
+  needs an entrance up to 5 tiles behind it; an entrance pairs with a lone exit
+  ahead). With the tool picked, tapping an entrance without an exit lights its tiles
+  again. `beltNetwork` covers every conveyor: `len` per conveyor, `exits` per
+  splitter, and a depth-first `order`. A splitter's item picks its way at the middle,
+  counting the items already heading each way; one held up because its way filled
+  picks again. Sorter filters are [front, left, right]; an item goes to the ways set to
+  it, else "any", and when those are full or missing, "overflow". Logistics (milestone
+  2) unlocks undergrounds and splitters, Assembly (3) sorters. Save format 6. The
+  stretch goal (dragging a belt across a belt makes an underground pair) isn't done.
 - [ ] A belt line crosses another through an underground pair, and neither line's items leak into the other.
 - [ ] A splitter feeding three belts sends a third down each, and skips a belt that's full.
 - [ ] A sorter set to iron ore on the left and overflow in front splits a mixed belt cleanly, and says when an item has nowhere to go.
