@@ -51,6 +51,15 @@ export function total(inv) {
   return n;
 }
 
+// Moves up to `max` of `item` from one inventory into another. Returns how many moved.
+export function move(from, to, item, max = Infinity) {
+  const n = Math.min(count(from, item), max);
+  if (n <= 0) return 0;
+  take(from, { [item]: n });
+  add(to, item, n);
+  return n;
+}
+
 // Moves everything from one inventory into another and returns what moved.
 export function moveAll(from, to) {
   const moved = from.items;

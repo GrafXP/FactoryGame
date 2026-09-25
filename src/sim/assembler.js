@@ -64,27 +64,27 @@ export function setRecipe(a, recipe, inv) {
   return back;
 }
 
-// Moves as much of `item` as fits from inventory `inv` into the assembler.
-// Returns how many moved.
-export function fillAssembler(a, inv, item) {
-  const n = Math.min(count(inv, item), assemblerRoom(a, item));
-  if (n) {
+// Moves as much of `item` as fits, up to `max`, from inventory `inv` into the
+// assembler. Returns how many moved.
+export function fillAssembler(a, inv, item, max = Infinity) {
+  const n = Math.min(count(inv, item), assemblerRoom(a, item), max);
+  if (n > 0) {
     take(inv, { [item]: n });
     assemblerAdd(a, item, n);
   }
   return n;
 }
 
-// Moves one ingredient's stock, or the output (item null), into `inv`. Returns what moved.
-export function emptyAssembler(a, inv, item = null) {
-  let moved = {};
-  if (item === null) {
-    if (a.output) moved = { [a.output.item]: a.output.n };
-    a.output = null;
-  } else if (a.inputs[item]) {
-    moved = { [item]: a.inputs[item] };
-    delete a.inputs[item];
-  }
+// Moves one ingredient's stock, or the output (item null), up to `max` of it, into
+// `inv`. Returns what moved.
+export function emptyAssembler(a, inv, item = null, max = Infinity) {
+  const have = item === null ? a.output?.n || 0 : a.inputs[item] || 0;
+  const n = Math.min(have, max);
+  if (n <= 0) return {};
+  const id = item ?? a.output.item;
+  if (item === null && (a.output.n -= n) === 0) a.output = null;
+  if (item !== null && (a.inputs[item] -= n) === 0) delete a.inputs[item];
+  const moved = { [id]: n };
   give(inv, moved);
   return moved;
 }

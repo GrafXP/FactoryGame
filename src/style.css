@@ -946,6 +946,20 @@ body.playing nav {
   font-size: 0.8rem;
 }
 
+/* How many each Add and Take button moves: 1, 10, Half, All. */
+.panel .amount {
+  margin: 8px 0 4px;
+  padding: 3px;
+  gap: 3px;
+  border-radius: 12px;
+}
+
+.panel .amount button {
+  padding: 6px 4px;
+  font-size: 0.8rem;
+  border-radius: 9px;
+}
+
 .panel .actions {
   display: flex;
   flex-wrap: wrap;

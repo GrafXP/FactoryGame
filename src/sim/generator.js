@@ -27,23 +27,24 @@ export function generatorAdd(g, item, n = 1) {
   else g.fuel = { item, n };
 }
 
-// Moves as much of `item` as fits from inventory `inv` into the generator. Returns
-// how many moved.
-export function fuelGenerator(g, inv, item) {
-  const n = Math.min(count(inv, item), generatorRoom(g, item));
-  if (n) {
+// Moves as much of `item` as fits, up to `max`, from inventory `inv` into the
+// generator. Returns how many moved.
+export function fuelGenerator(g, inv, item, max = Infinity) {
+  const n = Math.min(count(inv, item), generatorRoom(g, item), max);
+  if (n > 0) {
     take(inv, { [item]: n });
     generatorAdd(g, item, n);
   }
   return n;
 }
 
-// Moves the fuel slot into inventory `inv` and returns what moved. What's already
-// burning stays.
-export function emptyGenerator(g, inv) {
-  if (!g.fuel) return {};
-  const moved = { [g.fuel.item]: g.fuel.n };
-  g.fuel = null;
+// Moves the fuel slot, up to `max` of it, into inventory `inv` and returns what
+// moved. What's already burning stays.
+export function emptyGenerator(g, inv, max = Infinity) {
+  const n = g.fuel ? Math.min(g.fuel.n, max) : 0;
+  if (n <= 0) return {};
+  const moved = { [g.fuel.item]: n };
+  if ((g.fuel.n -= n) === 0) g.fuel = null;
   give(inv, moved);
   return moved;
 }

@@ -83,10 +83,11 @@ export function deliver(progress, item, n = 1) {
   }
 }
 
-// Delivers as much of `item` as is needed from inventory `inv`. Returns how many.
-export function deliverFrom(progress, inv, item) {
-  const n = Math.min(count(inv, item), stillNeeded(progress, item));
-  if (n) {
+// Delivers as much of `item` as is needed, up to `max`, from inventory `inv`.
+// Returns how many.
+export function deliverFrom(progress, inv, item, max = Infinity) {
+  const n = Math.min(count(inv, item), stillNeeded(progress, item), max);
+  if (n > 0) {
     take(inv, { [item]: n });
     deliver(progress, item, n);
   }

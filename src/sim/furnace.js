@@ -58,25 +58,26 @@ export function furnaceTakeOne(f, accepts) {
 // How many of `item` the player could still put in: slots fill up to a full stack.
 export const furnaceRoom = (f, item) => room(f, item, STACK);
 
-// Moves as much of `item` as fits from inventory `inv` into the furnace. Returns
-// how many moved.
-export function fillFrom(f, inv, item) {
-  const n = Math.min(count(inv, item), furnaceRoom(f, item));
-  if (n) {
+// Moves as much of `item` as fits, up to `max`, from inventory `inv` into the
+// furnace. Returns how many moved.
+export function fillFrom(f, inv, item, max = Infinity) {
+  const n = Math.min(count(inv, item), furnaceRoom(f, item), max);
+  if (n > 0) {
     take(inv, { [item]: n });
     furnaceAdd(f, item, n);
   }
   return n;
 }
 
-// Moves everything in `slot` ("input", "fuel" or "output") into inventory `inv`
-// and returns what moved. The player takes plates out this way, and ore or coal
-// back, e.g. a lone stone that's waiting for a second one.
-export function emptySlot(f, slot, inv) {
+// Moves what's in `slot` ("input", "fuel" or "output"), up to `max` of it, into
+// inventory `inv` and returns what moved. The player takes plates out this way,
+// and ore or coal back, e.g. a lone stone that's waiting for a second one.
+export function emptySlot(f, slot, inv, max = Infinity) {
   const s = f[slot];
-  if (!s) return {};
-  const moved = { [s.item]: s.n };
-  f[slot] = null;
+  const n = s ? Math.min(s.n, max) : 0;
+  if (n <= 0) return {};
+  const moved = { [s.item]: n };
+  takeFrom(f, slot, n);
   give(inv, moved);
   return moved;
 }

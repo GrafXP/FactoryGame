@@ -3,7 +3,7 @@
 import { generateMap, ORE, ORE_NAMES } from "./map.js";
 import { BUILDINGS, footprint, outputTile } from "./buildings.js";
 import { ORE_ITEM, START_KIT, describe } from "./items.js";
-import { createInventory, add, give, missing, take, moveAll } from "./inventory.js";
+import { createInventory, add, give, missing, take, move, moveAll, total } from "./inventory.js";
 import { inMap, entityAt } from "./grid.js";
 import { stepBelts, takesItems, canTake, put, splitterState, ANY_FILTERS } from "./transport.js";
 import { undergroundState, undergroundWhy, pairUp, unpair, buried } from "./underground.js";
@@ -151,6 +151,16 @@ export function refundOf(entity, world = null) {
 export function takeAll(world, chest) {
   return moveAll(chest.inventory, world.inventory);
 }
+
+// How many more items a chest holds.
+export const chestRoom = (chest) => BUILDINGS.chest.capacity - total(chest.inventory);
+
+// Takes up to `max` of `item` out of a chest into the player's inventory, or puts
+// up to `max` of it in from the inventory, as far as the chest has room. Each
+// returns how many moved.
+export const takeFromChest = (world, chest, item, max = Infinity) => move(chest.inventory, world.inventory, item, max);
+export const putInChest = (world, chest, item, max = Infinity) =>
+  move(world.inventory, chest.inventory, item, Math.min(max, chestRoom(chest)));
 
 // State a new building starts with. Miners track their dig and why they're stopped,
 // chests hold items, conveyors carry them (see transport.js and underground.js);

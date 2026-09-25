@@ -1,7 +1,7 @@
 import { BUILDINGS, kW } from "../sim/buildings.js";
 import { ITEMS, describe, itemName } from "../sim/items.js";
 import { count, total } from "../sim/inventory.js";
-import { takeAll, oreLeftUnder } from "../sim/world.js";
+import { takeAll, oreLeftUnder, chestRoom, takeFromChest, putInChest } from "../sim/world.js";
 import { SMELTING, FUEL, FUEL_ENERGY, RECIPES } from "../sim/recipes.js";
 import { fillFrom, emptySlot, furnaceRoom } from "../sim/furnace.js";
 import { setRecipe, fillAssembler, emptyAssembler, assemblerRoom } from "../sim/assembler.js";
@@ -13,10 +13,11 @@ import { beltNetwork, setFilter } from "../sim/transport.js";
 import { REACH, buried } from "../sim/underground.js";
 import { TICK_RATE } from "../sim/world.js";
 import { itemIcon, icon } from "./icons.js";
-import { lower, itemRows } from "./format.js";
+import { lower } from "./format.js";
 
 // The panel for the building tapped with no tool: what it holds and what it's
-// doing, with buttons to move items in and out. Redrawn when what it shows changes
+// doing, with buttons to move items in and out. How many each of those moves is
+// picked at the top of the panel (AMOUNTS) and shown on the button. Redrawn when what it shows changes
 // (its key); progress bars and the power readouts ([data-live] parts, which have
 // no buttons) move every tick.
 const MINER_STATUS = {
@@ -132,13 +133,50 @@ const recipeText = (id) => {
   return `${describe(r.in)} → ${describe({ [id]: r.n })}, every ${+(r.time / TICK_RATE).toFixed(2)} s`;
 };
 
-// Buttons that add each of `ids` from the inventory, as much as fits (`room`).
+// How many a button moves: one, ten, half of what's there (rounded up) or all of
+// it, as far as there's room. Remembered for the next panel and the next game.
+const AMOUNTS = [
+  ["1", "1"],
+  ["10", "10"],
+  ["half", "Half"],
+  ["all", "All"],
+];
+const AMOUNT_KEY = "factory:amount";
+let amount = "all";
+const loadAmount = () => {
+  try {
+    const saved = localStorage.getItem(AMOUNT_KEY);
+    if (AMOUNTS.some(([k]) => k === saved)) amount = saved;
+  } catch {}
+};
+const setAmount = (k) => {
+  amount = k;
+  try {
+    localStorage.setItem(AMOUNT_KEY, k);
+  } catch {}
+};
+// How many of `have` to move with the amount picked.
+const pick = (have) => Math.min(have, amount === "1" ? 1 : amount === "10" ? 10 : amount === "half" ? Math.ceil(have / 2) : have);
+
+const amountBar = () =>
+  `<div class="segmented amount" role="group" aria-label="How many each button moves">${AMOUNTS.map(
+    ([k, label]) => `<button data-action="amount" data-value="${k}" aria-pressed="${k === amount}">${label}</button>`,
+  ).join("")}</div>`;
+
+// Buttons that add each of `ids` from the inventory: the amount picked of what the
+// player has, as far as it fits (`room`).
 const addButtons = (ids, inv, room, verb = "Add") =>
   ids
-    .map((id) => [id, Math.min(count(inv, id), room(id))])
+    .map((id) => [id, Math.min(room(id), pick(count(inv, id)))])
     .filter(([, n]) => n > 0)
-    .map(([id, n]) => `<button data-action="fill" data-item="${id}">${itemIcon(id)}${verb} ${n} ${lower(id, n)}</button>`)
+    .map(([id, n]) => `<button data-action="fill" data-item="${id}" data-n="${n}">${itemIcon(id)}${verb} ${n} ${lower(id, n)}</button>`)
     .join("");
+
+// A Take button for `have` of `item`, taking the amount picked; `attrs` say where from.
+const takeButton = (item, have, attrs) => {
+  const n = pick(have);
+  return `<button class="take" data-action="empty" ${attrs} data-n="${n}" aria-label="Take ${n} ${lower(item, n)}">Take ${n}</button>`;
+};
 
 const heading = (title) => `<h3>${title}<button class="close" data-action="close" aria-label="Close">${icon("close")}</button></h3>`;
 
@@ -146,26 +184,37 @@ const heading = (title) => `<h3>${title}<button class="close" data-action="close
 // attribute saying which slot or item; the output has its own big button instead).
 const slotRow = (label, s, take) =>
   `<li><em>${label}</em>${
-    s
-      ? `${itemIcon(s.item)}<span>${itemName(s.item, s.n)}</span><b>${s.n}</b>` +
-        (take ? `<button class="take" data-action="empty" ${take} aria-label="Take back ${lower(s.item, s.n)}">Take</button>` : "")
-      : `<span class="empty">Empty</span>`
+    s ? `${itemIcon(s.item)}<span>${itemName(s.item, s.n)}</span><b>${s.n}</b>` + (take ? takeButton(s.item, s.n, take) : "") : `<span class="empty">Empty</span>`
   }</li>`;
 
-const takeOutput = (out) =>
-  `<button class="wide" data-action="empty" data-slot="output"${out ? "" : " disabled"}>${out ? `Take ${out.n} ${lower(out.item, out.n)}` : "Nothing made yet"}</button>`;
+const takeOutput = (out) => {
+  if (!out) return `<button class="wide" data-action="empty" data-slot="output" disabled>Nothing made yet</button>`;
+  const n = pick(out.n);
+  return `<button class="wide" data-action="empty" data-slot="output" data-n="${n}">Take ${n} ${lower(out.item, n)}</button>`;
+};
 
 // Each panel: the key its markup depends on, the markup, and the progress bar's fill.
 // `view` is the panel's own state: `picking` while choosing an assembler's recipe,
 // `exit` (0 front, 1 left, 2 right) while choosing a sorter's filter.
 const PANELS = {
+  // What it holds, each with a Take button, and buttons to put in what the player carries.
   chest: {
-    key: (c) => c.inventory.version,
-    html: (c) => {
+    key: (c, world) => `${c.inventory.version} ${world.inventory.version}`,
+    html: (c, world) => {
       const n = total(c.inventory);
+      const rows = Object.keys(ITEMS)
+        .filter((id) => count(c.inventory, id) > 0)
+        .map((id) => {
+          const k = count(c.inventory, id);
+          return `<li>${itemIcon(id)}<span>${itemName(id, k)}</span><b>${k}</b>${takeButton(id, k, `data-item="${id}"`)}</li>`;
+        })
+        .join("");
+      const adds = addButtons(Object.keys(ITEMS), world.inventory, () => chestRoom(c));
       return `${heading("Chest")}
         <p class="meta">${n} / ${BUILDINGS.chest.capacity} items</p>
-        <ul class="items">${itemRows(c.inventory) || `<li class="empty">Empty</li>`}</ul>
+        ${amountBar()}
+        <ul class="items slots">${rows || `<li class="empty">Empty</li>`}</ul>
+        ${adds ? `<div class="actions">${adds}</div>` : ""}
         <button class="wide" data-action="take"${n ? "" : " disabled"}>Take all</button>`;
     },
   },
@@ -187,6 +236,7 @@ const PANELS = {
       return `${heading("Furnace")}
         <p class="status" data-status="${f.status}">${FURNACE_STATUS[f.status](f)}</p>
         <span class="bar"><i></i></span>
+        ${amountBar()}
         <ul class="items slots">${slotRow("Ore", f.input, `data-slot="input"`)}${slotRow("Fuel", f.fuel, `data-slot="fuel"`)}${slotRow("Made", f.output)}</ul>
         ${adds ? `<div class="actions">${adds}</div>` : ""}
         ${takeOutput(f.output)}`;
@@ -222,6 +272,7 @@ const PANELS = {
         <span class="bar"><i></i></span>
         <div data-live="power"></div>
         <div class="makes">${itemIcon(a.recipe)}<span>${recipeText(a.recipe)}</span><button class="take" data-action="pick">Change</button></div>
+        ${amountBar()}
         <ul class="items slots">${ins}${slotRow("Made", a.output)}</ul>
         ${adds ? `<div class="actions">${adds}</div>` : ""}
         ${takeOutput(a.output)}`;
@@ -245,6 +296,7 @@ const PANELS = {
       const secs = +(FUEL_ENERGY.coal / BUILDINGS.generator.power / TICK_RATE).toFixed(1);
       return `${heading("Coal generator")}
         <p class="status" data-status="${g.status}">${GENERATOR_STATUS[g.status](g)}</p>
+        ${amountBar()}
         <ul class="items slots">${slotRow("Fuel", g.fuel, `data-slot="fuel"`)}</ul>
         ${adds ? `<div class="actions">${adds}</div>` : ""}
         <p class="meta">Makes up to ${kW(BUILDINGS.generator.power)} kW, and only burns what's used: a coal lasts ${secs} s at full power.</p>
@@ -333,7 +385,7 @@ const PANELS = {
         <p class="meta">Milestone ${milestone + 1} of ${MILESTONES.length}</p>
         <p><b>${m.name}</b>: ${m.about}</p>
         <ul class="items needs">${needs}</ul>
-        ${adds ? `<div class="actions">${adds}</div><button class="wide" data-action="deliver">Deliver all I can</button>` : ""}
+        ${adds ? `${amountBar()}<div class="actions">${adds}</div><button class="wide" data-action="deliver">Deliver all I can</button>` : ""}
         <p class="meta">${unlocks ? `Unlocks ${unlocks}.` : "The last milestone."} Belts and inserters can deliver here too; it only takes what the milestone still needs.</p>
         <ol class="milestones">${list}</ol>`;
     },
@@ -350,6 +402,7 @@ const PANELS = {
 // `close` is called when the panel should go (its ✕, or the building is gone);
 // `changed` after items moved between the building and the player.
 export function createEntityPanel(el, { close, changed, toast }) {
+  loadAmount();
   let shown = null;
   let shownKey = "";
   let world = null;
@@ -361,7 +414,7 @@ export function createEntityPanel(el, { close, changed, toast }) {
     if (!shown) return;
     if (!world.entities.has(shown.id)) return close();
     const panel = PANELS[shown.type];
-    const key = `${shown.type} ${panel.key(shown, world, view)}`;
+    const key = `${shown.type} ${amount} ${panel.key(shown, world, view)}`;
     if (key !== shownKey) {
       shownKey = key;
       el.innerHTML = panel.html(shown, world, view);
@@ -386,21 +439,26 @@ export function createEntityPanel(el, { close, changed, toast }) {
     const asm = shown.type === "assembler";
     const gen = shown.type === "generator";
     const hub = shown.type === "hub";
+    const chest = shown.type === "chest";
+    const max = btn?.dataset.n ? Number(btn.dataset.n) : Infinity; // what the button said it moves
     let moved = null;
-    if (action === "take" && shown.inventory) moved = takeAll(world, shown);
+    if (action === "amount") setAmount(btn.dataset.value);
+    else if (action === "take" && shown.inventory) moved = takeAll(world, shown);
     else if (action === "empty") {
-      if (asm) moved = emptyAssembler(shown, inv, btn.dataset.item ?? null);
-      else if (gen) moved = emptyGenerator(shown, inv);
-      else moved = emptySlot(shown, btn.dataset.slot, inv);
+      const item = btn.dataset.item;
+      if (asm) moved = emptyAssembler(shown, inv, item ?? null, max);
+      else if (gen) moved = emptyGenerator(shown, inv, max);
+      else if (chest) moved = { [item]: takeFromChest(world, shown, item, max) };
+      else moved = emptySlot(shown, btn.dataset.slot, inv, max);
     } else if (action === "fill") {
       const item = btn.dataset.item;
-      if (hub) {
-        const n = deliverFrom(world.progress, inv, item);
-        if (n) toast(`Delivered ${describe({ [item]: n })}`);
-      } else {
-        const n = asm ? fillAssembler(shown, inv, item) : gen ? fuelGenerator(shown, inv, item) : fillFrom(shown, inv, item);
-        if (n) toast(`Added ${describe({ [item]: n })}`);
-      }
+      let n;
+      if (hub) n = deliverFrom(world.progress, inv, item, max);
+      else if (asm) n = fillAssembler(shown, inv, item, max);
+      else if (gen) n = fuelGenerator(shown, inv, item, max);
+      else if (chest) n = putInChest(world, shown, item, max);
+      else n = fillFrom(shown, inv, item, max);
+      if (n) toast(`${hub ? "Delivered" : "Added"} ${describe({ [item]: n })}`);
     } else if (action === "deliver") {
       const moved = deliverAll(world.progress, inv);
       if (Object.keys(moved).length) toast(`Delivered ${describe(moved)}`);
@@ -417,7 +475,7 @@ export function createEntityPanel(el, { close, changed, toast }) {
       view.exit = null;
     } else if (action === "filter-keep") view.exit = null;
     else return;
-    if (moved && Object.keys(moved).length) toast(`Took ${describe(moved)}`);
+    if (moved && Object.values(moved).some((n) => n > 0)) toast(`Took ${describe(moved)}`);
     sync(world);
     changed();
   });
