@@ -10,7 +10,7 @@ import { costChips } from "./format.js";
 // The build controls. It drives the builder (build.js) and follows it through
 // syncTool, and shows costs and what's unlocked from the world passed to sync.
 //  - The bottom bar: Build (opens the sheet), quick slots holding recently picked
-//    buildings, and Remove. A building picked from the sheet that isn't in a slot
+//    buildings, Select and Remove. A building picked from the sheet that isn't in a slot
 //    takes over the slot used longest ago, so the others stay where they are.
 //    Slots only show unlocked buildings (progress.js); others fill in for the rest.
 //  - The build sheet: a tab per category, a card per building with what it's for,
@@ -18,6 +18,8 @@ import { costChips } from "./format.js";
 //  - The tool bar, just above the bottom bar while a tool is picked: what it is,
 //    its cost, Rotate and Done. When you can't afford the building but could
 //    hand-craft the parts it's missing, a Craft button calls `craft(cost)`.
+//    With Select, it says what to do, or how many buildings are selected with
+//    Copy, Cut, Rotate and Remove; pasting shows what the paste costs, like a building.
 const QUICK_SLOTS = 4;
 const QUICK_KEY = "factory:quick";
 const DEFAULT_QUICK = ["belt", "inserter", "miner", "furnace"];
@@ -36,9 +38,11 @@ function loadQuick() {
 }
 
 const countBadge = (n) => (n > 99 ? "99+" : String(n));
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 export function createBuildMenu({ bar, info, sheet }, builder, { craft }) {
   let tool = null;
+  let state = { tool: null, selected: 0, clipboard: null }; // the builder's, from syncTool
   let world = null;
   let inv = { items: {} };
   const unlocked = (t) => !world || buildingUnlocked(world, t);
@@ -82,29 +86,68 @@ export function createBuildMenu({ bar, info, sheet }, builder, { craft }) {
       bar,
       `<button class="tool" data-action="sheet" aria-expanded="${!sheet.hidden}" title="All buildings (B)">${icon("build")}<span>Build</span></button>
       <div class="quick">${shown.map(slot).join("")}</div>
+      <button class="tool" data-tool="select" aria-pressed="${tool === "select" || tool === "paste"}" title="Select, copy and paste (C)">${icon("select")}<span>Select</span></button>
       <button class="tool danger" data-tool="remove" aria-pressed="${tool === "remove"}" title="Remove (X)">${icon("remove")}<span>Remove</span></button>`,
     );
   };
 
+  // The Craft button, when `cost` can't be paid but its missing parts can be hand-crafted.
+  const craftButton = (cost) =>
+    !affordable(inv, cost) && !planItems(inv, cost, world ? canCraft(world) : undefined).missing
+      ? `<button class="ti-craft" data-action="craft" title="Hand-craft the missing parts">Craft</button>`
+      : "";
+
   const renderInfo = () => {
     info.hidden = !tool;
+    info.toggleAttribute("data-wrap", tool === "select" && state.selected > 0);
     if (tool === "remove") {
       put(
         info,
-        `${icon("remove")}<div class="ti-main"><div class="ti-text"><b>Remove</b><small>Tap a building to take it down. You get back what it cost.</small></div></div>
+        `${icon("remove")}<div class="ti-main"><div class="ti-text"><b>Remove</b><small>Tap a building to take it down. You get back what it cost. To remove many, use Select.</small></div></div>
+        <button class="done" data-action="done">Done</button>`,
+      );
+    } else if (tool === "select" && state.selected) {
+      put(
+        info,
+        `<div class="ti-main"><div class="ti-text"><b>${plural(state.selected, "building")}</b><small>selected</small></div></div>
+        <button class="done" data-action="done">Done</button>
+        <div class="ti-actions">
+          <button data-action="copy" title="Copy (Ctrl+C)">${icon("copy")}<span>Copy</span></button>
+          <button data-action="cut" title="Cut (Ctrl+X)">${icon("cut")}<span>Cut</span></button>
+          <button data-action="rotate" title="Rotate where it stands (R)">${icon("rotate")}<span>Rotate</span></button>
+          <button class="danger" data-action="remove-all" title="Remove all (Delete)">${icon("remove")}<span>Remove</span></button>
+        </div>`,
+      );
+    } else if (tool === "select") {
+      put(
+        info,
+        `${icon("select")}<div class="ti-main"><div class="ti-text"><b>Select</b><small>Drag a box over buildings to copy, move or remove them. On touch, press and hold first.</small></div></div>
+        ${state.clipboard ? `<button class="ti-craft" data-action="paste" title="Paste what you copied last (V)">Paste</button>` : ""}
+        <button class="done" data-action="done">Done</button>`,
+      );
+    } else if (tool === "paste" && state.clipboard) {
+      const { count: n, cost } = state.clipboard;
+      const payable = affordable(inv, cost) > 0;
+      put(
+        info,
+        `${icon("paste")}<div class="ti-main">
+          <div class="ti-text"><b>Paste ${plural(n, "building")}</b><small data-zero="${!payable}">${payable ? "you can pay for it all" : "you can't pay for all of it"}</small></div>
+          <div class="chips">${costChips(cost, inv, { compact: true })}</div>
+        </div>
+        ${craftButton(cost)}
+        <button class="ti-btn" data-action="rotate" aria-label="Rotate (R)">${icon("rotate")}</button>
         <button class="done" data-action="done">Done</button>`,
       );
     } else if (tool) {
       const b = BUILDINGS[tool];
       const n = affordable(inv, b.cost);
-      const craftable = !n && !planItems(inv, b.cost, world ? canCraft(world) : undefined).missing;
       put(
         info,
         `${icon(tool)}<div class="ti-main">
           <div class="ti-text"><b>${b.name}</b><small data-zero="${!n}">${n ? `can build ${countBadge(n)}` : "can't afford one"}</small></div>
           <div class="chips">${costChips(b.cost, inv, { compact: true })}</div>
         </div>
-        ${craftable ? `<button class="ti-craft" data-action="craft" title="Hand-craft the missing parts">Craft</button>` : ""}
+        ${craftButton(b.cost)}
         <button class="ti-btn" data-action="rotate" aria-label="Rotate (R)">${icon("rotate")}</button>
         <button class="done" data-action="done">Done</button>`,
       );
@@ -175,7 +218,14 @@ export function createBuildMenu({ bar, info, sheet }, builder, { craft }) {
     const action = e.target.closest("[data-action]")?.dataset.action;
     if (action === "rotate") builder.rotate();
     if (action === "done") builder.setTool(null);
-    if (action === "craft" && BUILDINGS[tool]) craft(BUILDINGS[tool].cost);
+    if (action === "craft") {
+      const cost = BUILDINGS[tool]?.cost || (tool === "paste" && state.clipboard?.cost);
+      if (cost) craft(cost);
+    }
+    if (action === "copy") builder.copy();
+    if (action === "cut") builder.cut();
+    if (action === "remove-all") builder.removeSelected();
+    if (action === "paste") builder.setTool("paste");
   });
   sheet.addEventListener("click", (e) => {
     const el = e.target.closest("[data-action], [data-tab], [data-pick]");
@@ -201,8 +251,9 @@ export function createBuildMenu({ bar, info, sheet }, builder, { craft }) {
     open,
     close,
     toggle: () => (sheet.hidden ? open() : close()),
-    // Follows the builder's tool.
-    syncTool(state) {
+    // Follows the builder: its tool, the selection and the clipboard.
+    syncTool(next) {
+      state = next;
       tool = state.tool;
       if (BUILDINGS[tool]) remember(tool);
       render();

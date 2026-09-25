@@ -23,7 +23,7 @@ decisions still holds.
   packs. Feeding the HUB by belt becomes the late-game "automate this" goal.
 - **Peaceful.** No enemies in this plan.
 - **One thumb at scale.** Once factories reach hundreds of buildings, placing them
-  one at a time on a phone is the bottleneck, so copy, paste and blueprints come early.
+  one at a time on a phone is the bottleneck, so copy and paste come early.
 - **Performance target, raised:** 60 UPS on a mid-range phone with ~3,000 buildings
   and ~15,000 items on belts (the MVP's was 1,000 and 5,000).
 
@@ -78,7 +78,7 @@ before phases 9 and 10 if you want it sooner.
 - [ ] A sorter set to iron ore on the left and overflow in front splits a mixed belt cleanly, and says when an item has nowhere to go.
 - [ ] You can't place an exit out of range, and the valid tiles are obvious while placing.
 
-### Phase 12: Select, copy, paste and mass remove
+### Phase 12: Select, copy, paste and mass remove ✅ (done)
 A Select tool: drag a box (touch: press and hold, then drag, like belts), then
 **Copy**, **Cut**, **Remove all** or **Rotate** the selection. Paste shows the whole
 selection as a ghost that follows your finger, with the same two-tap touch placement
@@ -86,43 +86,39 @@ as a single building. It's green where it fits, red where it doesn't, and pays f
 what it can. Settings come along (recipes, sorter filters). **Pick** (tap a building
 with the Build tool open) picks the same building and facing. **Undo** covers the
 last build, remove or paste.
+- Done as: `sim/layout.js`. A layout is the box a group of buildings covers and a
+  part per building: type, place, facing, and settings (underground end, assembler
+  recipe, sorter filters); what they hold isn't copied. `planLayout` says for each
+  part whether it'd be built or why not ("locked", "blocked", "unpaid"), paying in
+  order, and the ghost uses it; `buildLayout` builds and reports what it skipped and
+  what's missing. Underground exits go last, so their entrances are there to pair
+  with. Select sits in the bottom bar (C); the selected buildings are tinted, and the
+  tool bar gets a second row: Copy, Cut, Rotate, Remove (Ctrl+C, Ctrl+X, R, Delete).
+  **Rotate on a selection turns it where it stands**: it's taken down and built again
+  turned, so what it held goes to the inventory, and it's refused if a neighbour is in
+  the way. While pasting, Rotate turns the ghost. Paste stays picked to paste again,
+  and Select's Paste button (V) brings the clipboard back. Pick also works with Q under
+  a mouse. Undo is a button next to Pause (Z, Ctrl+Z), 50 steps deep; undoing a removal
+  builds it again, paid for, with its settings, and older steps follow the rebuilt
+  buildings' new ids. Neither the clipboard nor the undo history is saved, so the save
+  format didn't change. The bottom bar has seven buttons now, narrower on phones.
 - [ ] Copying a furnace column with its inserters and pasting it next to the first builds a working copy.
 - [ ] Removing a selection gives back everything in it, including what's on its belts.
 - [ ] A paste that's partly blocked builds the parts that fit and says what was skipped.
 
-### Phase 13: Blueprints and planned buildings
-Save a selection as a named **blueprint**. Blueprints are kept in the browser apart
-from the save, so they carry over to new games, and they can be exported and imported
-as a text string for sharing. Pasting what you can't afford yet leaves **planned
-buildings**: faint ghosts that build themselves from your inventory as soon as you
-can pay, nearest first. The resource bar shows what the plans still need.
-- [ ] A blueprint made in one game can be pasted in a new one.
-- [ ] Exporting a blueprint and importing the text elsewhere gives the same layout.
-- [ ] Planned buildings get built by themselves as items come in, and can be removed like buildings.
-
-### Phase 14: Faster belts and inserters
-A second tier to grow into: **Mk2 belts** (3.75 tiles/s, 15 items/s, double the
-speed with the same item gap), underground belts and splitters to match, and a **fast
-inserter** (2.4 items/s, needs power). Building a faster belt over a slower one
-**upgrades it in place**: facing and items are kept, and the old one is refunded.
-Dragging a line of Mk2 belts over a Mk1 line upgrades the lot. Unlocked by a HUB milestone.
-- [ ] Upgrading a busy belt line doesn't drop or move any items.
-- [ ] A Mk2 line fed by two full Mk1 lines carries both.
-- [ ] Tiers are told apart at a glance (arrow colour), in both themes.
-
-### Phase 15: A bigger world
+### Phase 13: A bigger world
 The 128×128 map gets cramped once there are sub-factories. It grows to **512×512**,
 split into 32×32 chunks that are generated from the seed when first seen and
 rendered (ground texture, rocks) per chunk, so only what's on screen costs anything.
 Only chunks you've changed go in the save. New terrain: **water** (lakes you can't
-build on, needed by phase 18) and further, richer ore fields. Zooming far out turns
+build on, needed by phase 16) and further, richer ore fields. Zooming far out turns
 into a **map view**: flat colours, ore patches with what's left, buildings as blocks.
 A saved game from before loads as a 128×128 corner of the new map.
 - [ ] Panning across the whole map stays smooth, and an empty map loads as fast as today.
 - [ ] Zooming all the way out shows the map view, and you can tell where the ore is.
 - [ ] A save with a big factory in one corner stays about as small as today's.
 
-### Phase 16: Performance pass
+### Phase 14: Performance pass
 Measure first: a benchmark (`?bench=big`) that builds a 3,000-building factory with
 15,000 belt items headless and in the browser, reporting ms per tick and per frame.
 Then fix what the numbers point at. Likely candidates:
@@ -137,7 +133,7 @@ The target is the one at the top of this plan, checked on a real phone.
 - [ ] The benchmark factory runs at 60 UPS on a mid-range phone.
 - [ ] A loaded save still runs tick-for-tick like the saved one (sleeping machines wake the same way).
 
-### Phase 17: Production statistics
+### Phase 15: Production statistics
 You can't balance what you can't see. A **Stats** panel lists each item's production
 and consumption per minute over the last minute, 10 minutes and hour, with a small
 graph each. A machine's panel shows how busy it has been (working % over the last
@@ -147,7 +143,7 @@ graphs survive a reload.
 - [ ] Building a second furnace column shows plate production double in Stats within a minute.
 - [ ] A starved assembler's panel shows it idle most of the time, and why.
 
-### Phase 18: Fluids and steam power
+### Phase 16: Fluids and steam power
 The first fluid chain. An **offshore pump** on the shore pumps water, which goes
 through **pipes** (joining their neighbours by themselves, like belts) and
 **underground pipes** to **boilers** that burn coal and turn it into steam for
@@ -162,7 +158,7 @@ refused with a reason.
 - [ ] Tapping a pipe shows what's in its run, how full it is, and what's drawing from it.
 - [ ] A pipe that would mix water and steam can't be placed, and says why.
 
-### Phase 19: Steel, oil and plastic
+### Phase 17: Steel, oil and plastic
 The second production tier and the next HUB milestones:
 - **Steel**: furnaces smelt 5 iron plates into 1 steel plate.
 - **Oil**: oil wells are spots on the map, not patches. A **pumpjack** on one pumps
@@ -178,7 +174,7 @@ assembler with a fluid recipe shows its pipe connections.
 - [ ] A drained well keeps producing at its minimum rate.
 - [ ] The HUB's tier 3 milestone asks for advanced circuits, and a new player can see how to get there.
 
-### Phase 20: Sound and feel
+### Phase 18: Sound and feel
 Sounds made in code with Web Audio, so there are no files to download:
 - clicks for the UI, a thunk for placing, a crunch for removing;
 - a ping when a craft finishes, a fanfare for a milestone;
@@ -189,7 +185,7 @@ placed, and a short puff when removed.
 - [ ] Building, removing and crafting all sound right, and nothing is annoying after 10 minutes.
 - [ ] Sound can be turned off in one tap, and stays off.
 
-### Phase 21: Onboarding and saves
+### Phase 19: Onboarding and saves
 - **Tutorial**: an optional guided first game (mine by hand, smelt, place a miner,
   belts, inserters, an assembler), each step checked against the sim, with an arrow
   at what to tap. After that, **hints** show up when something has been stuck a
@@ -199,20 +195,40 @@ placed, and a short puff when removed.
 - [ ] Someone who has never played gets to automated plates with the tutorial and no help.
 - [ ] Exporting a save on the phone and importing it on a computer continues the same game.
 
+### Phase 20: Blueprints and planned buildings
+Save a selection as a named **blueprint**. Blueprints are kept in the browser apart
+from the save, so they carry over to new games, and they can be exported and imported
+as a text string for sharing. Pasting what you can't afford yet leaves **planned
+buildings**: faint ghosts that build themselves from your inventory as soon as you
+can pay, nearest first. The resource bar shows what the plans still need.
+- [ ] A blueprint made in one game can be pasted in a new one.
+- [ ] Exporting a blueprint and importing the text elsewhere gives the same layout.
+- [ ] Planned buildings get built by themselves as items come in, and can be removed like buildings.
+
+### Phase 21: Faster belts and inserters
+A second tier to grow into: **Mk2 belts** (3.75 tiles/s, 15 items/s, double the
+speed with the same item gap), underground belts and splitters to match, and a **fast
+inserter** (2.4 items/s, needs power). Building a faster belt over a slower one
+**upgrades it in place**: facing and items are kept, and the old one is refunded.
+Dragging a line of Mk2 belts over a Mk1 line upgrades the lot. Unlocked by a HUB milestone.
+- [ ] Upgrading a busy belt line doesn't drop or move any items.
+- [ ] A Mk2 line fed by two full Mk1 lines carries both.
+- [ ] Tiers are told apart at a glance (arrow colour), in both themes.
+
 ## Order and dependencies
 
 | Phase | Needs | Why this order |
 |---|---|---|
 | 11 Underground, splitters, sorters | MVP phase 8 | The first thing bigger layouts need; independent of power and the HUB |
 | 12 Copy, paste, remove | 11 | Should copy splitter and sorter settings from day one |
-| 13 Blueprints, planned buildings | 12 | Built on the selection and paste code |
-| 14 Faster belts and inserters | 11, 9 (power) | Upgrading in place reuses paste's "build over" |
-| 15 Bigger world | — | Water and far ore are needed by 18 and 19 |
-| 16 Performance | 15 | Measured on the big map, before fluids and oil add load |
-| 17 Stats | — | Anywhere; most useful once factories are big |
-| 18 Fluids, steam | 15 (water), 9 (power) | |
-| 19 Steel, oil, plastic | 18 | Oil is a fluid |
-| 20 Sound, 21 Onboarding | — | Last, when what they describe has settled |
+| 13 Bigger world | — | Water and far ore are needed by 16 and 17 |
+| 14 Performance | 13 | Measured on the big map, before fluids and oil add load |
+| 15 Stats | — | Anywhere; most useful once factories are big |
+| 16 Fluids, steam | 13 (water), 9 (power) | |
+| 17 Steel, oil, plastic | 16 | Oil is a fluid |
+| 18 Sound, 19 Onboarding | — | Near the end, when what they describe has settled |
+| 20 Blueprints, planned buildings | 12 | Built on the selection and paste code; moved late, since copy and paste cover most of it |
+| 21 Faster belts and inserters | 11, 9 (power) | Upgrading in place reuses paste's "build over"; moved late |
 
 ## Open questions
 

@@ -230,12 +230,12 @@ function play(el) {
   };
 }
 
-const TOOL_KEYS = { ...BUILDING_KEYS, x: "remove", q: null };
+const TOOL_KEYS = { ...BUILDING_KEYS, x: "remove", c: "select", v: "paste" };
 const DEBUG_KEY = "factory:debug";
 
 // The game page itself, playing a loaded `world` or a new one from `seed`.
 //
-// Top: Back, the clock and Pause, under them the resource bar (tap it for the
+// Top: Back, the clock, Undo and Pause, under them the resource bar (tap it for the
 // inventory), and under that the goal card (ui/goal.js; tap it for the HUB). A
 // banner drops in when a milestone is reached. Bottom: the build controls
 // (ui/build-menu.js), with toasts and readouts stacked above them. Right: panels for the tapped building and the
@@ -248,6 +248,7 @@ function playWorld(el, { world, seed, isNew = false }) {
         <div class="hud">
           <a href="/" data-link class="icon-btn" aria-label="Back">${icon("back")}</a>
           <div class="score"><b id="clock">0:00</b><span id="status">Running</span></div>
+          <button class="icon-btn" id="undo" aria-label="Undo (Z)" title="Undo (Z)" disabled>${icon("undo")}</button>
           <button class="icon-btn" id="pause" aria-label="Pause (P)">${icon("pause")}</button>
         </div>
         <div class="resources" id="resources" role="button" tabindex="0" aria-label="Inventory (I)" aria-expanded="false"></div>
@@ -318,7 +319,7 @@ function playWorld(el, { world, seed, isNew = false }) {
     el.textContent = text;
     el.hidden = false;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => (el.hidden = true), 1800);
+    toastTimer = setTimeout(() => (el.hidden = true), Math.max(1800, text.length * 50)); // longer ones stay to be read
   };
 
   // Everything that shows the player's inventory, redrawn when it changes.
@@ -394,7 +395,10 @@ function playWorld(el, { world, seed, isNew = false }) {
       showTile();
       entityPanel.show(t?.entity, game.world);
     },
-    onBuildChange: (state) => menu?.syncTool(state),
+    onBuildChange: (state) => {
+      menu?.syncTool(state);
+      $("#undo").disabled = !state.canUndo;
+    },
     onMessage: toast,
     onTileHover: (t) => {
       hovered = t;
@@ -481,6 +485,7 @@ function playWorld(el, { world, seed, isNew = false }) {
   const autosave = setInterval(save, AUTOSAVE_MS);
   window.addEventListener("pagehide", save);
   $("#pause").addEventListener("click", pause);
+  $("#undo").addEventListener("click", () => game.running && game.builder.undo());
   const unbindFs = bindFullscreenButton($("#fs"));
 
   // The pause menu's theme button offers the other theme; T flips it too.
@@ -491,15 +496,31 @@ function playWorld(el, { world, seed, isNew = false }) {
   syncTheme(getTheme());
   const unbindTheme = onThemeChange(syncTheme);
 
+  // Ctrl (⌘ on a Mac) with C, X, V or Z works on the selection and undoes, as usual.
+  const onShortcut = (e, k) => {
+    const b = game.builder;
+    if (k === "z") b.undo();
+    else if (k === "c" && b.tool === "select") b.copy();
+    else if (k === "x" && b.tool === "select") b.cut();
+    else if (k === "v") b.tool !== "paste" && b.setTool("paste");
+    else return;
+    e.preventDefault();
+  };
+
   const onKey = (e) => {
     const k = e.key.toLowerCase();
+    if (e.altKey) return;
+    if (e.ctrlKey || e.metaKey) return game.running && onShortcut(e, k);
     if (k === "escape" && game.running && menu.isOpen) menu.close();
     else if (k === "escape" && game.builder.tool && game.running) game.builder.setTool(null);
     else if (k === "p" || k === "escape") game.running ? pause() : resume();
     else if (!game.running) return;
+    else if (k === "q") game.builder.pickHovered() || game.builder.setTool(null);
     else if (TOOL_KEYS[k] !== undefined) game.builder.setTool(TOOL_KEYS[k]);
+    else if (k === "z") game.builder.undo();
+    else if ((k === "delete" || k === "backspace") && game.builder.tool === "select") game.builder.removeSelected();
     else if (k === "b") menu.toggle();
-    else if (k === "r") BUILDINGS[game.builder.tool] && game.builder.rotate();
+    else if (k === "r") game.builder.tool && game.builder.tool !== "remove" && game.builder.rotate();
     else if (k === "i") toggleInventory();
     else if (k === "f") toggleFullscreen();
     else if (k === "t") toggleTheme();
@@ -543,8 +564,8 @@ function help(el) {
     </dl>
     <h2>The screen</h2>
     <dl>
-      <dt>Top</dt><dd>Back to the menu, the game clock and Pause. Under them, the resource bar shows everything you carry; tap it (or press I) for the inventory with full names.</dd>
-      <dt>Bottom</dt><dd>Build opens every building, sorted into tabs, with what each one does, what it costs and how many you can afford. Next to it are quick slots for the buildings you picked last, then Remove. The small number on a building is how many you can afford.</dd>
+      <dt>Top</dt><dd>Back to the menu, the game clock, Undo and Pause. Under them, the resource bar shows everything you carry; tap it (or press I) for the inventory with full names.</dd>
+      <dt>Bottom</dt><dd>Build opens every building, sorted into tabs, with what each one does, what it costs and how many you can afford. Next to it are quick slots for the buildings you picked last, then Select and Remove. The small number on a building is how many you can afford.</dd>
       <dt>Pause</dt><dd>Resume, light/dark mode, fullscreen, debug info (FPS and the tapped tile), and Save and quit.</dd>
     </dl>
     <h2>Building</h2>
@@ -552,9 +573,13 @@ function help(el) {
       <dt>Place</dt><dd>Pick a building from Build or a quick slot. A bar above the buttons shows its cost, with anything you're short of in red. Touch: tap the map to put the ghost there, then tap the ghost to build it (tap elsewhere to move it). Mouse: the ghost follows the cursor, click to build. The ghost is green where it fits and red where it doesn't. Done (or tapping the building's slot again) puts it away.</dd>
       <dt>Rotate</dt><dd>The rotate button next to Done, or R, turns the next building.</dd>
       <dt>Belt lines</dt><dd>Touch: press and hold, then drag. Mouse: drag with the left button. The belts face the way you drag.</dd>
-      <dt>Remove</dt><dd>Pick Remove. Touch: tap a building to mark it, then tap it again to remove it. Mouse: click a building. You get its full cost back.</dd>
+      <dt>Pick</dt><dd>With a building picked, tap (or click) a building on the map to pick one like it, facing the same way. With a mouse, Q picks the building under the cursor.</dd>
+      <dt>Remove</dt><dd>Pick Remove. Touch: tap a building to mark it, then tap it again to remove it. Mouse: click a building. You get its full cost back. To remove many at once, use Select.</dd>
+      <dt>Select</dt><dd>Pick Select, then drag a box over buildings (touch: press and hold, then drag), or tap one. Everything with a tile in the box is selected, and the bar above the buttons offers Copy, Cut, Rotate and Remove. Remove takes it all down and gives back everything, including what's on the belts. Rotate turns it a quarter where it stands; what the buildings held goes to your inventory.</dd>
+      <dt>Paste</dt><dd>Copy or Cut picks up the selection as one ghost, placed like a building (touch: tap to put it down, then tap the ghost). It's green where each building fits and you can pay for it, red where not; pasting builds the green ones and says what was skipped. Assembler recipes and sorter settings come along, but not what the buildings held. Rotate turns it. It stays picked so you can paste again, and Select's Paste button (or V) brings back what you copied last.</dd>
+      <dt>Undo</dt><dd>The arrow next to Pause (or Z) takes back the last build, removal, cut, paste or rotation, and again for the one before. Undoing a removal builds it again from your inventory.</dd>
       <dt>Moving around</dt><dd>A quick drag always moves the map, even with a tool picked. With a mouse, drag with the right button while laying belts.</dd>
-      <dt>Keys</dt><dd>B build menu, 9 HUB, 1 belt, 2 miner, 3 chest, 4 furnace, 5 inserter, 6 assembler, 7 power pole, 8 coal generator, X remove, R rotate, Q or Esc put the tool away.</dd>
+      <dt>Keys</dt><dd>B build menu, 9 HUB, 1 belt, 2 miner, 3 chest, 4 furnace, 5 inserter, 6 assembler, 7 power pole, 8 coal generator, X remove, C select, V paste, R rotate, Z (or Ctrl+Z) undo, Q pick the building under the cursor, Esc put the tool away. With a selection: Ctrl+C copy, Ctrl+X cut, Delete remove.</dd>
     </dl>
     <h2>Goals</h2>
     <dl>

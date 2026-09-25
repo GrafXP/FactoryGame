@@ -288,6 +288,10 @@ body.playing nav {
   font-size: 0.8rem;
 }
 
+.icon-btn:disabled {
+  opacity: 0.4;
+}
+
 .icon-btn {
   display: grid;
   place-items: center;
@@ -432,7 +436,7 @@ body.playing nav {
   color: var(--muted);
 }
 
-/* Bottom bar: Build, the quick slots, Remove. Big targets for thumbs. */
+/* Bottom bar: Build, the quick slots, Select and Remove. Big targets for thumbs. */
 .buildbar {
   position: absolute;
   left: 50%;
@@ -470,6 +474,15 @@ body.playing nav {
   background: transparent;
   border: 0;
   border-radius: 12px;
+}
+
+/* Long names break onto a second line, hyphenated. */
+.tool > span {
+  max-width: 100%;
+  line-height: 1.1;
+  text-align: center;
+  hyphens: auto;
+  overflow-wrap: anywhere;
 }
 
 .tool[data-action="sheet"] {
@@ -515,9 +528,20 @@ body.playing nav {
   border-color: #d63a3f;
 }
 
+/* Seven buttons have to fit a 360px phone. */
 @media (max-width: 420px) {
+  .buildbar,
+  .buildbar .quick {
+    gap: 2px;
+  }
+
+  .buildbar .quick {
+    padding: 0 2px;
+  }
+
   .tool {
-    width: 54px;
+    width: 48px;
+    font-size: 0.66rem;
   }
 
   .toolinfo > .icon {
@@ -527,8 +551,8 @@ body.playing nav {
 
 @media (max-width: 360px) {
   .tool {
-    width: 50px;
-    font-size: 0.68rem;
+    width: 44px;
+    font-size: 0.62rem;
   }
 }
 
@@ -623,6 +647,40 @@ body.playing nav {
   height: 40px;
   padding: 0;
   border-radius: 10px;
+}
+
+/* With a selection, the tool bar has a second row: Copy, Cut, Rotate, Remove. */
+.toolinfo[data-wrap] {
+  flex-wrap: wrap;
+  row-gap: 6px;
+  padding-left: 12px;
+}
+
+.toolinfo[data-wrap] .ti-main {
+  flex: 1;
+}
+
+.ti-actions {
+  display: flex;
+  flex-basis: 100%;
+  gap: 6px;
+}
+
+.ti-actions button {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 64px;
+  padding: 6px 4px;
+  font-size: 0.75rem;
+  border-radius: 10px;
+}
+
+.ti-actions button.danger {
+  color: #d63a3f;
+  border-color: #d63a3f;
 }
 
 .toolinfo .done {

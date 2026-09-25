@@ -234,25 +234,37 @@ export function createView(container, world, { theme = "dark" } = {}) {
   mineMark.visible = false;
   scene.add(mineMark);
 
-  // Lit tiles: where an underground exit can go while placing one.
-  const MAX_MARKS = 16;
-  const marks = new THREE.InstancedMesh(
-    new THREE.PlaneGeometry(0.86, 0.86).rotateX(-Math.PI / 2),
-    new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.4, depthWrite: false, depthTest: false }),
-    MAX_MARKS,
-  );
-  marks.renderOrder = 2;
-  marks.frustumCulled = false;
-  marks.count = 0;
-  scene.add(marks);
+  // Lit tiles and footprints: where an underground exit can go while placing one,
+  // or the buildings in a selection. The instanced mesh is swapped for a bigger
+  // one when a selection outgrows it.
+  const MARK_INSET = 0.07;
+  const markGeometry = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  const markMaterial = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.4, depthWrite: false, depthTest: false });
+  let marks = null;
+  const ensureMarks = (n) => {
+    if (marks && marks.instanceMatrix.count >= n) return;
+    let cap = 16;
+    while (cap < n) cap *= 2;
+    if (marks) {
+      scene.remove(marks);
+      marks.dispose();
+    }
+    marks = new THREE.InstancedMesh(markGeometry, markMaterial, cap);
+    marks.renderOrder = 2;
+    marks.frustumCulled = false;
+    marks.count = 0;
+    scene.add(marks);
+  };
+  ensureMarks(0);
 
   let highlightKind = "select";
   const paintHighlight = () => {
     const color = highlightKind === "remove" ? COLORS.bad : COLORS.accent;
     selFill.material.color.set(color);
+    selFill.material.opacity = highlightKind === "box" ? 0.12 : 0.3;
     selLine.material.color.set(color);
     mineFill.material.color.set(COLORS.accent);
-    marks.material.color.set(COLORS.accent);
+    markMaterial.color.set(COLORS.accent);
     mineLine.material.color.set(COLORS.accent);
   };
 
@@ -410,15 +422,24 @@ export function createView(container, world, { theme = "dark" } = {}) {
       }
       renderer.render(scene, camera);
     },
-    // Lights up tiles [{ x, y }] (or none, for null).
-    setMarks(tiles) {
-      const list = (tiles || []).slice(0, MAX_MARKS);
+    // Lights up tiles [{ x, y }] or footprints [{ x, y, w, h }] (or none, for null).
+    setMarks(rects) {
+      const list = rects || [];
+      ensureMarks(list.length);
       const m = new THREE.Matrix4();
-      list.forEach((t, i) => marks.setMatrixAt(i, m.makeTranslation(t.x + 0.5, 0.035, t.y + 0.5)));
+      const pos = new THREE.Vector3();
+      const scale = new THREE.Vector3();
+      const q = new THREE.Quaternion();
+      list.forEach(({ x, y, w = 1, h = 1 }, i) => {
+        pos.set(x + w / 2, 0.035, y + h / 2);
+        scale.set(w - 2 * MARK_INSET, 1, h - 2 * MARK_INSET);
+        marks.setMatrixAt(i, m.compose(pos, q, scale));
+      });
       marks.count = list.length;
       marks.instanceMatrix.needsUpdate = true;
     },
-    // Outlines rect { x, y, w, h } in tiles; kind "select" (accent) or "remove" (red).
+    // Outlines rect { x, y, w, h } in tiles; kind "select" (accent), "remove" (red)
+    // or "box" (accent, with a fainter fill, for a selection or a paste).
     setHighlight(rect, kind = "select") {
       selection.visible = !!rect;
       if (!rect) return;

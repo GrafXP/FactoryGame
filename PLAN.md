@@ -231,5 +231,5 @@ milestone done (`createWorld({ milestones: ALL })`).
 
 ## After the MVP
 Planned in [PLAN-2.md](PLAN-2.md): underground belts, splitters and sorters first,
-then copy-paste and blueprints, faster belts, a bigger map, performance, stats,
-fluids and oil, sound and a tutorial.
+then copy and paste, a bigger map, performance, stats, fluids and oil, sound and a
+tutorial, and after those blueprints and faster belts.
