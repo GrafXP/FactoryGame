@@ -7,8 +7,11 @@
 // from what the inventory holds. A craft whose ingredients are gone by the time it
 // starts (the player spent them) is dropped; `dropped` counts those and
 // `lastDropped` says what it was, so the UI can tell the player. Neither is saved.
+// Only recipes the player has unlocked (progress.js) can be crafted; the planning
+// functions take `can(recipe)` saying which those are.
 import { RECIPES, HAND_SPEED } from "./recipes.js";
 import { add, take, give } from "./inventory.js";
+import { recipeUnlocked } from "./progress.js";
 
 export const craftState = () => ({ queue: [], progress: 0, busy: false, dropped: 0, lastDropped: null });
 
@@ -18,7 +21,7 @@ export const handTime = (recipe) => Math.ceil(RECIPES[recipe].time / HAND_SPEED)
 // Plans with a copy of inventory `inv`: get(id, n) uses what's there and crafts
 // the rest, make(recipe, times) crafts outright. Steps come ingredients first.
 // `missing` is what can be neither found nor made ({ id: count }), or null.
-function planner(inv) {
+function planner(inv, can) {
   const have = { ...inv.items };
   const steps = [];
   let missing = null;
@@ -26,7 +29,7 @@ function planner(inv) {
     const use = Math.min(have[id] || 0, n);
     have[id] = (have[id] || 0) - use;
     if (n === use) return;
-    const r = RECIPES[id];
+    const r = can(id) && RECIPES[id];
     if (!r) {
       (missing ||= {})[id] = (missing[id] || 0) + n - use;
       return;
@@ -36,6 +39,10 @@ function planner(inv) {
   };
   const make = (recipe, times) => {
     const r = RECIPES[recipe];
+    if (!can(recipe)) {
+      (missing ||= {})[recipe] = (missing[recipe] || 0) + times * r.n;
+      return;
+    }
     for (const [id, k] of Object.entries(r.in)) get(id, k * times);
     const last = steps.at(-1);
     if (last?.recipe === recipe) last.n += times;
@@ -46,24 +53,24 @@ function planner(inv) {
 }
 
 // How to hand-craft `recipe` `times` times from inventory `inv`: { steps, missing }.
-export function planCraft(inv, recipe, times = 1) {
-  const p = planner(inv);
+export function planCraft(inv, recipe, times = 1, can = () => true) {
+  const p = planner(inv, can);
   p.make(recipe, times);
   return p.result();
 }
 
 // How to get `items` ({ id: count }, e.g. a building's cost) from inventory `inv`,
 // crafting what isn't there: { steps, missing }. No steps if it's all there.
-export function planItems(inv, items) {
-  const p = planner(inv);
+export function planItems(inv, items, can = () => true) {
+  const p = planner(inv, can);
   for (const [id, n] of Object.entries(items)) p.get(id, n);
   return p.result();
 }
 
 // How many times `recipe` could be hand-crafted from inventory `inv`, up to `max`.
-export function craftable(inv, recipe, max = 99) {
+export function craftable(inv, recipe, max = 99, can = () => true) {
   let n = 0;
-  while (n < max && !planCraft(inv, recipe, n + 1).missing) n++;
+  while (n < max && !planCraft(inv, recipe, n + 1, can).missing) n++;
   return n;
 }
 
@@ -80,11 +87,15 @@ function enqueue(world, plan) {
   return plan;
 }
 
+// Which recipes the player can hand-craft in `world`.
+export const canCraft = (world) => (recipe) => recipeUnlocked(world, recipe);
+
 // Queues `recipe` `times` times, with whatever has to be crafted first. Returns the plan.
-export const queueCraft = (world, recipe, times = 1) => enqueue(world, planCraft(world.inventory, recipe, times));
+export const queueCraft = (world, recipe, times = 1) =>
+  enqueue(world, planCraft(world.inventory, recipe, times, canCraft(world)));
 
 // Queues crafting whatever of `items` the inventory lacks. Returns the plan.
-export const queueItems = (world, items) => enqueue(world, planItems(world.inventory, items));
+export const queueItems = (world, items) => enqueue(world, planItems(world.inventory, items, canCraft(world)));
 
 // Calls off queue entry i. A craft under way gives its ingredients back.
 export function cancelCraft(world, i) {

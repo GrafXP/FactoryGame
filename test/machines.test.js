@@ -4,7 +4,7 @@ import { createWorld, step, place, removeAt, takeAll, refundOf, oreLeftUnder, en
 import { BUILDINGS, outputTile } from "../src/sim/buildings.js";
 import { count, total } from "../src/sim/inventory.js";
 import { ORE } from "../src/sim/map.js";
-import { charge } from "./helpers.js";
+import { charge, ALL } from "./helpers.js";
 
 const PERIOD = BUILDINGS.miner.period;
 const CAPACITY = BUILDINGS.chest.capacity;
@@ -30,7 +30,7 @@ const findBlock = (world, ore) => {
 
 // A world with a north-facing miner on iron and a chest at its output.
 const setup = () => {
-  const world = createWorld({ seed: 5, kit: RICH });
+  const world = createWorld({ milestones: ALL, seed: 5, kit: RICH });
   const { x, y } = findBlock(world, ORE.IRON);
   const miner = place(world, "miner", x, y, 0);
   const out = outputTile(miner);
@@ -60,7 +60,7 @@ test("a miner on ore with a chest in front fills the chest over time", () => {
 });
 
 test("a miner not on ore says so and does nothing", () => {
-  const world = createWorld({ seed: 5, kit: RICH });
+  const world = createWorld({ milestones: ALL, seed: 5, kit: RICH });
   const { x, y } = findBlock(world, ORE.NONE);
   const miner = place(world, "miner", x, y, 0);
   const out = outputTile(miner);

@@ -12,6 +12,7 @@ import { assemblerState, assemblerContents, stepAssembler } from "./assembler.js
 import { craftState, stepCraft } from "./crafting.js";
 import { generatorState } from "./generator.js";
 import { stepPower, usePower, usesPower } from "./power.js";
+import { progressState, lockedWhy } from "./progress.js";
 
 export { entityAt };
 
@@ -20,7 +21,9 @@ export const MAP_SIZE = 128;
 export const MINE_TICKS = 30; // hand-mining yields one item every half second
 
 // A new world. `map` skips generating one, for loading a save (see save.js).
-export function createWorld({ seed = 1, size = MAP_SIZE, kit = START_KIT, map } = {}) {
+// `milestones` starts it with that many milestones done (progress.js), e.g. all of
+// them for tests that build anything.
+export function createWorld({ seed = 1, size = MAP_SIZE, kit = START_KIT, map, milestones = 0 } = {}) {
   return {
     tick: 0,
     seed,
@@ -34,6 +37,7 @@ export function createWorld({ seed = 1, size = MAP_SIZE, kit = START_KIT, map } 
     inventory: createInventory(kit), // the player's
     mining: null, // { x, y, item, progress } while the player is hand-mining a tile
     craft: craftState(), // the player's hand-crafting queue (crafting.js)
+    progress: progressState(milestones), // milestones done and deliveries (progress.js)
   };
 }
 
@@ -62,6 +66,7 @@ export function tileAt(world, x, y) {
 // Why a building's footprint doesn't fit at (x, y), or null if it does.
 export function canFit(world, type, x, y, rot) {
   if (!BUILDINGS[type]) return "Unknown building";
+  if (type === "hub" && [...world.entities.values()].some((e) => e.type === "hub")) return "There's already a HUB";
   const { w, h } = footprint(type, rot);
   for (let ty = y; ty < y + h; ty++) {
     for (let tx = x; tx < x + w; tx++) {
@@ -72,9 +77,10 @@ export function canFit(world, type, x, y, rot) {
   return null;
 }
 
-// Why a building can't be placed at (x, y): it doesn't fit or the player can't pay for it.
+// Why a building can't be placed at (x, y): it's locked, it doesn't fit, or the
+// player can't pay for it.
 export function canPlace(world, type, x, y, rot) {
-  const why = canFit(world, type, x, y, rot);
+  const why = lockedWhy(world, type) || canFit(world, type, x, y, rot);
   if (why) return why;
   const short = missing(world.inventory, BUILDINGS[type].cost);
   return short ? `Missing ${describe(short)}` : null;
@@ -90,6 +96,7 @@ export function place(world, type, x, y, rot = 0) {
 // Puts a finished entity into the world without paying for it. Loading a save uses
 // this too; the caller has checked that it fits.
 export function addEntity(world, entity) {
+  if (entity.type === "hub") entity.progress = world.progress; // where deliveries go
   world.entities.set(entity.id, entity);
   fill(world, entity, entity.id);
   world.version++;

@@ -2,6 +2,7 @@ import { createWorld, step, tileAt, TICK_RATE } from "./sim/world.js";
 import { createView } from "./render/view.js";
 import { createControls } from "./render/controls.js";
 import { createBuilder } from "./build.js";
+import { footprint } from "./sim/buildings.js";
 
 const TICK_MS = 1000 / TICK_RATE;
 const MAX_TICKS_PER_FRAME = 10; // after a long stall, drop time instead of freezing to catch up
@@ -77,6 +78,12 @@ export function createGame(
       running = true;
     },
     setTheme: view.setTheme,
+    // Moves the camera to look at building e and shows its panel.
+    focus(e) {
+      const { w, h } = footprint(e.type, e.rot);
+      view.cam.centerOn(e.x + w / 2, e.y + h / 2);
+      builder.inspect(e);
+    },
     dispose() {
       cancelAnimationFrame(raf);
       disposeControls();

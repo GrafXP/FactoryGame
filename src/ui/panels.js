@@ -7,6 +7,8 @@ import { fillFrom, emptySlot, furnaceRoom } from "../sim/furnace.js";
 import { setRecipe, fillAssembler, emptyAssembler, assemblerRoom } from "../sim/assembler.js";
 import { fuelGenerator, emptyGenerator, generatorRoom } from "../sim/generator.js";
 import { powerNetwork, satisfaction } from "../sim/power.js";
+import { MILESTONES, currentMilestone, recipeUnlocked, stillNeeded, deliverFrom, deliverAll } from "../sim/progress.js";
+import { unlocksText } from "./goal.js";
 import { TICK_RATE } from "../sim/world.js";
 import { itemIcon, icon } from "./icons.js";
 import { lower, itemRows } from "./format.js";
@@ -111,11 +113,11 @@ const recipeText = (id) => {
 };
 
 // Buttons that add each of `ids` from the inventory, as much as fits (`room`).
-const addButtons = (ids, inv, room) =>
+const addButtons = (ids, inv, room, verb = "Add") =>
   ids
     .map((id) => [id, Math.min(count(inv, id), room(id))])
     .filter(([, n]) => n > 0)
-    .map(([id, n]) => `<button data-action="fill" data-item="${id}">${itemIcon(id)}Add ${n} ${lower(id, n)}</button>`)
+    .map(([id, n]) => `<button data-action="fill" data-item="${id}">${itemIcon(id)}${verb} ${n} ${lower(id, n)}</button>`)
     .join("");
 
 const heading = (title) => `<h3>${title}<button class="close" data-action="close" aria-label="Close">${icon("close")}</button></h3>`;
@@ -178,6 +180,7 @@ const PANELS = {
     html: (a, world, view) => {
       if (!a.recipe || view.picking) {
         const choices = Object.keys(RECIPES)
+          .filter((id) => recipeUnlocked(world, id))
           .map(
             (id) => `<button class="recipe-pick" data-action="recipe" data-recipe="${id}" aria-pressed="${id === a.recipe}">
               ${itemIcon(id)}<span><b>${ITEMS[id].name}</b><small>${recipeText(id)}</small></span></button>`,
@@ -229,6 +232,38 @@ const PANELS = {
     },
     live: (g, world) => ({ net: networkSummary(powerNetwork(world).netOf.get(g)) }),
   },
+  // The milestone under way: what it needs and what's been delivered, buttons to
+  // deliver from the inventory, what it unlocks, and the milestones in order.
+  hub: {
+    key: (h, world) => `${world.progress.milestone} ${JSON.stringify(world.progress.delivered)} ${world.inventory.version}`,
+    html: (h, world) => {
+      const { milestone, delivered } = world.progress;
+      const m = currentMilestone(world);
+      const list = MILESTONES.map(
+        (x, i) => `<li data-state="${i < milestone ? "done" : i === milestone ? "now" : "later"}">${i < milestone ? "✓" : i + 1}. ${x.name}</li>`,
+      ).join("");
+      if (!m) {
+        return `${heading("HUB")}
+          <p class="status" data-status="working">Every milestone is done: you've automated circuits.</p>
+          <ol class="milestones">${list}</ol>`;
+      }
+      const needs = Object.entries(m.needs)
+        .map(([id, n]) => {
+          const d = delivered[id] || 0;
+          return `<li>${itemIcon(id)}<span>${itemName(id, n)}<span class="bar"><i style="width: ${(d / n) * 100}%"></i></span></span><b>${d} / ${n}</b></li>`;
+        })
+        .join("");
+      const adds = addButtons(Object.keys(m.needs), world.inventory, (id) => stillNeeded(world.progress, id), "Deliver");
+      const unlocks = unlocksText(m);
+      return `${heading("HUB")}
+        <p class="meta">Milestone ${milestone + 1} of ${MILESTONES.length}</p>
+        <p><b>${m.name}</b>: ${m.about}</p>
+        <ul class="items needs">${needs}</ul>
+        ${adds ? `<div class="actions">${adds}</div><button class="wide" data-action="deliver">Deliver all I can</button>` : ""}
+        <p class="meta">${unlocks ? `Unlocks ${unlocks}.` : "The last milestone."} Belts and inserters can deliver here too; it only takes what the milestone still needs.</p>
+        <ol class="milestones">${list}</ol>`;
+    },
+  },
   pole: {
     key: () => "",
     html: () => `${heading("Power pole")}
@@ -276,6 +311,7 @@ export function createEntityPanel(el, { close, changed, toast }) {
     const inv = world.inventory;
     const asm = shown.type === "assembler";
     const gen = shown.type === "generator";
+    const hub = shown.type === "hub";
     let moved = null;
     if (action === "take" && shown.inventory) moved = takeAll(world, shown);
     else if (action === "empty") {
@@ -284,8 +320,16 @@ export function createEntityPanel(el, { close, changed, toast }) {
       else moved = emptySlot(shown, btn.dataset.slot, inv);
     } else if (action === "fill") {
       const item = btn.dataset.item;
-      const n = asm ? fillAssembler(shown, inv, item) : gen ? fuelGenerator(shown, inv, item) : fillFrom(shown, inv, item);
-      if (n) toast(`Added ${describe({ [item]: n })}`);
+      if (hub) {
+        const n = deliverFrom(world.progress, inv, item);
+        if (n) toast(`Delivered ${describe({ [item]: n })}`);
+      } else {
+        const n = asm ? fillAssembler(shown, inv, item) : gen ? fuelGenerator(shown, inv, item) : fillFrom(shown, inv, item);
+        if (n) toast(`Added ${describe({ [item]: n })}`);
+      }
+    } else if (action === "deliver") {
+      const moved = deliverAll(world.progress, inv);
+      if (Object.keys(moved).length) toast(`Delivered ${describe(moved)}`);
     } else if (action === "recipe") {
       view.picking = false;
       if (btn.dataset.recipe !== shown.recipe) {

@@ -9,6 +9,7 @@ import { powerNetwork, polesInReach, satisfaction } from "../src/sim/power.js";
 import { RECIPES, FUEL_ENERGY } from "../src/sim/recipes.js";
 import { add, count } from "../src/sim/inventory.js";
 import { serialize, deserialize } from "../src/sim/save.js";
+import { ALL } from "./helpers.js";
 
 const GEAR = RECIPES["iron-gear"];
 const DRAW = BUILDINGS.assembler.draw;
@@ -17,6 +18,7 @@ const { feed: FEED, stack: STACK } = BUILDINGS.generator;
 
 const setup = () =>
   createWorld({
+    milestones: ALL,
     seed: 3,
     kit: { "iron-plate": 5000, "copper-cable": 1000, "iron-gear": 1000, "electronic-circuit": 1000, stone: 1000, coal: 1000 },
   });

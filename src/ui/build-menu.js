@@ -1,18 +1,20 @@
 import { BUILDINGS } from "../sim/buildings.js";
 import { affordable } from "../sim/inventory.js";
 import { describe } from "../sim/items.js";
-import { planItems } from "../sim/crafting.js";
+import { planItems, canCraft } from "../sim/crafting.js";
+import { buildingUnlocked, buildingMilestone, MILESTONES } from "../sim/progress.js";
 import { CATEGORIES, ABOUT } from "./catalog.js";
 import { icon } from "./icons.js";
 import { costChips } from "./format.js";
 
 // The build controls. It drives the builder (build.js) and follows it through
-// syncTool, and shows costs from the inventory passed to sync.
+// syncTool, and shows costs and what's unlocked from the world passed to sync.
 //  - The bottom bar: Build (opens the sheet), quick slots holding recently picked
 //    buildings, and Remove. A building picked from the sheet that isn't in a slot
 //    takes over the slot used longest ago, so the others stay where they are.
+//    Slots only show unlocked buildings (progress.js); others fill in for the rest.
 //  - The build sheet: a tab per category, a card per building with what it's for,
-//    its cost and how many you can afford.
+//    its cost and how many you can afford, or the milestone that unlocks it.
 //  - The tool bar, just above the bottom bar while a tool is picked: what it is,
 //    its cost, Rotate and Done. When you can't afford the building but could
 //    hand-craft the parts it's missing, a Craft button calls `craft(cost)`.
@@ -37,7 +39,9 @@ const countBadge = (n) => (n > 99 ? "99+" : String(n));
 
 export function createBuildMenu({ bar, info, sheet }, builder, { craft }) {
   let tool = null;
+  let world = null;
   let inv = { items: {} };
+  const unlocked = (t) => !world || buildingUnlocked(world, t);
   let tab = 0;
   const quick = loadQuick();
   // When each quick slot was last picked; the rightmost default goes first.
@@ -70,10 +74,14 @@ export function createBuildMenu({ bar, info, sheet }, builder, { craft }) {
       return `<button class="tool" data-tool="${t}" aria-pressed="${t === tool}" title="${b.name}: ${describe(b.cost)}">
         ${icon(t)}<span>${b.name}</span><b class="badge" data-zero="${!n}">${countBadge(n)}</b></button>`;
     };
+    const shown = quick.filter(unlocked);
+    for (const t of CATEGORIES.flatMap((c) => c.buildings)) {
+      if (shown.length < QUICK_SLOTS && unlocked(t) && !shown.includes(t)) shown.push(t);
+    }
     put(
       bar,
       `<button class="tool" data-action="sheet" aria-expanded="${!sheet.hidden}" title="All buildings (B)">${icon("build")}<span>Build</span></button>
-      <div class="quick">${quick.map(slot).join("")}</div>
+      <div class="quick">${shown.map(slot).join("")}</div>
       <button class="tool danger" data-tool="remove" aria-pressed="${tool === "remove"}" title="Remove (X)">${icon("remove")}<span>Remove</span></button>`,
     );
   };
@@ -89,7 +97,7 @@ export function createBuildMenu({ bar, info, sheet }, builder, { craft }) {
     } else if (tool) {
       const b = BUILDINGS[tool];
       const n = affordable(inv, b.cost);
-      const craftable = !n && !planItems(inv, b.cost).missing;
+      const craftable = !n && !planItems(inv, b.cost, world ? canCraft(world) : undefined).missing;
       put(
         info,
         `${icon(tool)}<div class="ti-main">
@@ -105,6 +113,13 @@ export function createBuildMenu({ bar, info, sheet }, builder, { craft }) {
 
   const card = (t) => {
     const b = BUILDINGS[t];
+    if (!unlocked(t)) {
+      const i = buildingMilestone(t);
+      return `<button class="bcard" data-pick="${t}" data-locked="true">
+        <span class="bcard-top">${icon(t)}<b>${b.name}</b><span class="badge lock">${icon("lock")}</span></span>
+        <span class="bcard-about">Unlocked by milestone ${i + 1} at the HUB: ${MILESTONES[i].name}.</span>
+      </button>`;
+    }
     const n = affordable(inv, b.cost);
     return `<button class="bcard" data-pick="${t}" aria-pressed="${t === tool}">
       <span class="bcard-top">${icon(t)}<b>${b.name}</b><span class="badge" data-zero="${!n}">${countBadge(n)}</span></span>
@@ -136,9 +151,9 @@ export function createBuildMenu({ bar, info, sheet }, builder, { craft }) {
     renderSheet();
   };
 
-  const open = () => {
-    // Start on the picked building's category.
-    const at = CATEGORIES.findIndex((c) => c.buildings.includes(tool));
+  // Opens the sheet on category `id`, or the picked building's.
+  const open = (id) => {
+    const at = CATEGORIES.findIndex((c) => (id ? c.id === id : c.buildings.includes(tool)));
     if (at >= 0) tab = at;
     sheet.hidden = false;
     render();
@@ -171,6 +186,7 @@ export function createBuildMenu({ bar, info, sheet }, builder, { craft }) {
       renderSheet();
     } else if (el.dataset.pick) {
       const pick = el.dataset.pick;
+      if (!unlocked(pick)) return builder.setTool(pick); // says what unlocks it
       close();
       if (builder.tool !== pick) builder.setTool(pick);
     }
@@ -191,9 +207,10 @@ export function createBuildMenu({ bar, info, sheet }, builder, { craft }) {
       if (BUILDINGS[tool]) remember(tool);
       render();
     },
-    // Costs and badges for the player's inventory.
-    sync(inventory) {
-      inv = inventory;
+    // Costs and badges for the player's inventory, and what's unlocked.
+    sync(w) {
+      world = w;
+      inv = w.inventory;
       render();
     },
   };

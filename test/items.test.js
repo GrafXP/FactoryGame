@@ -5,7 +5,7 @@ import { createInventory, count, add, affordable, missing, take, give } from "..
 import { BUILDINGS } from "../src/sim/buildings.js";
 import { START_KIT, describe } from "../src/sim/items.js";
 import { ORE } from "../src/sim/map.js";
-import { charge } from "./helpers.js";
+import { charge, ALL } from "./helpers.js";
 
 const run = (world, ticks) => {
   for (let i = 0; i < ticks; i++) {
@@ -48,13 +48,13 @@ test("describe lists items in words", () => {
 });
 
 test("a new game starts with the kit, and every building is affordable from it", () => {
-  const world = createWorld({ seed: 1 });
+  const world = createWorld({ milestones: ALL, seed: 1 });
   assert.deepEqual(world.inventory.items, START_KIT);
   for (const type in BUILDINGS) assert.ok(affordable(world.inventory, BUILDINGS[type].cost) >= 1, type);
 });
 
 test("placing pays the cost, and removing refunds it", () => {
-  const world = createWorld({ seed: 1 });
+  const world = createWorld({ milestones: ALL, seed: 1 });
   const before = { ...world.inventory.items };
   place(world, "miner", 10, 10, 0);
   for (const id in BUILDINGS.miner.cost) assert.equal(count(world.inventory, id), before[id] - BUILDINGS.miner.cost[id]);
@@ -63,7 +63,7 @@ test("placing pays the cost, and removing refunds it", () => {
 });
 
 test("you can't place what you can't pay for, and are told what's missing", () => {
-  const world = createWorld({ seed: 1, kit: { "iron-plate": 5 } });
+  const world = createWorld({ milestones: ALL, seed: 1, kit: { "iron-plate": 5 } });
   assert.equal(canPlace(world, "miner", 10, 10, 0), "Missing 3 iron gears, 6 stone");
   assert.equal(place(world, "miner", 10, 10, 0), null);
   assert.equal(count(world.inventory, "iron-plate"), 5, "a refused placement costs nothing");
@@ -74,7 +74,7 @@ test("you can't place what you can't pay for, and are told what's missing", () =
 });
 
 test("hand-mining an ore tile yields its item at a steady rate", () => {
-  const world = createWorld({ seed: 5, kit: {} });
+  const world = createWorld({ milestones: ALL, seed: 5, kit: {} });
   const t = findOre(world, ORE.IRON);
   const amount = world.map.amount[t.i];
   assert.equal(startMining(world, t.x, t.y), null);
@@ -97,7 +97,7 @@ test("hand-mining an ore tile yields its item at a steady rate", () => {
 });
 
 test("each ore gives its own item", () => {
-  const world = createWorld({ seed: 5, kit: {} });
+  const world = createWorld({ milestones: ALL, seed: 5, kit: {} });
   for (const [ore, item] of [[ORE.COPPER, "copper-ore"], [ORE.COAL, "coal"], [ORE.STONE, "stone"]]) {
     const t = findOre(world, ore);
     startMining(world, t.x, t.y);
@@ -107,7 +107,7 @@ test("each ore gives its own item", () => {
 });
 
 test("only bare ore tiles can be mined", () => {
-  const world = createWorld({ seed: 5 });
+  const world = createWorld({ milestones: ALL, seed: 5 });
   const empty = world.map.ore.findIndex((o) => o === ORE.NONE);
   assert.equal(startMining(world, empty % world.size, Math.floor(empty / world.size)), "Nothing to mine here");
   assert.equal(startMining(world, -1, 0), "Off the map");
@@ -118,7 +118,7 @@ test("only bare ore tiles can be mined", () => {
 });
 
 test("a tile mined empty turns to ground and mining stops", () => {
-  const world = createWorld({ seed: 5, kit: {} });
+  const world = createWorld({ milestones: ALL, seed: 5, kit: {} });
   const t = findOre(world, ORE.STONE);
   world.map.amount[t.i] = 2;
   const v = world.mapVersion;

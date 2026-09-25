@@ -9,13 +9,13 @@ import { SMELTING, FUEL } from "../src/sim/recipes.js";
 import { count, total } from "../src/sim/inventory.js";
 import { ORE } from "../src/sim/map.js";
 import { serialize, deserialize } from "../src/sim/save.js";
-import { charge } from "./helpers.js";
+import { charge, ALL } from "./helpers.js";
 
 const { stack: STACK, feed: FEED } = BUILDINGS.furnace;
 const PLATE_TICKS = SMELTING["iron-ore"].time;
 
 const setup = () =>
-  createWorld({ seed: 3, kit: { "iron-plate": 1000, "copper-plate": 1000, "iron-gear": 1000, "electronic-circuit": 1000, stone: 1000, coal: 100, "iron-ore": 100 } });
+  createWorld({ milestones: ALL, seed: 3, kit: { "iron-plate": 1000, "copper-plate": 1000, "iron-gear": 1000, "electronic-circuit": 1000, stone: 1000, coal: 100, "iron-ore": 100 } });
 const run = (world, ticks, each) => {
   for (let i = 0; i < ticks; i++) {
     each?.(i);

@@ -4,7 +4,8 @@
 // Only real state is saved. Anything worked out from it is rebuilt on load: the tile
 // grid, the belt and power networks, the version counters the view watches. Hand-mining isn't
 // saved either, since it only lasts while a finger is down. The hand-crafting queue
-// is, since a craft under way has taken its ingredients.
+// is, since a craft under way has taken its ingredients, and so is progress
+// towards the HUB's milestones.
 //
 // SAVE_VERSION goes up whenever the format changes. Add a step to MIGRATIONS that
 // turns a save of the old version into the next one, so old saves keep loading.
@@ -15,9 +16,10 @@ import { BELT_LEN } from "./transport.js";
 import { SMELTING, FUEL, FUEL_ENERGY, RECIPES } from "./recipes.js";
 import { SWING } from "./inserter.js";
 import { usesPower } from "./power.js";
+import { MILESTONES } from "./progress.js";
 
 export const SAVE_FORMAT = "factory-save";
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 
 // What a save from before power gets, so its stopped machines can be started
 // again: the parts for a coal generator and ten poles, and coal to burn.
@@ -49,6 +51,10 @@ export const MIGRATIONS = {
     const entities = data.entities.map((e) => (usesPower(e.type) ? { ...e, energy: 0 } : e));
     return { ...data, inventory, entities };
   },
+  // 5 added the HUB and its milestones, which lock buildings until they're reached.
+  // A save from before was built without them, so it gets everything unlocked and
+  // only the last milestone, the goal, still to do.
+  4: (data) => ({ ...data, progress: { milestone: MILESTONES.length - 1, delivered: {} } }),
 };
 
 // A save that can't be loaded. The message is written for the player.
@@ -71,6 +77,7 @@ export function serialize(world) {
       progress: world.craft.progress,
       busy: world.craft.busy,
     },
+    progress: { milestone: world.progress.milestone, delivered: { ...world.progress.delivered } },
     // In the order they were built: the sim steps them in that order, so keeping it
     // makes a loaded world carry on exactly as the saved one would have.
     entities: [...world.entities.values()].map(saveEntity),
@@ -130,7 +137,7 @@ function migrate(data, migrations, current) {
 }
 
 function load(data) {
-  const { seed, size, tick, nextId, map, inventory, entities, craft } = data;
+  const { seed, size, tick, nextId, map, inventory, entities, craft, progress } = data;
   check(Number.isInteger(size) && size > 0, "bad map size");
   check(Number.isInteger(tick) && tick >= 0, "bad clock");
   check(map?.ore instanceof Uint8Array && map.ore.length === size * size, "bad ore map");
@@ -145,6 +152,7 @@ function load(data) {
   });
   world.tick = tick;
   Object.assign(world.craft, checkCraft(craft));
+  Object.assign(world.progress, checkProgress(progress)); // before the HUB is added, which refers to it
 
   let maxId = 0;
   for (const s of entities) {
@@ -241,6 +249,17 @@ function checkAssembler(s, where) {
     crafting: s.crafting,
     status: String(s.status),
   };
+}
+
+// Milestones done, and what's been delivered to the next: only what it needs, and
+// never all of it (that would have finished it).
+function checkProgress(p) {
+  check(Number.isInteger(p?.milestone) && p.milestone >= 0 && p.milestone <= MILESTONES.length, "bad milestone");
+  const delivered = checkItems(p.delivered, "milestone");
+  const needs = MILESTONES[p.milestone]?.needs || {};
+  const done = Object.keys(needs).every((id) => (delivered[id] || 0) >= needs[id]);
+  check(Object.entries(delivered).every(([id, n]) => n <= (needs[id] || 0)) && (!done || !Object.keys(needs).length), "bad deliveries");
+  return { milestone: p.milestone, delivered };
 }
 
 // The hand-crafting queue: known recipes, whole counts.

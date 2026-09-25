@@ -1,6 +1,7 @@
 // Shared test helpers. (Node's runner loads every file under test/, so this one
 // runs too, with no tests in it.)
 import { BUILDINGS } from "../src/sim/buildings.js";
+import { MILESTONES } from "../src/sim/progress.js";
 
 // Fills every machine's store of energy, as if it were on a network with power to
 // spare. Tests about what machines do call it before every tick, so they don't
@@ -8,3 +9,6 @@ import { BUILDINGS } from "../src/sim/buildings.js";
 export function charge(world) {
   for (const e of world.entities.values()) if (BUILDINGS[e.type].draw) e.energy = 2 * BUILDINGS[e.type].draw;
 }
+
+// Milestones done for a world where anything can be built: createWorld({ milestones: ALL }).
+export const ALL = MILESTONES.length;

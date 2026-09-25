@@ -7,7 +7,7 @@ import { count, affordable, createInventory } from "../src/sim/inventory.js";
 import { queueCraft, queueItems, cancelCraft, planItems, craftable, handTime } from "../src/sim/crafting.js";
 import { RECIPES } from "../src/sim/recipes.js";
 import { serialize, deserialize } from "../src/sim/save.js";
-import { charge } from "./helpers.js";
+import { charge, ALL } from "./helpers.js";
 
 const run = (world, ticks) => {
   for (let i = 0; i < ticks; i++) {
@@ -20,7 +20,7 @@ const CABLE = handTime("copper-cable");
 const CIRCUIT = handTime("electronic-circuit");
 
 test("hand-crafting a gear takes two plates and makes a gear", () => {
-  const world = createWorld({ seed: 1, kit: { "iron-plate": 5 } });
+  const world = createWorld({ milestones: ALL, seed: 1, kit: { "iron-plate": 5 } });
   assert.equal(queueCraft(world, "iron-gear", 2).missing, null);
   run(world, 1);
   assert.equal(count(world.inventory, "iron-plate"), 3, "the first craft takes its plates when it starts");
@@ -34,14 +34,14 @@ test("hand-crafting a gear takes two plates and makes a gear", () => {
 });
 
 test("crafting what you can't make says what's missing and queues nothing", () => {
-  const world = createWorld({ seed: 1, kit: { "iron-plate": 3 } });
+  const world = createWorld({ milestones: ALL, seed: 1, kit: { "iron-plate": 3 } });
   assert.deepEqual(queueCraft(world, "iron-gear", 2).missing, { "iron-plate": 1 });
   assert.deepEqual(queueCraft(world, "electronic-circuit").missing, { "copper-plate": 2 });
   assert.deepEqual(world.craft.queue, []);
 });
 
 test("a circuit from plates crafts its cables first, and the spare cable is kept", () => {
-  const world = createWorld({ seed: 1, kit: { "iron-plate": 1, "copper-plate": 2 } });
+  const world = createWorld({ milestones: ALL, seed: 1, kit: { "iron-plate": 1, "copper-plate": 2 } });
   const plan = queueCraft(world, "electronic-circuit");
   assert.deepEqual(plan.steps, [
     { recipe: "copper-cable", n: 2 },
@@ -58,7 +58,7 @@ test("what you already have is used before crafting more", () => {
 });
 
 test("cancelling the craft under way gives its ingredients back", () => {
-  const world = createWorld({ seed: 1, kit: { "iron-plate": 4 } });
+  const world = createWorld({ milestones: ALL, seed: 1, kit: { "iron-plate": 4 } });
   queueCraft(world, "iron-gear", 2);
   run(world, 5);
   assert.equal(count(world.inventory, "iron-plate"), 2);
@@ -70,7 +70,7 @@ test("cancelling the craft under way gives its ingredients back", () => {
 });
 
 test("a craft whose ingredients were spent is dropped", () => {
-  const world = createWorld({ seed: 1, kit: { "iron-plate": 2 } });
+  const world = createWorld({ milestones: ALL, seed: 1, kit: { "iron-plate": 2 } });
   queueCraft(world, "iron-gear");
   world.inventory.items = {}; // spent before the craft could start
   run(world, 1);
@@ -80,7 +80,7 @@ test("a craft whose ingredients were spent is dropped", () => {
 });
 
 test("queueing a building's missing parts crafts just those", () => {
-  const world = createWorld({ seed: 1, kit: { "iron-plate": 20, stone: 6 } });
+  const world = createWorld({ milestones: ALL, seed: 1, kit: { "iron-plate": 20, stone: 6 } });
   assert.equal(affordable(world.inventory, BUILDINGS.miner.cost), 0);
   queueItems(world, BUILDINGS.miner.cost);
   assert.deepEqual(world.craft.queue, [{ recipe: "iron-gear", n: 3 }]);
@@ -95,7 +95,7 @@ test("every building can be had from the start kit, crafting parts by hand", () 
 });
 
 test("the crafting queue is saved, including a craft under way", () => {
-  const world = createWorld({ seed: 1, kit: { "iron-plate": 10, "copper-plate": 4 } });
+  const world = createWorld({ milestones: ALL, seed: 1, kit: { "iron-plate": 10, "copper-plate": 4 } });
   queueCraft(world, "electronic-circuit");
   queueCraft(world, "iron-gear", 2);
   run(world, CABLE + 3);

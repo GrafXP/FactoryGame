@@ -7,13 +7,14 @@ import { setRecipe, fillAssembler, emptyAssembler } from "../src/sim/assembler.j
 import { RECIPES } from "../src/sim/recipes.js";
 import { add, count, total } from "../src/sim/inventory.js";
 import { serialize, deserialize } from "../src/sim/save.js";
-import { charge } from "./helpers.js";
+import { charge, ALL } from "./helpers.js";
 
 const STACK = BUILDINGS.assembler.stack;
 const GEAR = RECIPES["iron-gear"];
 
 const setup = () =>
   createWorld({
+    milestones: ALL,
     seed: 3,
     kit: { "iron-plate": 1000, "copper-plate": 1000, "iron-gear": 1000, "electronic-circuit": 1000, stone: 1000 },
   });

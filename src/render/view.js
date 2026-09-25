@@ -44,6 +44,9 @@ const PALETTES = {
     pole: 0x9a7650,
     poleTop: 0xd9d4c7,
     wire: 0xe0a060,
+    hub: 0x5a6f86,
+    hubBase: 0x363d4a,
+    hubTrim: 0xf2c94c,
     powerArea: 0x6cb4ff,
     items: {
       "iron-plate": 0xc8d4e3,
@@ -85,6 +88,9 @@ const PALETTES = {
     pole: 0x7a5a38,
     poleTop: 0xf2eee4,
     wire: 0x7a3f12,
+    hub: 0x7b95b0,
+    hubBase: 0x4a5260,
+    hubTrim: 0xe0a800,
     powerArea: 0x1f6fd1,
     items: {
       "iron-plate": 0x7d8ea3,
@@ -330,6 +336,10 @@ export function createView(container, world, { theme = "dark" } = {}) {
   // Camera moves used by the input controls. The centre stays on the map, so you can't lose it.
   const cam = {
     groundAt,
+    // Moves the camera to look at ground point (x, y).
+    centerOn(x, y) {
+      cam.panBy(x - center.x, y - center.z);
+    },
     panBy(dx, dy) {
       center.x = THREE.MathUtils.clamp(center.x + dx, 0, size);
       center.z = THREE.MathUtils.clamp(center.z + dy, 0, size);

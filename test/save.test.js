@@ -5,7 +5,7 @@ import { outputTile } from "../src/sim/buildings.js";
 import { count, total } from "../src/sim/inventory.js";
 import { ORE } from "../src/sim/map.js";
 import { serialize, deserialize, SaveError, SAVE_VERSION } from "../src/sim/save.js";
-import { charge } from "./helpers.js";
+import { charge, ALL } from "./helpers.js";
 
 const run = (world, ticks) => {
   for (let i = 0; i < ticks; i++) {
@@ -30,7 +30,7 @@ const findBlock = (world, ore) => {
 // A running factory: an east-facing miner on iron feeding a belt that turns a corner
 // into a chest, with a second belt merging in from the side.
 const factory = () => {
-  const world = createWorld({ seed: 5, kit: { "iron-plate": 1000, "copper-plate": 100, "iron-gear": 1000, "electronic-circuit": 1000, stone: 100 } });
+  const world = createWorld({ milestones: ALL, seed: 5, kit: { "iron-plate": 1000, "copper-plate": 100, "iron-gear": 1000, "electronic-circuit": 1000, stone: 100 } });
   const { x, y } = findBlock(world, ORE.IRON);
   const miner = place(world, "miner", x, y, 1);
   const out = outputTile(miner);
@@ -42,7 +42,7 @@ const factory = () => {
 };
 
 test("a fresh world survives a save and load unchanged", () => {
-  const world = createWorld({ seed: 9 });
+  const world = createWorld({ milestones: ALL, seed: 9 });
   const loaded = roundTrip(world);
   assert.deepEqual(serialize(loaded), serialize(world));
   assert.equal(loaded.seed, 9);
@@ -84,19 +84,19 @@ test("loading rebuilds the tile grid and keeps buildings, contents and mined ore
 });
 
 test("hand-mining isn't saved", () => {
-  const world = createWorld({ seed: 5 });
+  const world = createWorld({ milestones: ALL, seed: 5 });
   const { x, y } = findBlock(world, ORE.IRON);
   assert.equal(startMining(world, x, y), null);
   assert.equal(roundTrip(world).mining, null);
 });
 
 test("a save from a newer version fails with a clear message", () => {
-  const data = { ...serialize(createWorld({ seed: 2 })), version: SAVE_VERSION + 1 };
+  const data = { ...serialize(createWorld({ milestones: ALL, seed: 2 })), version: SAVE_VERSION + 1 };
   assert.throws(() => deserialize(data), (err) => err instanceof SaveError && /newer version/.test(err.message));
 });
 
 test("an older save is migrated step by step", () => {
-  const data = serialize(createWorld({ seed: 2 }));
+  const data = serialize(createWorld({ milestones: ALL, seed: 2 }));
   // Pretend the format is now 3: 1 → 2 renamed the inventory, 2 → 3 added some stone.
   const old = { ...data, version: 1, bag: data.inventory, inventory: undefined };
   const migrations = {
@@ -104,20 +104,21 @@ test("an older save is migrated step by step", () => {
     2: (d) => ({ ...d, inventory: { ...d.inventory, stone: (d.inventory.stone || 0) + 5 } }),
   };
   const world = deserialize(old, { migrations, version: 3 });
-  assert.equal(count(world.inventory, "stone"), count(createWorld({ seed: 2 }).inventory, "stone") + 5);
+  assert.equal(count(world.inventory, "stone"), count(createWorld({ milestones: ALL, seed: 2 }).inventory, "stone") + 5);
 });
 
 test("a version 1 save (before furnaces) still loads", () => {
   const { world } = factory();
   run(world, 300);
   const v1 = { ...serialize(world), version: 1 };
-  // Loading it as it was, apart from what came with power (see power.test.js).
-  const withoutPower = ({ inventory, entities, ...rest }) => ({ ...rest, entities: entities.map(({ energy, ...e }) => e) });
-  assert.deepEqual(withoutPower(serialize(deserialize(structuredClone(v1)))), withoutPower(serialize(world)));
+  // Loading it as it was, apart from what came with power and milestones (see
+  // power.test.js and progress.test.js).
+  const withoutLater = ({ inventory, progress, entities, ...rest }) => ({ ...rest, entities: entities.map(({ energy, ...e }) => e) });
+  assert.deepEqual(withoutLater(serialize(deserialize(structuredClone(v1)))), withoutLater(serialize(world)));
 });
 
 test("an older save with no way to migrate it fails with a clear message", () => {
-  const data = serialize(createWorld({ seed: 2 }));
+  const data = serialize(createWorld({ milestones: ALL, seed: 2 }));
   assert.throws(
     () => deserialize(data, { migrations: {}, version: SAVE_VERSION + 1 }),
     (err) => err instanceof SaveError && /old version/.test(err.message),

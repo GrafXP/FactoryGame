@@ -2,9 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createWorld, place, removeAt, canPlace, entityAt, tileAt } from "../src/sim/world.js";
 import { beltLine } from "../src/sim/buildings.js";
+import { ALL } from "./helpers.js";
 
 test("placing a building fills its footprint and keeps its facing", () => {
-  const world = createWorld({ seed: 1 });
+  const world = createWorld({ milestones: ALL, seed: 1 });
   const miner = place(world, "miner", 10, 10, 1);
   assert.ok(miner);
   assert.equal(miner.rot, 1);
@@ -14,7 +15,7 @@ test("placing a building fills its footprint and keeps its facing", () => {
 });
 
 test("buildings can't overlap or leave the map", () => {
-  const world = createWorld({ seed: 1 });
+  const world = createWorld({ milestones: ALL, seed: 1 });
   place(world, "miner", 10, 10, 0);
   assert.equal(canPlace(world, "belt", 11, 11, 0), "Something is in the way");
   assert.equal(place(world, "miner", 11, 9, 0), null);
@@ -24,7 +25,7 @@ test("buildings can't overlap or leave the map", () => {
 });
 
 test("removing frees every tile of the building", () => {
-  const world = createWorld({ seed: 1 });
+  const world = createWorld({ milestones: ALL, seed: 1 });
   const miner = place(world, "miner", 10, 10, 0);
   const v = world.version;
   assert.equal(removeAt(world, 11, 11), miner);

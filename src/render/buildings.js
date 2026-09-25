@@ -87,6 +87,17 @@ function makeParts() {
       { geometry: new THREE.CylinderGeometry(0.13, 0.16, 0.9, 8).translate(-1.05, 1.45, -0.45), color: "generatorBase" },
       { geometry: box(0.6, 0.4, 0.06, -0.85, 0.35, 0.86), color: "furnaceMouth" },
     ],
+    // A platform with a hall, a mast with a beacon on the back corner, and the
+    // terminal where deliveries go on the front.
+    hub: [
+      { geometry: box(3.9, 0.15, 3.9, 0, 0.075, 0), color: "hubBase" },
+      { geometry: box(2.7, 1.1, 2.3, -0.35, 0.7, -0.45), color: "hub" },
+      { geometry: box(2.9, 0.12, 2.5, -0.35, 1.31, -0.45), color: "hubTrim" },
+      { geometry: new THREE.CylinderGeometry(0.12, 0.16, 2.6, 8).translate(1.35, 1.3, -1.35), color: "hubBase" },
+      { geometry: box(0.34, 0.3, 0.34, 1.35, 2.7, -1.35), color: "hubTrim" },
+      { geometry: box(0.9, 0.85, 0.4, 0.9, 0.57, 1.3), color: "hub" },
+      { geometry: box(0.7, 0.35, 0.06, 0.9, 0.75, 1.52), color: "hubTrim" },
+    ],
     // A post with a crossbar; wires run from the middle of the crossbar
     // (POLE_TOP, render/wires.js).
     pole: [

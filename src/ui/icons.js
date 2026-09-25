@@ -72,6 +72,8 @@ const PATHS = {
   inserter: "M7 20h10M12 20v-5M12 15l-5-6M7 9l5-4M10 4l3 2",
   assembler: "M3 8h18v12H3zM12 11.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 1 0 0-5M12 9.5v2M12 16.5v2M8 8V4h8v4",
   generator: "M3 9h18v11H3zM6 9V4h3v5M13.5 11l-3 4.5h3.5l-3 3",
+  hub: "M3 20h18M5 20V10h10v10M15 20v-6h4v6M18 14V4M16 4h4M8 13h4",
+  lock: "M6 11h12v9H6zM9 11V8a3 3 0 0 1 6 0v3",
   pole: "M12 21V4M6 6h12M7 6v2M17 6v2M9 21h6",
   remove: "M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13",
   rotate: "M19 12a7 7 0 1 1-2-4.9M19 4v4h-4",

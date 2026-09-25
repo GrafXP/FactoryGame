@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createWorld, step, tileAt } from "../src/sim/world.js";
 import { ORE } from "../src/sim/map.js";
 import { parseSeed } from "../src/sim/rng.js";
+import { ALL } from "./helpers.js";
 
 test("step advances the tick", () => {
   const world = createWorld();
@@ -11,21 +12,21 @@ test("step advances the tick", () => {
 });
 
 test("the same seed gives the same map", () => {
-  const a = createWorld({ seed: 42 });
-  const b = createWorld({ seed: 42 });
+  const a = createWorld({ milestones: ALL, seed: 42 });
+  const b = createWorld({ milestones: ALL, seed: 42 });
   assert.deepEqual(a.map.ore, b.map.ore);
   assert.deepEqual(a.map.amount, b.map.amount);
 });
 
 test("different seeds give different maps", () => {
-  const a = createWorld({ seed: 42 });
-  const b = createWorld({ seed: 43 });
+  const a = createWorld({ milestones: ALL, seed: 42 });
+  const b = createWorld({ milestones: ALL, seed: 43 });
   assert.notDeepEqual(a.map.ore, b.map.ore);
 });
 
 test("every ore has a patch near the centre, for many seeds", () => {
   for (let seed = 0; seed < 50; seed++) {
-    const world = createWorld({ seed });
+    const world = createWorld({ milestones: ALL, seed });
     const mid = world.size / 2;
     const found = new Set();
     for (let y = mid - 22; y < mid + 22; y++) {
@@ -38,7 +39,7 @@ test("every ore has a patch near the centre, for many seeds", () => {
 });
 
 test("ore tiles hold resources and empty tiles don't", () => {
-  const { map } = createWorld({ seed: 7 });
+  const { map } = createWorld({ milestones: ALL, seed: 7 });
   for (let i = 0; i < map.ore.length; i++) {
     if (map.ore[i]) assert.ok(map.amount[i] > 0);
     else assert.equal(map.amount[i], 0);
@@ -46,7 +47,7 @@ test("ore tiles hold resources and empty tiles don't", () => {
 });
 
 test("tileAt reports the resource and rejects tiles off the map", () => {
-  const world = createWorld({ seed: 3 });
+  const world = createWorld({ milestones: ALL, seed: 3 });
   assert.equal(tileAt(world, -1, 0), null);
   assert.equal(tileAt(world, 0, world.size), null);
   assert.equal(tileAt(world, 1.5, 2), null);

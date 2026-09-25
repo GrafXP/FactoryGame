@@ -259,7 +259,8 @@ body.playing nav {
 }
 
 .hud > *,
-.top > .resources {
+.top > .resources,
+.top > .goal {
   pointer-events: auto;
 }
 
@@ -416,7 +417,7 @@ body.playing nav {
 .debug {
   position: absolute;
   left: calc(12px + env(safe-area-inset-left, 0px));
-  top: calc(104px + env(safe-area-inset-top, 0px));
+  top: calc(146px + env(safe-area-inset-top, 0px));
   padding: 6px 10px;
   font: 0.8rem/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-variant-numeric: tabular-nums;
@@ -753,7 +754,7 @@ body.playing nav {
    resource bar, leaving room above the bottom bar for a readout or the tool bar. */
 .side {
   position: absolute;
-  top: calc(104px + env(safe-area-inset-top, 0px));
+  top: calc(146px + env(safe-area-inset-top, 0px));
   right: calc(12px + env(safe-area-inset-right, 0px));
   display: flex;
   flex-direction: column;
@@ -1135,4 +1136,133 @@ button.big.secondary {
 .segmented button[aria-pressed="true"] {
   background: var(--accent);
   color: var(--on-accent);
+}
+
+/* The goal card under the resource bar: what the HUB's milestone needs, or what to do first. */
+.goal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 3px 12px 3px 8px;
+  overflow: hidden;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+}
+
+.goal .icon {
+  width: 20px;
+  height: 20px;
+  color: var(--accent);
+}
+
+.goal > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+
+.goal .chips {
+  flex-wrap: nowrap;
+}
+
+.goal .chip,
+.panel .needs b {
+  font-variant-numeric: tabular-nums;
+}
+
+.chip[data-done="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* A milestone reached: what it unlocked and what's next, until OK. */
+.banner {
+  position: absolute;
+  top: calc(146px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  z-index: 5;
+  transform: translateX(-50%);
+  width: min(420px, calc(100% - 24px));
+  padding: 16px;
+  text-align: center;
+  background: var(--panel);
+  border: 2px solid var(--accent);
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgb(0 0 0 / 35%);
+  animation: banner-in 0.35s ease-out;
+}
+
+.banner h2 {
+  margin: 0 0 8px;
+  color: var(--accent);
+}
+
+.banner p {
+  margin: 6px 0;
+}
+
+.banner .meta {
+  color: var(--muted);
+}
+
+.banner .big {
+  margin-top: 10px;
+}
+
+@keyframes banner-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -16px);
+  }
+}
+
+/* The HUB panel: each item the milestone needs, with a bar, then the milestones in order. */
+.panel .needs li > span {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.milestones {
+  margin: 10px 0 0;
+  padding-left: 0;
+  font-size: 0.85rem;
+  list-style: none;
+}
+
+.milestones li {
+  padding: 2px 0;
+  color: var(--muted);
+}
+
+.milestones li[data-state="done"] {
+  color: var(--accent);
+}
+
+.milestones li[data-state="now"] {
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* A building that a milestone hasn't unlocked yet. */
+.bcard[data-locked="true"] {
+  opacity: 0.6;
+}
+
+.badge.lock {
+  display: grid;
+  place-items: center;
+  padding: 1px 3px;
+}
+
+.badge.lock .icon {
+  width: 12px;
+  height: 12px;
 }

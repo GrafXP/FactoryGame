@@ -3,6 +3,7 @@ import { canFit, place, removeAt, refundOf, entityAt, tileAt, startMining, stopM
 import { affordable, missing } from "./sim/inventory.js";
 import { describe } from "./sim/items.js";
 import { usesPower } from "./sim/power.js";
+import { lockedWhy } from "./sim/progress.js";
 
 // Buildings that show which ground the poles power while you place them or look at them.
 const onPower = (type) => type === "pole" || type === "generator" || usesPower(type);
@@ -100,8 +101,10 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
     get tool() {
       return tool;
     },
-    // Picking the active tool again puts it away.
+    // Picking the active tool again puts it away. A locked building can't be picked.
     setTool(next) {
+      const locked = BUILDINGS[next] && lockedWhy(world, next);
+      if (locked) return onMessage?.(locked);
       tool = next === tool ? null : next;
       paint = null;
       pending = null;
@@ -109,6 +112,13 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
       inspected = null;
       onInspect?.(null);
       changed();
+    },
+    // Puts the tools away and shows building e's panel, as if it had been tapped.
+    inspect(e) {
+      if (tool !== null) this.setTool(null);
+      inspected = tileAt(world, e.x, e.y);
+      onInspect?.(inspected);
+      refresh();
     },
     // Drops the inspected tile, e.g. when its panel is closed.
     closeInspect() {

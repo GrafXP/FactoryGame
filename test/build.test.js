@@ -2,10 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createWorld, entityAt } from "../src/sim/world.js";
 import { createBuilder } from "../src/build.js";
+import { ALL } from "./helpers.js";
 
 // A builder wired to a fake view that records the ghosts it's asked to draw.
 const setup = () => {
-  const world = createWorld({ seed: 1 });
+  const world = createWorld({ milestones: ALL, seed: 1 });
   const out = { ghosts: [], messages: [], power: null };
   const view = { setGhosts: (g) => (out.ghosts = g), setHighlight() {}, setPowerOverlay: (p) => (out.power = p) };
   const builder = createBuilder(world, view, { onMessage: (m) => out.messages.push(m) });

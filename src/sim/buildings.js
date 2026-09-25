@@ -43,6 +43,8 @@ export const BUILDINGS = {
     stack: 50,
     feed: 5,
   },
+  // Where milestones are delivered (see progress.js). There's only ever one.
+  hub: { name: "HUB", w: 4, h: 4, cost: { "iron-plate": 10, stone: 10 } },
   pole: { name: "Power pole", w: 1, h: 1, cost: { "iron-plate": 1, "copper-cable": 2 }, reach: 7, area: 3 },
 };
 

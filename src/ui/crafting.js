@@ -1,6 +1,6 @@
 import { ITEMS, describe } from "../sim/items.js";
 import { RECIPES } from "../sim/recipes.js";
-import { queueCraft, cancelCraft, craftable, handTime } from "../sim/crafting.js";
+import { queueCraft, cancelCraft, craftable, handTime, canCraft } from "../sim/crafting.js";
 import { TICK_RATE } from "../sim/world.js";
 import { itemIcon, icon } from "./icons.js";
 import { lower } from "./format.js";
@@ -36,8 +36,9 @@ export function createCrafting(section, readout, { toast, showReadout = () => tr
       )
       .join("");
     const recipes = Object.entries(RECIPES)
+      .filter(([id]) => canCraft(world)(id))
       .map(([id, r]) => {
-        const can = craftable(inv, id);
+        const can = craftable(inv, id, 99, canCraft(world));
         const makes = r.n > 1 ? `${r.n} from ` : "";
         return `<li class="recipe">${itemIcon(id)}
           <span><b>${ITEMS[id].name}</b><small>${makes}${describe(r.in)} · ${seconds(handTime(id))}${can ? "" : " · can't make one yet"}</small></span>
@@ -64,7 +65,7 @@ export function createCrafting(section, readout, { toast, showReadout = () => tr
   const sync = (w) => {
     world = w;
     const c = world.craft;
-    const key = `${world.inventory.version} ${c.busy} ${JSON.stringify(c.queue)}`;
+    const key = `${world.inventory.version} ${c.busy} ${JSON.stringify(c.queue)} ${world.progress.milestone}`;
     if (key !== shownKey) {
       shownKey = key;
       render();

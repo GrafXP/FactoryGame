@@ -208,9 +208,23 @@ aren't about power keep stores full with `test/helpers.js`'s `charge`.
 - [ ] Poles show their range while you place them, and wires connect automatically.
 - [ ] When demand is higher than supply, everything slows evenly and the power panel shows why.
 
-### Phase 10: Progression (MVP complete)
+### Phase 10: Progression (MVP complete) ✅ (done)
 A Satisfactory-style HUB: deliver batches of items to reach milestones that unlock
 buildings and recipes. There's a starting goal and a "you've automated circuits" end state.
+`sim/progress.js` has START (HUB, furnace, chest; gear and cable recipes) and
+MILESTONES, done one at a time in order: 1. Power and mining (20 iron plates, 10
+bricks → miner, belt, generator, pole), 2. Logistics (100 iron plates, 50 copper
+plates, 20 gears → inserter, hand-crafting circuits), 3. Assembly (20 circuits, 50
+gears, 30 bricks → assembler) and 4. Circuit production (150 circuits), the goal.
+`canPlace` refuses locked buildings and hand-crafting locked recipes; every building
+and recipe is unlocked by exactly one (tested). The HUB (4×4, one at most) takes what
+the milestone still needs from belts and inserters, or from its panel; progress is the
+world's (`world.progress`), so moving the HUB loses nothing. The goal card under the
+resource bar says what to do (build the HUB, then each delivery), and tapping it goes
+to the HUB. A banner shows what a milestone unlocked and what's next. Locked
+buildings have a padlock under Build and quick slots skip them. Save format 5: older
+saves get every building and only the goal left. Tests build in worlds with every
+milestone done (`createWorld({ milestones: ALL })`).
 - [ ] A new game only has basic buildings, and the first milestone is obvious.
 - [ ] Delivering the required items unlocks the next buildings, with a clear notification.
 - [ ] A new player can get from an empty map to automated circuits without reading the code.

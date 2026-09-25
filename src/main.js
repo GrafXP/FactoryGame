@@ -15,6 +15,7 @@ import { createBuildMenu } from "./ui/build-menu.js";
 import { createResources } from "./ui/resources.js";
 import { createEntityPanel } from "./ui/panels.js";
 import { createCrafting } from "./ui/crafting.js";
+import { createGoal, milestoneBanner } from "./ui/goal.js";
 import { queueItems } from "./sim/crafting.js";
 import { RECIPES } from "./sim/recipes.js";
 import { describe } from "./sim/items.js";
@@ -234,9 +235,10 @@ const DEBUG_KEY = "factory:debug";
 
 // The game page itself, playing a loaded `world` or a new one from `seed`.
 //
-// Top: Back, the clock and Pause, and under them the resource bar (tap it for the
-// inventory). Bottom: the build controls (ui/build-menu.js), with toasts and
-// readouts stacked above them. Right: panels for the tapped building and the
+// Top: Back, the clock and Pause, under them the resource bar (tap it for the
+// inventory), and under that the goal card (ui/goal.js; tap it for the HUB). A
+// banner drops in when a milestone is reached. Bottom: the build controls
+// (ui/build-menu.js), with toasts and readouts stacked above them. Right: panels for the tapped building and the
 // inventory. Pause holds the settings: theme, fullscreen, debug info.
 function playWorld(el, { world, seed, isNew = false }) {
   const $ = html(
@@ -249,7 +251,9 @@ function playWorld(el, { world, seed, isNew = false }) {
           <button class="icon-btn" id="pause" aria-label="Pause (P)">${icon("pause")}</button>
         </div>
         <div class="resources" id="resources" role="button" tabindex="0" aria-label="Inventory (I)" aria-expanded="false"></div>
+        <div class="goal" id="goal" role="button" tabindex="0"></div>
       </div>
+      <div class="banner" id="banner" hidden><div id="banner-text"></div><button class="big" data-action="ok">OK</button></div>
       <div class="buildbar" id="buildbar"></div>
       <div class="side">
         <div class="panel" id="entity" hidden></div>
@@ -320,9 +324,30 @@ function playWorld(el, { world, seed, isNew = false }) {
   // Everything that shows the player's inventory, redrawn when it changes.
   const resources = createResources($("#resources"), $("#inventory"));
   let menu = null;
+  // The goal card and, when a milestone is reached, the banner.
+  const goal = createGoal($("#goal"), {
+    open: (hub) => {
+      if (hub) game.focus(hub);
+      else menu.open("base");
+    },
+  });
+  let reached = world?.progress.milestone ?? 0;
+  const banner = $("#banner");
+  banner.addEventListener("click", (e) => e.target.closest("[data-action=ok]") && (banner.hidden = true));
+  const syncProgress = (world) => {
+    goal.sync(world);
+    if (world.progress.milestone === reached) return;
+    if (world.progress.milestone > reached) {
+      $("#banner-text").innerHTML = milestoneBanner(world.progress.milestone - 1);
+      banner.hidden = false;
+    }
+    reached = world.progress.milestone;
+  };
+
   const syncInventory = (world) => {
     resources.sync(world.inventory);
-    menu?.sync(world.inventory);
+    menu?.sync(world);
+    syncProgress(world);
   };
   const invPanel = $("#inventory");
   const toggleInventory = () => {
@@ -529,7 +554,12 @@ function help(el) {
       <dt>Belt lines</dt><dd>Touch: press and hold, then drag. Mouse: drag with the left button. The belts face the way you drag.</dd>
       <dt>Remove</dt><dd>Pick Remove. Touch: tap a building to mark it, then tap it again to remove it. Mouse: click a building. You get its full cost back.</dd>
       <dt>Moving around</dt><dd>A quick drag always moves the map, even with a tool picked. With a mouse, drag with the right button while laying belts.</dd>
-      <dt>Keys</dt><dd>B build menu, 1 belt, 2 miner, 3 chest, 4 furnace, 5 inserter, 6 assembler, 7 power pole, 8 coal generator, X remove, R rotate, Q or Esc put the tool away.</dd>
+      <dt>Keys</dt><dd>B build menu, 9 HUB, 1 belt, 2 miner, 3 chest, 4 furnace, 5 inserter, 6 assembler, 7 power pole, 8 coal generator, X remove, R rotate, Q or Esc put the tool away.</dd>
+    </dl>
+    <h2>Goals</h2>
+    <dl>
+      <dt>The HUB</dt><dd>A new game can only build the HUB, furnaces and chests. Build the HUB first (Build → Base); the goal card under the resource bar says what to do next, and tapping it takes you to the HUB. There's only one, and taking it down loses no progress.</dd>
+      <dt>Milestones</dt><dd>Each milestone asks for a batch of items delivered to the HUB: tap the HUB and deliver from your inventory, or run a belt or inserter into it (it only takes what the milestone still needs). Reaching one unlocks new buildings and recipes: 1. Power and mining (miners, belts, generators, poles), 2. Logistics (inserters, hand-crafting circuits), 3. Assembly (assemblers), and 4. Circuit production, the goal: 150 circuits, best made by a line of assemblers. Locked buildings show a padlock under Build, with the milestone that unlocks them.</dd>
     </dl>
     <h2>Items</h2>
     <dl>
