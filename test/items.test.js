@@ -5,9 +5,13 @@ import { createInventory, count, add, affordable, missing, take, give } from "..
 import { BUILDINGS } from "../src/sim/buildings.js";
 import { START_KIT, describe } from "../src/sim/items.js";
 import { ORE } from "../src/sim/map.js";
+import { charge } from "./helpers.js";
 
 const run = (world, ticks) => {
-  for (let i = 0; i < ticks; i++) step(world);
+  for (let i = 0; i < ticks; i++) {
+    charge(world);
+    step(world);
+  }
 };
 
 // First tile holding `ore`, as { x, y, i }.

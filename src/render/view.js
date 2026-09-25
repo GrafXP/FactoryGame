@@ -9,6 +9,7 @@ import { createItemLayer } from "./items.js";
 import { drawBeltItems, beltItemCount } from "./belt-items.js";
 import { createMachineParts } from "./machines.js";
 import { createRecipeIcons } from "./recipe-icons.js";
+import { createPowerLayer } from "./power.js";
 
 // Ore colours are picked so the four ores differ in hue *and* lightness in both
 // themes: iron blue, copper orange, coal black, stone pale sand. Ore items are drawn
@@ -36,6 +37,14 @@ const PALETTES = {
     assembler: 0x5f7a96,
     assemblerBase: 0x363d4a,
     assemblerCog: 0xf2c94c,
+    generator: 0x6f6a64,
+    generatorBase: 0x363d4a,
+    generatorTop: 0xa9b4c2,
+    generatorWheel: 0xf2c94c,
+    pole: 0x9a7650,
+    poleTop: 0xd9d4c7,
+    wire: 0xe0a060,
+    powerArea: 0x6cb4ff,
     items: {
       "iron-plate": 0xc8d4e3,
       "copper-plate": 0xf5a36c,
@@ -69,6 +78,14 @@ const PALETTES = {
     assembler: 0x7b95b0,
     assemblerBase: 0x4a5260,
     assemblerCog: 0xe0a800,
+    generator: 0x8c867e,
+    generatorBase: 0x4a5260,
+    generatorTop: 0x9aa6b5,
+    generatorWheel: 0xe0a800,
+    pole: 0x7a5a38,
+    poleTop: 0xf2eee4,
+    wire: 0x7a3f12,
+    powerArea: 0x1f6fd1,
     items: {
       "iron-plate": 0x7d8ea3,
       "copper-plate": 0xd9793a,
@@ -161,6 +178,7 @@ export function createView(container, world, { theme = "dark" } = {}) {
   const items = createItemLayer(scene);
   const machines = createMachineParts(scene);
   const recipeIcons = createRecipeIcons(scene);
+  const power = createPowerLayer(scene, size);
   const ghosts = createBuildingLayer(scene, { ghost: true });
   let drawnVersion = -1;
 
@@ -257,6 +275,7 @@ export function createView(container, world, { theme = "dark" } = {}) {
     buildings.setTheme(COLORS);
     ghosts.setTheme(COLORS);
     machines.setTheme(COLORS);
+    power.setTheme(COLORS);
     const itemColors = { ...COLORS.items };
     for (const ore in ORE_ITEM) itemColors[ORE_ITEM[ore]] = COLORS.ore[ore];
     items.setTheme(itemColors);
@@ -346,7 +365,8 @@ export function createView(container, world, { theme = "dark" } = {}) {
       machines.update(world, items);
       items.end();
       if (drawnOre !== world.mapVersion) paintOre();
-      statusIcons.update(world.entities.values());
+      power.update(world);
+      statusIcons.update(world);
       recipeIcons.update(world.entities.values());
       const m = world.mining;
       mineMark.visible = !!m;
@@ -365,6 +385,11 @@ export function createView(container, world, { theme = "dark" } = {}) {
       highlightKind = kind;
       paintHighlight();
     },
+    // Shows the ground poles power, and the area and wires of a pole about to be
+    // built at tile `pole` if given; null hides them.
+    setPowerOverlay(overlay) {
+      power.set(overlay);
+    },
     // Ghost previews: [{ type, x, y, rot, ok }], green where ok, red where not.
     setGhosts(list) {
       ghosts.set(list);
@@ -380,6 +405,7 @@ export function createView(container, world, { theme = "dark" } = {}) {
       items.dispose();
       machines.dispose();
       recipeIcons.dispose();
+      power.dispose();
       scene.traverse((obj) => {
         obj.geometry?.dispose();
         obj.material?.dispose();

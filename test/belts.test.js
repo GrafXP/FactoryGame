@@ -6,6 +6,7 @@ import { beltNetwork, canTake, put, BELT_LEN, BELT_SPEED, ITEM_GAP } from "../sr
 import { count, total } from "../src/sim/inventory.js";
 import { ORE } from "../src/sim/map.js";
 import { TICK_RATE } from "../src/sim/world.js";
+import { charge } from "./helpers.js";
 
 const TILE_TICKS = BELT_LEN / BELT_SPEED; // ticks for an item to cross one tile
 const MAX_RATE = (TICK_RATE * BELT_SPEED) / ITEM_GAP; // items/s a belt carries at most
@@ -15,6 +16,7 @@ const setup = () => createWorld({ seed: 3, kit: { "iron-plate": 5000, "copper-pl
 const run = (world, ticks, each) => {
   for (let i = 0; i < ticks; i++) {
     each?.();
+    charge(world);
     step(world);
   }
 };

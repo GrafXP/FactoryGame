@@ -4,13 +4,17 @@ import { createWorld, step, place, removeAt, takeAll, refundOf, oreLeftUnder, en
 import { BUILDINGS, outputTile } from "../src/sim/buildings.js";
 import { count, total } from "../src/sim/inventory.js";
 import { ORE } from "../src/sim/map.js";
+import { charge } from "./helpers.js";
 
 const PERIOD = BUILDINGS.miner.period;
 const CAPACITY = BUILDINGS.chest.capacity;
 const RICH = { "iron-plate": 1000, "copper-plate": 1000, "iron-gear": 1000, "electronic-circuit": 1000, stone: 1000 };
 
 const run = (world, ticks) => {
-  for (let i = 0; i < ticks; i++) step(world);
+  for (let i = 0; i < ticks; i++) {
+    charge(world);
+    step(world);
+  }
 };
 
 // Top-left of a 2×2 block that's all `ore`, with plain room around it.

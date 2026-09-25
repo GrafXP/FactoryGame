@@ -6,8 +6,8 @@ import { createBuilder } from "../src/build.js";
 // A builder wired to a fake view that records the ghosts it's asked to draw.
 const setup = () => {
   const world = createWorld({ seed: 1 });
-  const out = { ghosts: [], messages: [] };
-  const view = { setGhosts: (g) => (out.ghosts = g), setHighlight() {} };
+  const out = { ghosts: [], messages: [], power: null };
+  const view = { setGhosts: (g) => (out.ghosts = g), setHighlight() {}, setPowerOverlay: (p) => (out.power = p) };
   const builder = createBuilder(world, view, { onMessage: (m) => out.messages.push(m) });
   return { world, builder, out };
 };
@@ -105,4 +105,15 @@ test("touch: the first tap marks a building, a second tap on it removes it", () 
   assert.equal(out.messages.at(-1), "Nothing to remove here");
   builder.tap(at(10, 10), "touch");
   assert.ok(entityAt(world, 10, 10), "marked again, not removed");
+});
+
+test("placing something electric shows where the poles reach, and a new pole's own area", () => {
+  const { builder, out } = setup();
+  builder.setTool("pole");
+  builder.point(at(20, 12));
+  assert.deepEqual(out.power, { pole: { x: 20, y: 12 } });
+  builder.setTool("assembler");
+  assert.deepEqual(out.power, { pole: null });
+  builder.setTool("chest");
+  assert.equal(out.power, null, "a chest doesn't need power");
 });

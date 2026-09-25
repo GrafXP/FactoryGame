@@ -7,9 +7,15 @@
 // top them up to `feed` (see furnace.js). An inserter takes `swing` ticks to swing
 // across, and as long to swing back. An assembler's slots hold up to `stack` of
 // each ingredient; machines fill them to two crafts' worth (see assembler.js).
+//
+// Power (see power.js) is in joules per tick; 60 J/tick is 1 kW. Machines with a
+// `draw` run on electricity and use that much for each tick they work. A generator
+// makes up to `power` from the fuel in its slot, which fills like a furnace's. A
+// pole joins every pole within `reach` tiles and powers buildings within `area`
+// tiles of it.
 export const BUILDINGS = {
   belt: { name: "Belt", w: 1, h: 1, cost: { "iron-plate": 1 } },
-  miner: { name: "Miner", w: 2, h: 2, cost: { "iron-gear": 3, "iron-plate": 3, stone: 6 }, period: 60 },
+  miner: { name: "Miner", w: 2, h: 2, cost: { "iron-gear": 3, "iron-plate": 3, stone: 6 }, period: 60, draw: 1500 },
   chest: { name: "Chest", w: 1, h: 1, cost: { "iron-plate": 4 }, capacity: 50 },
   furnace: { name: "Furnace", w: 2, h: 2, cost: { stone: 10 }, stack: 50, feed: 5 },
   inserter: {
@@ -18,6 +24,7 @@ export const BUILDINGS = {
     h: 1,
     cost: { "iron-plate": 1, "iron-gear": 1, "electronic-circuit": 1 },
     swing: 24,
+    draw: 250,
   },
   assembler: {
     name: "Assembler",
@@ -25,8 +32,22 @@ export const BUILDINGS = {
     h: 3,
     cost: { "iron-plate": 9, "iron-gear": 5, "electronic-circuit": 3 },
     stack: 50,
+    draw: 1250,
   },
+  generator: {
+    name: "Coal generator",
+    w: 3,
+    h: 2,
+    cost: { "iron-plate": 8, "iron-gear": 4, stone: 10 },
+    power: 10000,
+    stack: 50,
+    feed: 5,
+  },
+  pole: { name: "Power pole", w: 1, h: 1, cost: { "iron-plate": 1, "copper-cable": 2 }, reach: 7, area: 3 },
 };
+
+// Power in J/tick → kW, for showing.
+export const kW = (perTick) => Math.round((perTick * 60) / 1000);
 
 // Rotation r faces DIRS[r]: 0 north (-y), 1 east, 2 south, 3 west.
 export const DIRS = [

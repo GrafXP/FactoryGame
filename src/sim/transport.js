@@ -11,6 +11,7 @@ import { ITEMS } from "./items.js";
 import { add, count, take, total } from "./inventory.js";
 import { furnaceCanTake, furnaceAdd, furnaceTakeOne } from "./furnace.js";
 import { assemblerCanTake, assemblerAdd, assemblerTakeOne } from "./assembler.js";
+import { generatorCanTake, generatorAdd } from "./generator.js";
 
 export const BELT_LEN = 32;
 export const BELT_SPEED = 1;
@@ -18,16 +19,18 @@ export const ITEM_GAP = 8;
 const MID = BELT_LEN / 2;
 
 // Whether building e ever takes items from a neighbour.
-export const takesItems = (e) => e.type === "belt" || e.type === "furnace" || e.type === "assembler" || !!e.inventory;
+export const takesItems = (e) =>
+  e.type === "belt" || e.type === "furnace" || e.type === "assembler" || e.type === "generator" || !!e.inventory;
 
 // Whether building e can take `item` right now. Belts take items onto their middle
 // (where a miner's chute drops them); chests store them until they're full;
-// furnaces take ore and fuel into their slots (see furnace.js), and assemblers
-// their recipe's ingredients (assembler.js).
+// furnaces take ore and fuel into their slots (see furnace.js), assemblers their
+// recipe's ingredients (assembler.js) and generators fuel (generator.js).
 export function canTake(e, item) {
   if (e.type === "belt") return roomAt(e, MID);
   if (e.type === "furnace") return furnaceCanTake(e, item);
   if (e.type === "assembler") return assemblerCanTake(e, item);
+  if (e.type === "generator") return generatorCanTake(e, item);
   return !!e.inventory && total(e.inventory) < BUILDINGS[e.type].capacity;
 }
 
@@ -36,12 +39,13 @@ export function put(e, item) {
   if (e.type === "belt") insertAt(e, item, MID);
   else if (e.type === "furnace") furnaceAdd(e, item);
   else if (e.type === "assembler") assemblerAdd(e, item);
+  else if (e.type === "generator") generatorAdd(e, item);
   else add(e.inventory, item);
 }
 
 // Takes one item that `accepts(item)` says yes to out of building e, for an inserter,
 // and returns it (or null). Belts give up their frontmost such item, chests any,
-// furnaces and assemblers only what they've made.
+// furnaces and assemblers only what they've made, generators nothing.
 export function takeOne(e, accepts) {
   if (e.type === "belt") {
     const i = e.items.findIndex((it) => accepts(it.item));

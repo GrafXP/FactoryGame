@@ -5,9 +5,13 @@ import { outputTile } from "../src/sim/buildings.js";
 import { count, total } from "../src/sim/inventory.js";
 import { ORE } from "../src/sim/map.js";
 import { serialize, deserialize, SaveError, SAVE_VERSION } from "../src/sim/save.js";
+import { charge } from "./helpers.js";
 
 const run = (world, ticks) => {
-  for (let i = 0; i < ticks; i++) step(world);
+  for (let i = 0; i < ticks; i++) {
+    charge(world);
+    step(world);
+  }
 };
 // What IndexedDB does to a save: a structured clone.
 const roundTrip = (world) => deserialize(structuredClone(serialize(world)));
@@ -107,7 +111,9 @@ test("a version 1 save (before furnaces) still loads", () => {
   const { world } = factory();
   run(world, 300);
   const v1 = { ...serialize(world), version: 1 };
-  assert.deepEqual(serialize(deserialize(structuredClone(v1))), serialize(world));
+  // Loading it as it was, apart from what came with power (see power.test.js).
+  const withoutPower = ({ inventory, entities, ...rest }) => ({ ...rest, entities: entities.map(({ energy, ...e }) => e) });
+  assert.deepEqual(withoutPower(serialize(deserialize(structuredClone(v1)))), withoutPower(serialize(world)));
 });
 
 test("an older save with no way to migrate it fails with a clear message", () => {

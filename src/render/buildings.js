@@ -77,6 +77,24 @@ function makeParts() {
       { geometry: box(1.7, 0.08, 1.7, 0, 1.24, 0), color: "assemblerBase" },
       { geometry: new THREE.CylinderGeometry(0.12, 0.12, 0.3, 8).translate(0, 1.35, 0), color: "assemblerBase" },
     ],
+    // A firebox with a chimney at the west end and a boiler drum at the east; the
+    // flywheel on the drum's end spins and the firebox glows while it works
+    // (render/machines.js).
+    generator: [
+      { geometry: box(2.9, 0.15, 1.9, 0, 0.075, 0), color: "generatorBase" },
+      { geometry: box(1.1, 1.0, 1.7, -0.85, 0.55, 0), color: "generator" },
+      { geometry: new THREE.CylinderGeometry(0.5, 0.5, 1.5, 14).rotateZ(Math.PI / 2).translate(0.55, 0.65, 0), color: "generatorTop" },
+      { geometry: new THREE.CylinderGeometry(0.13, 0.16, 0.9, 8).translate(-1.05, 1.45, -0.45), color: "generatorBase" },
+      { geometry: box(0.6, 0.4, 0.06, -0.85, 0.35, 0.86), color: "furnaceMouth" },
+    ],
+    // A post with a crossbar; wires run from the middle of the crossbar
+    // (POLE_TOP, render/wires.js).
+    pole: [
+      { geometry: new THREE.CylinderGeometry(0.05, 0.07, 1.6, 6).translate(0, 0.8, 0), color: "pole" },
+      { geometry: box(0.62, 0.06, 0.07, 0, 1.5, 0), color: "pole" },
+      { geometry: box(0.08, 0.1, 0.08, -0.25, 1.58, 0), color: "poleTop" },
+      { geometry: box(0.08, 0.1, 0.08, 0.25, 1.58, 0), color: "poleTop" },
+    ],
     // The base and the pivot; the arm swings in render/machines.js. The arrow on the
     // base points the way items go.
     inserter: [

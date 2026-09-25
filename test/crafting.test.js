@@ -7,9 +7,13 @@ import { count, affordable, createInventory } from "../src/sim/inventory.js";
 import { queueCraft, queueItems, cancelCraft, planItems, craftable, handTime } from "../src/sim/crafting.js";
 import { RECIPES } from "../src/sim/recipes.js";
 import { serialize, deserialize } from "../src/sim/save.js";
+import { charge } from "./helpers.js";
 
 const run = (world, ticks) => {
-  for (let i = 0; i < ticks; i++) step(world);
+  for (let i = 0; i < ticks; i++) {
+    charge(world);
+    step(world);
+  }
 };
 const GEAR = handTime("iron-gear");
 const CABLE = handTime("copper-cable");

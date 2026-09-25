@@ -24,16 +24,18 @@ export const ORE_ITEM = {
   [ORE.STONE]: "stone",
 };
 
-// What a new game starts with: enough for a couple of miners, a furnace fed by
-// inserters, a chest and some belts, plus coal to light the furnace. Anything more
-// (an assembler, say) means hand-crafting gears and circuits from the plates.
+// What a new game starts with: enough for a couple of miners, a coal generator and
+// a few poles to power them, a furnace fed by inserters, a chest and some belts,
+// plus coal for the furnace and the generator. Anything more (an assembler, say)
+// means hand-crafting gears and circuits from the plates.
 export const START_KIT = {
-  "iron-plate": 40,
+  "iron-plate": 50,
   "copper-plate": 10,
-  "iron-gear": 10,
+  "copper-cable": 10,
+  "iron-gear": 14,
   "electronic-circuit": 4,
-  stone: 30,
-  coal: 10,
+  stone: 40,
+  coal: 20,
 };
 
 // { "iron-plate": 8, stone: 6 } → "8 iron plates, 6 stone"

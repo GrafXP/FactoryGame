@@ -1,7 +1,35 @@
 import * as THREE from "three";
 import { footprint } from "../sim/buildings.js";
+import { powerNetwork, satisfaction, usesPower } from "../sim/power.js";
 
-// Icons floating over machines that are stopped, so a glance shows what needs help.
+const LOW_POWER = 0.95; // a working machine on a network doing worse than this shows it
+
+// A lightning bolt on the 64-pixel icon grid.
+function bolt(g, color) {
+  g.fillStyle = color;
+  g.beginPath();
+  g.moveTo(36, 10);
+  g.lineTo(20, 35);
+  g.lineTo(31, 35);
+  g.lineTo(27, 54);
+  g.lineTo(44, 28);
+  g.lineTo(33, 28);
+  g.closePath();
+  g.fill();
+}
+
+function crossOut(g) {
+  g.strokeStyle = "#e0282e";
+  g.lineWidth = 6;
+  g.beginPath();
+  g.arc(32, 32, 24, 0, Math.PI * 2);
+  g.moveTo(15, 15);
+  g.lineTo(49, 49);
+  g.stroke();
+}
+
+// Icons floating over machines that are stopped or slowed, so a glance shows what
+// needs help.
 // Drawn once onto small canvases; sprites always face the camera.
 const ICONS = {
   // No ore left under a miner: a rock, crossed out.
@@ -15,13 +43,7 @@ const ICONS = {
     g.lineTo(44, 44);
     g.closePath();
     g.fill();
-    g.strokeStyle = "#e0282e";
-    g.lineWidth = 6;
-    g.beginPath();
-    g.arc(32, 32, 24, 0, Math.PI * 2);
-    g.moveTo(15, 15);
-    g.lineTo(49, 49);
-    g.stroke();
+    crossOut(g);
   },
   // Output blocked (nothing to take the items, or it's full): an amber no-entry sign.
   blocked: (g) => {
@@ -40,6 +62,18 @@ const ICONS = {
     g.textBaseline = "middle";
     g.fillText("?", 32, 35);
   },
+  // A machine without power: a lightning bolt, crossed out.
+  "no-power": (g) => {
+    bolt(g, "#ffd23f");
+    crossOut(g);
+  },
+  // A machine slowed by a network short of power: an amber bolt.
+  "low-power": (g) => bolt(g, "#f2a900"),
+  // A generator with no pole near it: a grey bolt, crossed out.
+  unconnected: (g) => {
+    bolt(g, "#8a8f99");
+    crossOut(g);
+  },
   // A furnace with nothing to burn: a flame, crossed out.
   "no-fuel": (g) => {
     g.fillStyle = "#ff8a1f";
@@ -51,13 +85,7 @@ const ICONS = {
     g.bezierCurveTo(29, 28, 30, 30, 33, 31);
     g.bezierCurveTo(34, 24, 33, 18, 32, 12);
     g.fill();
-    g.strokeStyle = "#e0282e";
-    g.lineWidth = 6;
-    g.beginPath();
-    g.arc(32, 32, 24, 0, Math.PI * 2);
-    g.moveTo(15, 15);
-    g.lineTo(49, 49);
-    g.stroke();
+    crossOut(g);
   },
 };
 // Which icon each machine status shows. Statuses not listed (e.g. "working", or an
@@ -68,7 +96,17 @@ const ICON_FOR = {
   full: "blocked",
   "no-fuel": "no-fuel",
   "no-recipe": "no-recipe",
+  "no-power": "no-power",
+  unconnected: "unconnected",
 };
+
+// The icon over entity e, if it needs one.
+function iconOf(e, world) {
+  const icon = ICON_FOR[e.status];
+  if (icon || e.status !== "working" || !usesPower(e.type)) return icon;
+  const net = powerNetwork(world).netOf.get(e);
+  return net && satisfaction(net) < LOW_POWER ? "low-power" : undefined;
+}
 
 function iconTexture(draw) {
   const canvas = document.createElement("canvas");
@@ -94,10 +132,10 @@ export function createStatusIcons(parent) {
 
   return {
     // Shows an icon over every entity whose status needs one.
-    update(entities) {
+    update(world) {
       let n = 0;
-      for (const e of entities) {
-        const icon = ICON_FOR[e.status];
+      for (const e of world.entities.values()) {
+        const icon = iconOf(e, world);
         if (!icon) continue;
         let sprite = pool[n];
         if (!sprite) {

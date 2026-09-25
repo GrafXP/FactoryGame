@@ -2,6 +2,10 @@ import { BUILDINGS, footprint, beltLine } from "./sim/buildings.js";
 import { canFit, place, removeAt, refundOf, entityAt, tileAt, startMining, stopMining } from "./sim/world.js";
 import { affordable, missing } from "./sim/inventory.js";
 import { describe } from "./sim/items.js";
+import { usesPower } from "./sim/power.js";
+
+// Buildings that show which ground the poles power while you place them or look at them.
+const onPower = (type) => type === "pole" || type === "generator" || usesPower(type);
 
 // Build mode: the current tool and facing, the ghost preview, and turning taps and
 // drags into sim calls. Tools are a building type, "remove", or null (inspect).
@@ -74,6 +78,11 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
     } else {
       view.setHighlight(null);
     }
+    // Where power reaches, while placing something electric (with a new pole's
+    // area and wires) or looking at it.
+    const looking = tool === null && inspected && entityAt(world, inspected.x, inspected.y);
+    if (onPower(tool)) view.setPowerOverlay({ pole: tool === "pole" && list[0] ? { x: list[0].x, y: list[0].y } : null });
+    else view.setPowerOverlay(looking && onPower(looking.type) ? { pole: null } : null);
   };
 
   const changed = () => {

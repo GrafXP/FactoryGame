@@ -7,6 +7,7 @@ import { setRecipe, fillAssembler, emptyAssembler } from "../src/sim/assembler.j
 import { RECIPES } from "../src/sim/recipes.js";
 import { add, count, total } from "../src/sim/inventory.js";
 import { serialize, deserialize } from "../src/sim/save.js";
+import { charge } from "./helpers.js";
 
 const STACK = BUILDINGS.assembler.stack;
 const GEAR = RECIPES["iron-gear"];
@@ -17,7 +18,10 @@ const setup = () =>
     kit: { "iron-plate": 1000, "copper-plate": 1000, "iron-gear": 1000, "electronic-circuit": 1000, stone: 1000 },
   });
 const run = (world, ticks) => {
-  for (let i = 0; i < ticks; i++) step(world);
+  for (let i = 0; i < ticks; i++) {
+    charge(world);
+    step(world);
+  }
 };
 // Finds a clear square of bare ground, n tiles across, so tests don't hit ore.
 const clearArea = (world, n) => {

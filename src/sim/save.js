@@ -2,7 +2,7 @@
 // typed arrays, which IndexedDB stores as they are (see ../storage.js).
 //
 // Only real state is saved. Anything worked out from it is rebuilt on load: the tile
-// grid, the belt network, the version counters the view watches. Hand-mining isn't
+// grid, the belt and power networks, the version counters the view watches. Hand-mining isn't
 // saved either, since it only lasts while a finger is down. The hand-crafting queue
 // is, since a craft under way has taken its ingredients.
 //
@@ -12,11 +12,24 @@ import { createWorld, addEntity, canFit, initialState } from "./world.js";
 import { BUILDINGS } from "./buildings.js";
 import { ITEMS } from "./items.js";
 import { BELT_LEN } from "./transport.js";
-import { SMELTING, FUEL, RECIPES } from "./recipes.js";
+import { SMELTING, FUEL, FUEL_ENERGY, RECIPES } from "./recipes.js";
 import { SWING } from "./inserter.js";
+import { usesPower } from "./power.js";
 
 export const SAVE_FORMAT = "factory-save";
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
+
+// What a save from before power gets, so its stopped machines can be started
+// again: the parts for a coal generator and ten poles, and coal to burn.
+const POWER_GIFT = (() => {
+  const gift = { coal: 20 };
+  const add = (cost, times) => {
+    for (const [id, n] of Object.entries(cost)) gift[id] = (gift[id] || 0) + n * times;
+  };
+  add(BUILDINGS.generator.cost, 1);
+  add(BUILDINGS.pole.cost, 10);
+  return gift;
+})();
 
 // version → function turning a save of that version into one of version + 1.
 export const MIGRATIONS = {
@@ -27,6 +40,15 @@ export const MIGRATIONS = {
   // 3 added assemblers, gears, cables and circuits, and the hand-crafting queue;
   // miners and inserters now cost gears (and refund today's price).
   2: (data) => ({ ...data, craft: { queue: [], progress: 0, busy: false } }),
+  // 4 added power: miners, inserters and assemblers store energy, and there are
+  // generators and poles. The machines start with none, so they stop until the
+  // player builds power; the inventory gets the parts for it (POWER_GIFT).
+  3: (data) => {
+    const inventory = { ...data.inventory };
+    for (const [id, n] of Object.entries(POWER_GIFT)) inventory[id] = (inventory[id] || 0) + n;
+    const entities = data.entities.map((e) => (usesPower(e.type) ? { ...e, energy: 0 } : e));
+    return { ...data, inventory, entities };
+  },
 };
 
 // A save that can't be loaded. The message is written for the player.
@@ -70,6 +92,8 @@ function saveEntity(e) {
     Object.assign(out, { recipe: e.recipe, inputs: { ...e.inputs }, output: e.output && { item: e.output.item, n: e.output.n } });
     Object.assign(out, { progress: e.progress, crafting: e.crafting, status: e.status });
   }
+  if (e.type === "generator") Object.assign(out, { fuel: e.fuel && { item: e.fuel.item, n: e.fuel.n }, burn: e.burn, status: e.status });
+  if (usesPower(e.type)) out.energy = e.energy;
   return out;
 }
 
@@ -144,6 +168,12 @@ function load(data) {
       check(Number.isInteger(s.swing) && s.swing >= 0 && s.swing <= SWING, `${where}: bad swing`);
       Object.assign(e, { hand: s.hand, swing: s.swing, status: String(s.status) });
     }
+    if (s.type === "generator") Object.assign(e, checkGenerator(s, where));
+    if (usesPower(s.type)) {
+      const draw = BUILDINGS[s.type].draw;
+      check(Number.isInteger(s.energy) && s.energy >= 0 && s.energy <= 2 * draw, `${where}: bad energy`);
+      e.energy = s.energy;
+    }
     addEntity(world, e);
     maxId = Math.max(maxId, s.id);
   }
@@ -183,6 +213,14 @@ function checkFurnace(s, where) {
   check(Number.isInteger(s.progress) && s.progress >= 0, `${where}: bad progress`);
   check(Number.isInteger(s.burn) && s.burn >= 0, `${where}: bad fuel`);
   return { ...out, smelting: s.smelting, progress: s.progress, burn: s.burn, status: String(s.status) };
+}
+
+// A generator's fuel is a fuel, and what's left burning a whole number of joules.
+function checkGenerator(s, where) {
+  const f = s.fuel;
+  check(f === null || (Object.hasOwn(FUEL_ENERGY, f?.item) && Number.isInteger(f.n) && f.n > 0), `${where}: bad fuel`);
+  check(Number.isInteger(s.burn) && s.burn >= 0, `${where}: bad fuel`);
+  return { fuel: f && { item: f.item, n: f.n }, burn: s.burn, status: String(s.status) };
 }
 
 // An assembler's recipe is known (or null), and it holds only that recipe's items.

@@ -2,12 +2,14 @@
 //
 // `inputs` holds the ingredients it has been given ({ item: count }), `output`
 // what it has made ({ item, n } or null). A craft takes its ingredients when it
-// starts (`crafting` is then true) and makes the item `time` ticks later. status
-// says what it's doing: "no-recipe", "working", "no-input" (short of an
-// ingredient) or "full" (no room in the output for the next craft).
+// starts (`crafting` is then true) and makes the item after `time` ticks of work,
+// each using power. status says what it's doing: "no-recipe", "working", "no-input"
+// (short of an ingredient), "no-power" or "full" (no room in the output for the
+// next craft).
 import { BUILDINGS } from "./buildings.js";
 import { RECIPES } from "./recipes.js";
 import { count, take, give } from "./inventory.js";
+import { usePower } from "./power.js";
 
 const { stack: STACK } = BUILDINGS.assembler;
 
@@ -87,8 +89,9 @@ export function emptyAssembler(a, inv, item = null) {
   return moved;
 }
 
-export function stepAssembler(a) {
+export function stepAssembler(world, a) {
   if (!a.crafting && !start(a)) return;
+  if (!usePower(world, a)) return;
   a.status = "working";
   const r = RECIPES[a.recipe];
   if (++a.progress < r.time) return;

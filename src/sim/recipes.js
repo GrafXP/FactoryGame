@@ -13,6 +13,12 @@ export const FUEL = {
   coal: 480,
 };
 
+// The energy in each fuel, in joules, for generators: a coal runs one at its full
+// 600 kW for 400 ticks (see BUILDINGS.generator and power.js).
+export const FUEL_ENERGY = {
+  coal: 4_000_000,
+};
+
 // Assembler recipes, by the item they make (which is also the recipe's id): the
 // ingredients `in` become `n` of the item after `time` ticks. The times let one
 // inserter per ingredient keep up (an inserter moves 1.2 items/s), so a copper

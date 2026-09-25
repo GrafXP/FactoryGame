@@ -811,7 +811,10 @@ body.playing nav {
 .panel .status[data-status="no-resource"],
 .panel .status[data-status="no-output"],
 .panel .status[data-status="no-fuel"],
-.panel .status[data-status="full"] {
+.panel .status[data-status="no-power"],
+.panel .status[data-status="unconnected"],
+.panel .status[data-status="full"],
+.panel .power[data-ok="false"] {
   color: #e08a00;
   font-weight: 600;
 }

@@ -10,6 +10,8 @@ import { furnaceState, furnaceContents, stepFurnace } from "./furnace.js";
 import { inserterState, stepInserter } from "./inserter.js";
 import { assemblerState, assemblerContents, stepAssembler } from "./assembler.js";
 import { craftState, stepCraft } from "./crafting.js";
+import { generatorState } from "./generator.js";
+import { stepPower, usePower, usesPower } from "./power.js";
 
 export { entityAt };
 
@@ -39,10 +41,11 @@ export function step(world) {
   world.tick++;
   stepMining(world);
   stepCraft(world);
+  stepPower(world);
   for (const e of world.entities.values()) {
     if (e.type === "miner") stepMiner(world, e);
     else if (e.type === "furnace") stepFurnace(e);
-    else if (e.type === "assembler") stepAssembler(e);
+    else if (e.type === "assembler") stepAssembler(world, e);
     else if (e.type === "inserter") stepInserter(world, e);
   }
   stepBelts(world);
@@ -106,6 +109,7 @@ export function removeAt(world, x, y) {
   if (entity.items) entity.items = [];
   if (entity.type === "furnace") Object.assign(entity, furnaceState());
   if (entity.type === "assembler") Object.assign(entity, assemblerState());
+  if (entity.type === "generator") entity.fuel = null;
   if (entity.hand) entity.hand = null;
   world.version++;
   return entity;
@@ -119,6 +123,7 @@ export function refundOf(entity) {
   for (const it of entity.items || []) add(it.item);
   if (entity.type === "furnace") for (const [id, n] of Object.entries(furnaceContents(entity))) add(id, n);
   if (entity.type === "assembler") for (const [id, n] of Object.entries(assemblerContents(entity))) add(id, n);
+  if (entity.type === "generator" && entity.fuel) add(entity.fuel.item, entity.fuel.n);
   if (entity.hand) add(entity.hand);
   return items;
 }
@@ -129,23 +134,27 @@ export function takeAll(world, chest) {
 }
 
 // State a new building starts with. Miners track their dig and why they're stopped,
-// chests hold items, belts carry them (see transport.js); furnaces, inserters and
-// assemblers are in furnace.js, inserter.js and assembler.js.
+// chests hold items, belts carry them (see transport.js); furnaces, inserters,
+// assemblers and generators are in their own files. Machines that run on power
+// start with an empty store of energy (see power.js).
 export function initialState(type) {
-  if (type === "miner") return { progress: 0, status: "working", item: null };
+  const power = usesPower(type) ? { energy: 0 } : {};
+  if (type === "miner") return { progress: 0, status: "working", item: null, ...power };
   if (type === "chest") return { inventory: createInventory() };
   if (type === "belt") return { items: [] };
   if (type === "furnace") return furnaceState();
-  if (type === "inserter") return inserterState();
-  if (type === "assembler") return assemblerState();
+  if (type === "inserter") return { ...inserterState(), ...power };
+  if (type === "assembler") return { ...assemblerState(), ...power };
+  if (type === "generator") return generatorState();
   return {};
 }
 
-// A miner digs the ore under its footprint into whatever is on its output tile.
-// status says what it's doing: "working", "no-resource" (no ore left under it),
-// "no-output" (nothing in front takes items) or "full" (it has dug an item and the
-// thing in front has no room for it yet). It waits with the finished item rather
-// than dropping it, so a stopped miner loses nothing. `item` is what it's digging.
+// A miner digs the ore under its footprint into whatever is on its output tile,
+// using power while it digs. status says what it's doing: "working", "no-resource"
+// (no ore left under it), "no-output" (nothing in front takes items), "no-power" or
+// "full" (it has dug an item and the thing in front has no room for it yet). It
+// waits with the finished item rather than dropping it, so a stopped miner loses
+// nothing. `item` is what it's digging.
 function stepMiner(world, m) {
   const i = oreUnder(world, m);
   if (i < 0) {
@@ -162,7 +171,10 @@ function stepMiner(world, m) {
     return;
   }
   const period = BUILDINGS.miner.period;
-  if (m.progress < period) m.progress++;
+  if (m.progress < period) {
+    if (!usePower(world, m)) return;
+    m.progress++;
+  }
   if (m.progress < period) {
     m.status = "working";
   } else if (!canTake(target, item)) {

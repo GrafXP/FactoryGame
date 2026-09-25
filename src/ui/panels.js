@@ -1,21 +1,25 @@
-import { BUILDINGS } from "../sim/buildings.js";
+import { BUILDINGS, kW } from "../sim/buildings.js";
 import { ITEMS, describe, itemName } from "../sim/items.js";
 import { count, total } from "../sim/inventory.js";
 import { takeAll, oreLeftUnder } from "../sim/world.js";
-import { SMELTING, FUEL, RECIPES } from "../sim/recipes.js";
+import { SMELTING, FUEL, FUEL_ENERGY, RECIPES } from "../sim/recipes.js";
 import { fillFrom, emptySlot, furnaceRoom } from "../sim/furnace.js";
 import { setRecipe, fillAssembler, emptyAssembler, assemblerRoom } from "../sim/assembler.js";
+import { fuelGenerator, emptyGenerator, generatorRoom } from "../sim/generator.js";
+import { powerNetwork, satisfaction } from "../sim/power.js";
 import { TICK_RATE } from "../sim/world.js";
 import { itemIcon, icon } from "./icons.js";
 import { lower, itemRows } from "./format.js";
 
 // The panel for the building tapped with no tool: what it holds and what it's
 // doing, with buttons to move items in and out. Redrawn when what it shows changes
-// (its key); progress bars move every tick.
+// (its key); progress bars and the power readouts ([data-live] parts, which have
+// no buttons) move every tick.
 const MINER_STATUS = {
   working: (m) => `Mining ${lower(m.item)}`,
   "no-resource": () => "Stopped: no ore under it. Miners have to sit on an ore patch.",
   "no-output": () => "Stopped: nothing in front of the chute takes the ore. Put a belt, chest or furnace there.",
+  "no-power": () => "Stopped: no power.",
   full: () => "Stopped: no room in front for the ore. Empty the chest or clear the belt.",
 };
 const FURNACE_STATUS = {
@@ -32,6 +36,7 @@ const INSERTER_STATUS = {
   working: (e) => (e.hand ? `Moving ${lower(e.hand)}` : "Swinging back"),
   idle: () => "Waiting for something the building in front can use.",
   waiting: (e) => `Holding ${lower(e.hand)} until there's room in front.`,
+  "no-power": () => "Stopped: no power.",
   "no-output": () => "Stopped: nothing in front takes items. It drops into belts, chests, furnaces and assemblers.",
 };
 const ASSEMBLER_STATUS = {
@@ -43,8 +48,61 @@ const ASSEMBLER_STATUS = {
       .map(([id]) => lower(id, 2));
     return `Waiting for ${short.join(" and ")}.`;
   },
+  "no-power": () => "Stopped: no power.",
   full: () => "Stopped: the output is full. Take what it made, or put an inserter there to take it out.",
 };
+
+const GENERATOR_STATUS = {
+  working: () => "Burning coal to make power",
+  idle: () => "Idle: nothing on its network needs power right now, so it keeps its coal.",
+  "no-fuel": () => "Stopped: no coal. Give it some, or feed it with an inserter or a miner on coal.",
+  unconnected: () => `Not connected: put a power pole within ${BUILDINGS.pole.area} tiles of it.`,
+};
+
+const AREA = BUILDINGS.pole.area;
+const percent = (x) => `${Math.floor(x * 100 + 0.5)}%`;
+
+// What's wrong with a network's power, or null if its machines get all they ask for.
+function shortfall(net) {
+  if (!net.generators.length) return "its network has no generator";
+  if (!net.capacity) {
+    return `its network's generator${net.generators.length > 1 ? "s have" : " has"} no coal`;
+  }
+  const s = satisfaction(net);
+  if (s >= 0.95) return null;
+  return `its machines ask for ${kW(net.avg.demand)} kW and the generators make ${kW(net.avg.supplied)} kW`;
+}
+
+// A powered machine's line about its power.
+function powerLine(e, world) {
+  const net = powerNetwork(world).netOf.get(e);
+  const use = `${kW(BUILDINGS[e.type].draw)} kW`;
+  const line = (ok, text) => `<p class="meta power" data-ok="${ok}">${text}</p>`;
+  if (!net) return line(false, `No power: there's no power pole within ${AREA} tiles. It uses ${use} while it works.`);
+  const why = shortfall(net);
+  if (!why) return line(true, `Powered. It uses ${use} while it works.`);
+  const s = satisfaction(net);
+  return s > 0.02 ? line(false, `Slowed to ${percent(s)}: ${why}.`) : line(false, `No power: ${why}.`);
+}
+
+// A network's generators and machines, what they make and use, and how well it keeps up.
+function networkSummary(net) {
+  if (!net) return `<p class="meta power" data-ok="false">Not on a network.</p>`;
+  const out = net.generators.filter((g) => g.status === "no-fuel").length;
+  const why = shortfall(net);
+  const s = satisfaction(net);
+  const verdict = !why
+    ? "Every machine on it gets all the power it needs."
+    : s > 0.02
+      ? `Every machine on it runs at ${percent(s)} speed: ${why}. Build another generator, or keep them in coal.`
+      : `Its machines have no power: ${why}.`;
+  return `<ul class="items slots">
+      <li><em>Make</em><span>${net.generators.length} generator${net.generators.length === 1 ? "" : "s"}${out ? ` (${out} without coal)` : ""}</span><b>${kW(net.avg.supplied)} / ${kW(net.avg.capacity)} kW</b></li>
+      <li><em>Use</em><span>${net.consumers.length} machine${net.consumers.length === 1 ? "" : "s"} · ${net.poles.length} pole${net.poles.length === 1 ? "" : "s"}</span><b>${kW(net.avg.demand)} kW</b></li>
+    </ul>
+    <span class="bar"><i style="width: ${Math.min(100, s * 100)}%"></i></span>
+    <p class="meta power" data-ok="${!why}">${verdict}</p>`;
+}
 
 // "2 iron plates → 1 iron gear, every 2 s"
 const recipeText = (id) => {
@@ -93,8 +151,10 @@ const PANELS = {
     html: (m, world) => `${heading("Miner")}
       <p class="status" data-status="${m.status}">${MINER_STATUS[m.status](m)}</p>
       <p class="meta">Ore left under it: ${oreLeftUnder(world, m)}</p>
-      <span class="bar"><i></i></span>`,
+      <span class="bar"><i></i></span>
+      <div data-live="power"></div>`,
     progress: (m) => m.progress / BUILDINGS.miner.period,
+    live: (m, world) => ({ power: powerLine(m, world) }),
   },
   // The player can add ore and fuel from the inventory, take them back, and take what it made.
   furnace: {
@@ -136,18 +196,45 @@ const PANELS = {
       return `${heading("Assembler")}
         <p class="status" data-status="${a.status}">${ASSEMBLER_STATUS[a.status](a)}</p>
         <span class="bar"><i></i></span>
+        <div data-live="power"></div>
         <div class="makes">${itemIcon(a.recipe)}<span>${recipeText(a.recipe)}</span><button class="take" data-action="pick">Change</button></div>
         <ul class="items slots">${ins}${slotRow("Made", a.output)}</ul>
         ${adds ? `<div class="actions">${adds}</div>` : ""}
         ${takeOutput(a.output)}`;
     },
     progress: (a) => (a.crafting ? a.progress / RECIPES[a.recipe].time : 0),
+    live: (a, world) => ({ power: powerLine(a, world) }),
   },
   inserter: {
     key: (e) => `${e.status} ${e.hand}`,
     html: (e) => `${heading("Inserter")}
       <p class="status" data-status="${e.status}">${INSERTER_STATUS[e.status](e)}</p>
+      <div data-live="power"></div>
       <p class="meta">It takes from the building behind it and drops into the one in front (the arrow points that way), one item at a time and only what that building can use.</p>`,
+    live: (e, world) => ({ power: powerLine(e, world) }),
+  },
+  // Fuel in and out like a furnace's, and the network it powers.
+  generator: {
+    key: (g, world) => `${g.status} ${JSON.stringify(g.fuel)} ${world.inventory.version}`,
+    html: (g, world) => {
+      const adds = addButtons(Object.keys(FUEL_ENERGY), world.inventory, (id) => generatorRoom(g, id));
+      const secs = +(FUEL_ENERGY.coal / BUILDINGS.generator.power / TICK_RATE).toFixed(1);
+      return `${heading("Coal generator")}
+        <p class="status" data-status="${g.status}">${GENERATOR_STATUS[g.status](g)}</p>
+        <ul class="items slots">${slotRow("Fuel", g.fuel, `data-slot="fuel"`)}</ul>
+        ${adds ? `<div class="actions">${adds}</div>` : ""}
+        <p class="meta">Makes up to ${kW(BUILDINGS.generator.power)} kW, and only burns what's used: a coal lasts ${secs} s at full power.</p>
+        <h3>Its network</h3>
+        <div data-live="net"></div>`;
+    },
+    live: (g, world) => ({ net: networkSummary(powerNetwork(world).netOf.get(g)) }),
+  },
+  pole: {
+    key: () => "",
+    html: () => `${heading("Power pole")}
+      <div data-live="net"></div>
+      <p class="meta">It powers machines within ${AREA} tiles and wires itself to poles up to ${BUILDINGS.pole.reach} tiles away; wired poles make one network. A generator has to be near a pole too.</p>`,
+    live: (p, world) => ({ net: networkSummary(powerNetwork(world).netOf.get(p)) }),
   },
 };
 
@@ -158,6 +245,7 @@ export function createEntityPanel(el, { close, changed, toast }) {
   let shownKey = "";
   let world = null;
   const view = { picking: false };
+  const live = new WeakMap(); // [data-live] part → the markup it shows
 
   const sync = (w) => {
     world = w;
@@ -171,6 +259,13 @@ export function createEntityPanel(el, { close, changed, toast }) {
     }
     const bar = el.querySelector(".bar i");
     if (panel.progress && bar) bar.style.width = `${panel.progress(shown) * 100}%`;
+    for (const [name, html] of Object.entries(panel.live?.(shown, world) || {})) {
+      const part = el.querySelector(`[data-live="${name}"]`);
+      if (part && live.get(part) !== html) {
+        live.set(part, html);
+        part.innerHTML = html;
+      }
+    }
   };
 
   el.addEventListener("click", (e) => {
@@ -180,13 +275,16 @@ export function createEntityPanel(el, { close, changed, toast }) {
     if (!shown || !world) return;
     const inv = world.inventory;
     const asm = shown.type === "assembler";
+    const gen = shown.type === "generator";
     let moved = null;
     if (action === "take" && shown.inventory) moved = takeAll(world, shown);
     else if (action === "empty") {
-      moved = asm ? emptyAssembler(shown, inv, btn.dataset.item ?? null) : emptySlot(shown, btn.dataset.slot, inv);
+      if (asm) moved = emptyAssembler(shown, inv, btn.dataset.item ?? null);
+      else if (gen) moved = emptyGenerator(shown, inv);
+      else moved = emptySlot(shown, btn.dataset.slot, inv);
     } else if (action === "fill") {
       const item = btn.dataset.item;
-      const n = asm ? fillAssembler(shown, inv, item) : fillFrom(shown, inv, item);
+      const n = asm ? fillAssembler(shown, inv, item) : gen ? fuelGenerator(shown, inv, item) : fillFrom(shown, inv, item);
       if (n) toast(`Added ${describe({ [item]: n })}`);
     } else if (action === "recipe") {
       view.picking = false;

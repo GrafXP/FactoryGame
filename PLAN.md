@@ -185,9 +185,25 @@ and circuits.
 - [ ] A fully automated circuit line (iron + copper → cable + plates → circuits) runs unattended.
 - [ ] Hand-crafting a gear from plates works from the inventory panel.
 
-### Phase 9: Power
+### Phase 9: Power ✅ (done)
 Coal generators, power poles with a connection range, and consumers that slow
 down when there's too little power. Miners, inserters and assemblers switch to electric.
+Power is whole joules per tick (60 J/tick = 1 kW; `sim/power.js`). A coal generator
+(3×2, `sim/generator.js`) makes up to 600 kW and burns only what's drawn: a coal
+(4 MJ, `FUEL_ENERGY`) lasts 6.7 s at full power. It takes coal like a furnace, so an
+inserter or a miner on coal can feed it. A pole joins every pole within 7 tiles
+(wires drawn as the fewest that join them, shortest first) and powers buildings within
+3 tiles; joined poles are one network, worked out from the layout and cached like
+`beltNetwork`. Miners draw 90 kW, assemblers 75 kW and inserters 15 kW, only while
+they work. Each has a store of two ticks' energy that the network tops up each tick;
+when the generators can't make it all, every machine gets the same share, so they all
+slow evenly (status stays "working"; an amber bolt and the panels say why). With none
+they show "no-power". Placing anything electric tints the ground the poles power, and
+a pole ghost shows its area and the wires it'll get. Tap a pole or generator for its
+network: what it makes, what it uses, and how well it keeps up. The start kit covers a
+generator and some poles. Save format 4: old saves load with their machines stopped
+and the parts for a generator and ten poles in the inventory. Machine tests that
+aren't about power keep stores full with `test/helpers.js`'s `charge`.
 - [ ] Unpowered machines show a "no power" icon and don't run.
 - [ ] Poles show their range while you place them, and wires connect automatically.
 - [ ] When demand is higher than supply, everything slows evenly and the power panel shows why.

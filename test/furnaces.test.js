@@ -9,6 +9,7 @@ import { SMELTING, FUEL } from "../src/sim/recipes.js";
 import { count, total } from "../src/sim/inventory.js";
 import { ORE } from "../src/sim/map.js";
 import { serialize, deserialize } from "../src/sim/save.js";
+import { charge } from "./helpers.js";
 
 const { stack: STACK, feed: FEED } = BUILDINGS.furnace;
 const PLATE_TICKS = SMELTING["iron-ore"].time;
@@ -18,6 +19,7 @@ const setup = () =>
 const run = (world, ticks, each) => {
   for (let i = 0; i < ticks; i++) {
     each?.(i);
+    charge(world);
     step(world);
   }
 };

@@ -3,12 +3,14 @@
 // right now, so nothing ever gets stuck in the hand for long.
 //
 // `swing` is where the arm is: 0 over the pickup side, SWING over the drop side.
-// `hand` is the item it holds, or null. status is "working", "idle" (nothing to
-// pick up), "waiting" (holding an item the target has no room for yet) or
-// "no-output" (nothing in front takes items).
+// `hand` is the item it holds, or null. Each tick the arm moves uses power, and it
+// won't pick anything up without power to move it. status is "working", "idle"
+// (nothing to pick up), "waiting" (holding an item the target has no room for
+// yet), "no-power" or "no-output" (nothing in front takes items).
 import { BUILDINGS, DIRS } from "./buildings.js";
 import { entityAt } from "./grid.js";
 import { takesItems, canTake, put, takeOne } from "./transport.js";
+import { hasPower, usePower } from "./power.js";
 
 export const SWING = BUILDINGS.inserter.swing;
 
@@ -27,6 +29,7 @@ export function stepInserter(world, ins) {
 
   if (ins.hand) {
     if (ins.swing < SWING) {
+      if (!usePower(world, ins)) return;
       ins.swing++;
       ins.status = "working";
     } else if (!hasTarget) {
@@ -41,6 +44,7 @@ export function stepInserter(world, ins) {
     return;
   }
   if (ins.swing > 0) {
+    if (!usePower(world, ins)) return;
     ins.swing--;
     ins.status = "working";
     return;
@@ -49,6 +53,7 @@ export function stepInserter(world, ins) {
     ins.status = "no-output";
     return;
   }
+  if (!hasPower(world, ins)) return;
   const source = entityAt(world, from.x, from.y);
   const item = source && takeOne(source, (id) => canTake(target, id));
   ins.hand = item || null;
