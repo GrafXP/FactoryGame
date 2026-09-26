@@ -116,6 +116,7 @@ function home(el) {
         <span id="replace-note" hidden>Your saved factory will be replaced. This can't be undone.</span>
         <div class="row"><button id="confirm-yes">Start new game</button><button id="confirm-no">Cancel</button></div>
       </div>
+      <a class="card" href="/play?bench=realistic" data-link><b>Example factory</b><span>A working factory with every building and production chain</span></a>
       <a class="card" href="/help" data-link><b>Help</b><span>Controls and tips</span></a>
     </div>
     <p class="hint" id="save-note" hidden></p>
@@ -752,6 +753,7 @@ function help(el) {
     <h2>Speed</h2>
     <dl>
       <dt>Debug info</dt><dd>Pause → Show debug info (or \`) shows frames and ticks a second (60 of each is full speed), how many draw calls a frame takes, and how long a tick of the game and drawing a frame take.</dd>
+      <dt>Example factory</dt><dd><a href="/play?bench=realistic">/play?bench=realistic</a> loads a complete factory with mines, coal power, smelting, gears, cable, circuits, underground crossings, splitters, sorters, radar and a HUB. Follow the belts from the western mines to circuit dispatch in the east. The HUB needs 150 circuits; surplus production stays in storage. Like the benchmarks, this example is never saved and leaves your saved game untouched.</dd>
       <dt>Benchmark</dt><dd><a href="/play?bench=big">/play?bench=big</a> builds a factory of 3,120 buildings with 15,000 items on its belts, running flat out, and shows the debug info, to see how a big factory runs on this device. It's never saved, so your own game is left as it was. <code>?bench=small</code> is a quick one.</dd>
     </dl>
     <h2>Fullscreen</h2>

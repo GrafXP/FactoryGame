@@ -18,6 +18,7 @@
 // The big one is the plan's performance target: 48 modules make 3,120 buildings,
 // and with the loops about 6,000 belts carry 15,000 items once they've filled
 // (after about 40 s).
+import { realisticWorld } from "./realistic.js";
 import { createWorld, place, canPlace } from "./world.js";
 import { BUILDINGS } from "./buildings.js";
 import { ORE, CHUNK } from "./map.js";
@@ -30,6 +31,7 @@ import { MILESTONES } from "./progress.js";
 
 // The sizes: modules across and down, and how many items go on the loops.
 export const BENCHES = {
+  realistic: { factory: realisticWorld },
   big: { across: 8, down: 6, loopItems: 10000 },
   small: { across: 2, down: 1, loopItems: 400 },
 };
@@ -51,6 +53,7 @@ const loopCapacity = () => (2 * (LOOP.w + LOOP.h) - 5) * PER_TILE;
 export function benchWorld(name = "big") {
   const size = BENCHES[name];
   if (!size) throw new Error(`No benchmark called "${name}"`);
+  if (size.factory) return size.factory();
   const world = createWorld({ seed: 1, kit: {}, milestones: MILESTONES.length });
   const sinks = [];
 
