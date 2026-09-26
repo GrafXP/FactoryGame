@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { footprint } from "../sim/buildings.js";
 import { CHUNK, chunkKey } from "../sim/chunks.js";
 import { NEST } from "../sim/map.js";
-import { TILE, UNITS } from "../sim/enemies.js";
+import { TILE, UNITS, chartedBases, tierOf } from "../sim/enemies.js";
 import { maxHealth } from "../sim/health.js";
 
 // The enemies on the playfield, as instanced meshes: the nests in the chunks on
@@ -209,10 +209,14 @@ export function drawHealthBars(world, list, icons) {
   }
 }
 
-// The map view's markers: ruins as red squares, and attack groups as orange
-// diamonds where their first unit is. Big enough to see far out.
+// The map view's markers: ruins as red squares, groups out to fight as orange
+// diamonds where their first unit is, and a ring round each charted enemy base, coloured by
+// how strong it is (baseTiers, enemies.js's tierOf). Big enough to see far out. The
+// bases are worked out again at most once a second.
 const MIN_MARK = 6;
+const MIN_RING = 14;
 export function createMapMarkers(parent) {
+  const rings = instancedRings(parent);
   const geometry = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
   const material = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9, depthTest: false, depthWrite: false });
   let mesh = null;
@@ -239,11 +243,12 @@ export function createMapMarkers(parent) {
   const c = new THREE.Color();
   return {
     update(world, on) {
+      rings.update(world, on && colors);
       if (!on || !colors) {
         mesh.visible = false;
         return;
       }
-      const groups = [...world.enemies.groups.values()];
+      const groups = [...world.enemies.groups.values()].filter((g) => g.kind !== "expand");
       ensure(world.ruins.length + groups.length);
       let n = 0;
       for (const r of world.ruins) {
@@ -265,6 +270,69 @@ export function createMapMarkers(parent) {
     },
     setTheme(palette) {
       colors = palette;
+      rings.setTheme(palette);
+    },
+    dispose() {
+      geometry.dispose();
+      material.dispose();
+      mesh.dispose();
+      rings.dispose();
+    },
+  };
+}
+
+// The bases' rings, drawn under the other markers.
+function instancedRings(parent) {
+  const geometry = new THREE.RingGeometry(0.36, 0.5, 32).rotateX(-Math.PI / 2);
+  const material = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9, depthTest: false, depthWrite: false });
+  let mesh = null;
+  let shownKey = "";
+  let tiers = null;
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const pos = new THREE.Vector3();
+  const scale = new THREE.Vector3();
+  const c = new THREE.Color();
+  const ensure = (n) => {
+    if (mesh && mesh.instanceMatrix.count >= n) return;
+    let cap = 32;
+    while (cap < n) cap *= 2;
+    if (mesh) {
+      parent.remove(mesh);
+      mesh.dispose();
+    }
+    mesh = new THREE.InstancedMesh(geometry, material, cap);
+    mesh.frustumCulled = false;
+    mesh.renderOrder = 1;
+    parent.add(mesh);
+  };
+  ensure(0);
+  return {
+    update(world, on) {
+      if (!on) {
+        mesh.visible = false;
+        shownKey = "";
+        return;
+      }
+      const key = `${Math.floor(world.tick / 60)} ${world.nests.size} ${world.chartVersion} ${world.mapVersion}`;
+      if (key === shownKey) return;
+      shownKey = key;
+      const bases = chartedBases(world);
+      ensure(bases.length);
+      bases.forEach((b, i) => {
+        const s = Math.max(MIN_RING, Math.max(b.w, b.h) + 8);
+        mesh.setMatrixAt(i, m.compose(pos.set(b.x, 0.08, b.y), q, scale.set(s, 1, s)));
+        mesh.setColorAt(i, c.set(tiers[tierOf(b.units)]));
+      });
+      mesh.count = bases.length;
+      mesh.visible = bases.length > 0;
+      if (!bases.length) return;
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.instanceColor.needsUpdate = true;
+    },
+    setTheme(palette) {
+      tiers = palette.baseTiers;
+      shownKey = "";
     },
     dispose() {
       geometry.dispose();

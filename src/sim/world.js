@@ -244,7 +244,13 @@ export function destroy(world, e) {
 // Notes an alert about building e: "attacked", "destroyed" or "no-ammo".
 export function raise(world, kind, e) {
   const { w, h } = footprint(e.type, e.rot);
-  world.alerts.push({ kind, type: e.type, x: e.x + w / 2, y: e.y + h / 2, tick: world.tick });
+  raiseAt(world, kind, e.type, e.x + w / 2, e.y + h / 2);
+}
+
+// Notes an alert of `kind` about a `type` (a building's, or "nest" for a nest
+// destroyed, "nest", or the last of its base, "cleared") at ground point (x, y).
+export function raiseAt(world, kind, type, x, y) {
+  world.alerts.push({ kind, type, x, y, tick: world.tick });
   if (world.alerts.length > 50) world.alerts.shift();
   world.alertCount++;
 }

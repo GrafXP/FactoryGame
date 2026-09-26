@@ -163,12 +163,22 @@ function cellNests(seed, i, j) {
   return nests;
 }
 
+// The nests of the base with key `key`, a nest's id divided by 8 and rounded down.
+// Kept once worked out, since turrets ask on every shot at a nest; don't change them.
+const bases = new Map();
+export function baseNests(seed, key) {
+  const k = `${seed} ${key}`;
+  let list = bases.get(k);
+  if (!list) {
+    if (bases.size >= 1024) bases.clear();
+    bases.set(k, (list = cellNests(seed, Math.floor(key / 0x10000) - 0x8000, (key % 0x10000) - 0x8000)));
+  }
+  return list;
+}
+
 // The nest with id `id` ({ id, x, y }), or null if there's no such nest.
 export function nestById(seed, id) {
-  const key = Math.floor(id / 8);
-  const i = Math.floor(key / 0x10000) - 0x8000;
-  const j = (key % 0x10000) - 0x8000;
-  return cellNests(seed, i, j).find((n) => n.id === id) || null;
+  return baseNests(seed, Math.floor(id / 8)).find((n) => n.id === id) || null;
 }
 
 // The nests that reach into the box from (x0, y0) to (x1, y1), not included.

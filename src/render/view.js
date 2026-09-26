@@ -83,6 +83,8 @@ const PALETTES = {
     ruin: 0x7a6a5e,
     mapNest: 0xd0357a,
     attack: 0xff8a1f,
+    // Bases' rings on the map, weak, medium and strong.
+    baseTiers: [0xc9a7f0, 0xe0487f, 0xff2e3e],
     items: {
       "iron-plate": 0xc8d4e3,
       "copper-plate": 0xf5a36c,
@@ -90,6 +92,7 @@ const PALETTES = {
       "iron-gear": 0xa9b4c2,
       "copper-cable": 0xf0a24a,
       "firearm-magazine": 0xbb9448,
+      "piercing-magazine": 0xd0603c,
       "electronic-circuit": 0x3fbf6a,
     },
     ok: 0x5be38a,
@@ -151,6 +154,7 @@ const PALETTES = {
     ruin: 0x4a3f38,
     mapNest: 0xa0205a,
     attack: 0xe06a00,
+    baseTiers: [0x7b52c4, 0xc0206a, 0x9a0a1e],
     items: {
       "iron-plate": 0x7d8ea3,
       "copper-plate": 0xd9793a,
@@ -158,6 +162,7 @@ const PALETTES = {
       "iron-gear": 0x6b7788,
       "copper-cable": 0xc4661a,
       "firearm-magazine": 0xbb9448,
+      "piercing-magazine": 0xb4462a,
       "electronic-circuit": 0x1f9a4a,
     },
     ok: 0x10a84f,

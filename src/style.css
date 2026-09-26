@@ -20,7 +20,12 @@
   --item-iron-gear: #a9b4c2;
   --item-copper-cable: #f0a24a;
   --item-firearm-magazine: #bb9448;
+  --item-piercing-magazine: #d0603c;
   --item-electronic-circuit: #3fbf6a;
+  /* Enemy bases by strength, as their rings on the map (src/render/view.js). */
+  --tier-0: #c9a7f0;
+  --tier-1: #e0487f;
+  --tier-2: #ff2e3e;
   color-scheme: dark;
 }
 
@@ -44,7 +49,11 @@
   --item-iron-gear: #6b7788;
   --item-copper-cable: #c4661a;
   --item-firearm-magazine: #bb9448;
+  --item-piercing-magazine: #b4462a;
   --item-electronic-circuit: #1f9a4a;
+  --tier-0: #7b52c4;
+  --tier-1: #c0206a;
+  --tier-2: #9a0a1e;
   color-scheme: light;
 }
 
@@ -363,6 +372,54 @@ body.playing nav {
 
 .alert-row[data-kind="attacked"] .icon {
   color: var(--warn);
+}
+
+.alert-row[data-kind="nest"] .icon,
+.alert-row[data-kind="cleared"] .icon {
+  color: var(--accent);
+}
+
+/* The base panel: how strong the base is, in its ring's colour, and a row per nest. */
+.panel .status[data-tier] {
+  font-weight: 600;
+}
+
+.panel .status[data-tier="0"] {
+  color: var(--tier-0);
+}
+
+.panel .status[data-tier="1"] {
+  color: var(--tier-1);
+}
+
+.panel .status[data-tier="2"] {
+  color: var(--tier-2);
+}
+
+.nest-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 8px;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+}
+
+.nest-list li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.nest-list .bar i {
+  background: var(--tier-1);
+}
+
+.nest-list small {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .icon-btn[aria-pressed="true"] {

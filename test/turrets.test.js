@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createWorld, place, step, removeAt } from "../src/sim/world.js";
 import { BUILDINGS } from "../src/sim/buildings.js";
 import { AMMO, turretCanTake, turretAdd, loadTurret, emptyTurret, stepTurret } from "../src/sim/turret.js";
-import { addUnit, hitUnit, unitsNear, TILE, UNITS, MITE, BRUTE, setEnemies } from "../src/sim/enemies.js";
+import { addUnit, hitUnit, unitsNear, TILE, UNITS, MITE, BRUTE, setEnemies, NEST_HEALTH } from "../src/sim/enemies.js";
 import { nestsNear } from "../src/sim/map.js";
 import { serialize, deserialize } from "../src/sim/save.js";
 import { healthOf } from "../src/sim/health.js";
@@ -20,9 +20,9 @@ const run = (world, n, power = false) => { for (let i = 0; i < n; i++) { if (pow
 function attack(world, target, { x = 12, y = 1, n = 5, kind = MITE, hp = UNITS[kind].hp } = {}) {
   const en = world.enemies;
   const nest = nestsNear(world.seed, -600, -600, 600, 600)[0];
-  const g = { id: en.nextId++, nest: nest.id, target: target.id, goal: { x: target.x, y: target.y, w: 2, h: 2 }, path: Int32Array.from(Array.from({length: x - target.x}, (_, i) => [x - i, y]).flat()), mode: "go", units: [], hit: -1 };
+  const g = { id: en.nextId++, nest: nest.id, kind: "attack", target: target.id, goal: { x: target.x, y: target.y, w: 2, h: 2 }, path: Int32Array.from(Array.from({length: x - target.x}, (_, i) => [x - i, y]).flat()), mode: "go", units: [], hit: -1 };
   en.groups.set(g.id, g);
-  en.nests.set(nest.id, { points: 0, home: [], next: -1, group: g.id });
+  en.nests.set(nest.id, { points: 0, home: [], next: -1, group: g.id, hp: NEST_HEALTH, hit: -600 });
   for (let i = 0; i < n; i++) {
     const u = { id: en.nextId++, group: g.id, kind, x: (x + 0.5) * TILE, y: (y + 0.5) * TILE, ox: 0, oy: 0, hp, cool: 0, step: 0, target: 0, dx: 0, dy: 0, key: 0 };
     addUnit(world, u); g.units.push(u.id);

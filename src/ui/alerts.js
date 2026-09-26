@@ -6,12 +6,12 @@ import { TICK_RATE } from "../sim/world.js";
 import { REPAIR_AFTER } from "../sim/health.js";
 import { icon } from "./icons.js";
 
-// Alerts: attacks and losses (world.alerts, raised by the sim). The alert button
-// next to the clock shows how many things need looking at, the ruins plus the
-// attack groups still fighting, and tapping it goes to the latest alert and opens
-// the panel: the recent alerts, newest first, each a button that goes there, and
-// Rebuild all for the ruins. New alerts also show as toasts, "under attack" at most
-// once every TOAST_EVERY.
+// Alerts: attacks and losses, and nests destroyed (world.alerts, raised by the
+// sim). The alert button next to the clock shows how many things need looking at,
+// the ruins plus the attack groups still fighting, and tapping it goes to the
+// latest alert and opens the panel: the recent alerts, newest first, each a button
+// that goes there, and Rebuild all for the ruins. New alerts also show as toasts,
+// "under attack" at most once every TOAST_EVERY.
 const TOAST_EVERY = 10 * TICK_RATE;
 const SHOWN = 8;
 
@@ -20,6 +20,9 @@ const ago = (world, tick) => {
   return s < 60 ? `${s} s ago` : `${Math.floor(s / 60)} min ago`;
 };
 const TEXT = { attacked: "under attack", destroyed: "destroyed", "no-ammo": "out of ammunition" };
+// What an alert says: a building's name and what happened to it, or a nest's news.
+const label = (a) =>
+  a.kind === "nest" ? "Nest destroyed" : a.kind === "cleared" ? "Enemy base cleared" : `${BUILDINGS[a.type].name} ${TEXT[a.kind]}`;
 
 // The attack groups that have hit something lately.
 export const fighting = (world) => [...world.enemies.groups.values()].filter((g) => g.hit >= 0 && world.tick - g.hit < REPAIR_AFTER);
@@ -42,6 +45,8 @@ export function createAlerts({ button, count, panel }, { go, rebuildAll, toast }
       const lost = list.filter((a) => a.kind === "destroyed");
       if (lost.length === 1) toast(`${BUILDINGS[lost[0].type].name} destroyed`);
       else if (lost.length > 1) toast(`${lost.length} buildings destroyed`);
+      else if (list.some((a) => a.kind === "cleared")) toast("Enemy base cleared: its land is free to build on");
+      else if (list.some((a) => a.kind === "nest")) toast("Nest destroyed");
       else if (list.some(a => a.kind === "no-ammo")) toast("Gun turret out of ammunition near enemies");
       else if (list.some((a) => a.kind === "attacked") && world.tick - toastedAttack >= TOAST_EVERY) {
         toastedAttack = world.tick;
@@ -66,7 +71,7 @@ export function createAlerts({ button, count, panel }, { go, rebuildAll, toast }
       .reverse()
       .map((a, i) => {
         const at = world.alerts.length - 1 - i;
-        return `<li><button class="alert-row" data-action="go" data-i="${at}" data-kind="${a.kind}">${icon(a.type)}<span><b>${BUILDINGS[a.type].name} ${TEXT[a.kind]}</b><small>${ago(world, a.tick)}</small></span></button></li>`;
+        return `<li><button class="alert-row" data-action="go" data-i="${at}" data-kind="${a.kind}">${icon(a.type)}<span><b>${label(a)}</b><small>${ago(world, a.tick)}</small></span></button></li>`;
       })
       .join("");
     const ruins = world.ruins.length;

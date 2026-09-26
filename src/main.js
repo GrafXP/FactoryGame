@@ -18,7 +18,8 @@ import { createResources } from "./ui/resources.js";
 import { createEntityPanel } from "./ui/panels.js";
 import { createStatsPanel } from "./ui/stats.js";
 import { createAlerts } from "./ui/alerts.js";
-import { setEnemies } from "./sim/enemies.js";
+import { createBasePanel } from "./ui/base.js";
+import { setEnemies, baseKey, nestAt, NEST_HEALTH, EXPANSION } from "./sim/enemies.js";
 import { createCrafting } from "./ui/crafting.js";
 import { createGoal, milestoneBanner } from "./ui/goal.js";
 import { queueItems } from "./sim/crafting.js";
@@ -152,7 +153,7 @@ function home(el) {
     for (const b of $("#enemies-pick").querySelectorAll("button")) b.setAttribute("aria-pressed", (b.dataset.enemies === "on") === on);
     $("#enemies-note").textContent = on
       ? "Nests the factory's pollution reaches send units to attack it. You can make it peaceful from the pause menu."
-      : "Nests never attack. You can turn enemies on from the pause menu.";
+      : "Nests never attack, and only fight back if you attack them. You can turn enemies on from the pause menu.";
   };
   pickEnemies(true);
   $("#enemies-pick").addEventListener("click", (e) => {
@@ -299,7 +300,8 @@ const POLLUTION_KEY = "factory:pollution-overlay";
 // HUB). A banner drops in when a milestone is reached. Bottom: the build controls
 // (ui/build-menu.js), with toasts and readouts stacked above them (in the map view,
 // the switch for the pollution overlay). Right: panels
-// for the tapped building, the inventory and production stats (ui/stats.js).
+// for the tapped building, the inventory, production stats (ui/stats.js), alerts
+// (ui/alerts.js) and a tapped enemy base (ui/base.js).
 // Pause holds the settings: theme, fullscreen, debug info.
 function playWorld(el, { world, seed, enemies = true, isNew = false, bench = null, sinks = [] }) {
   const $ = html(
@@ -329,6 +331,7 @@ function playWorld(el, { world, seed, enemies = true, isNew = false, bench = nul
         </div>
         <div class="panel" id="stats-panel" hidden></div>
         <div class="panel" id="alerts-panel" hidden></div>
+        <div class="panel" id="base-panel" hidden></div>
       </div>
       <div class="bottom-stack">
         <button class="map-toggle" id="pollution-toggle" aria-pressed="false" hidden>${icon("pollution")}Pollution</button>
@@ -456,6 +459,10 @@ function playWorld(el, { world, seed, enemies = true, isNew = false, bench = nul
     changed: () => syncInventory(game.world),
     toast,
   });
+  const basePanel = createBasePanel($("#base-panel"), {
+    go: (x, y) => game.lookAt(x, y),
+    close: () => basePanel.show(null),
+  });
 
   // Game clock in the HUD: ticks → m:ss.
   let shownSeconds = -1;
@@ -475,7 +482,10 @@ function playWorld(el, { world, seed, enemies = true, isNew = false, bench = nul
       tapped = t;
       showTile();
       entityPanel.show(t?.entity, game.world);
+      const nest = t?.nest && nestAt(game.world, t.x, t.y);
+      basePanel.show(nest ? baseKey(nest.id) : null, game.world);
     },
+    onBase: (key) => basePanel.show(key, game.world),
     onBuildChange: (state) => {
       menu?.syncTool(state);
       $("#undo").disabled = !state.canUndo;
@@ -491,6 +501,7 @@ function playWorld(el, { world, seed, enemies = true, isNew = false, bench = nul
       syncMining(world);
       crafting.sync(world);
       entityPanel.sync(world);
+      basePanel.sync(world);
       statsPanel.sync(world);
       alerts?.sync(world);
       const s = Math.floor(world.tick / TICK_RATE);
@@ -712,7 +723,7 @@ function help(el) {
     <h2>Goals</h2>
     <dl>
       <dt>The HUB</dt><dd>A new game can only build the HUB, furnaces and chests. Build the HUB first (Build → Base); the goal card under the resource bar says what to do next, and tapping it takes you to the HUB. There's only one, and taking it down loses no progress.</dd>
-      <dt>Milestones</dt><dd>Each milestone asks for a batch of items delivered to the HUB: tap the HUB and deliver from your inventory, or run a belt or inserter into it (it only takes what the milestone still needs). Reaching one unlocks new buildings and recipes: 1. Power and mining (miners, belts, generators, poles, inserters), 2. Logistics and defense (underground belts, splitters, radars, turrets, walls, circuits and firearm magazines), 3. Assembly (assemblers, sorters), and 4. Circuit production, the goal: 150 circuits, best made by a line of assemblers. Locked buildings show a padlock under Build, with the milestone that unlocks them.</dd>
+      <dt>Milestones</dt><dd>Each milestone asks for a batch of items delivered to the HUB: tap the HUB and deliver from your inventory, or run a belt or inserter into it (it only takes what the milestone still needs). Reaching one unlocks new buildings and recipes: 1. Power and mining (miners, belts, generators, poles, inserters), 2. Logistics and defense (underground belts, splitters, radars, turrets, walls, circuits and firearm magazines), 3. Assembly (assemblers, sorters), 4. Defense (magazines and bricks for walls; unlocks piercing magazines), and 5. Circuit production, the goal: 150 circuits, best made by a line of assemblers. Locked buildings show a padlock under Build, with the milestone that unlocks them.</dd>
     </dl>
     <h2>Items</h2>
     <dl>
@@ -725,8 +736,9 @@ function help(el) {
       <dt>Splitters</dt><dd>Items come in the back and go out front, left and right in turn. A way out with nothing on it, or no room, is skipped, so a splitter with two belts on it splits half and half.</dd>
       <dt>Sorters</dt><dd>A splitter you set: tap it and set each way out (left, front, right) to Any item, one kind of item, or Overflow. An item goes out the ways set to it if there are any, otherwise those set to Any; if they're full, it takes the Overflow. An item nothing will take waits in the middle, holding up the line, and the sorter shows an amber sign. Small icons on the sorter show each way's setting.</dd>
       <dt>Inserters</dt><dd>An inserter swings items from the building behind it into the one in front, the way its arrow points: off a belt into a furnace, out of a furnace onto a belt, chest to chest. It only picks up what the building in front can use, so one inserter can feed a furnace both ore and coal off a mixed belt. It only takes finished plates out of a furnace.</dd>
-      <dt>Assemblers</dt><dd>An assembler makes one thing: gears (2 iron plates each), copper cable (2 from a copper plate), circuits (an iron plate and 3 cables), or firearm magazines (4 iron plates). Tap it (no tool picked) to pick what it makes; the icon over it shows what that is, and a question mark means it hasn't been told. Feed it with inserters and take what it makes out with another, or add and take by hand from its panel. Changing what it makes gives you back what it holds. A line like copper plates → cable assembler → inserter → circuit assembler runs on its own.</dd>
-      <dt>Defense</dt><dd>Gun turrets need no power and shoot enemies within 18 tiles; the ring shown while placing one marks its range. Make firearm magazines by hand or in an assembler from 4 iron plates. Each magazine gives 10 shots. Belts and inserters keep 5 magazines in a turret, or load up to 10 by hand. Tap a turret for ammo, kills and damage. An amber sign means empty; an alert warns when enemies are nearby. Enemies turn on the turret that shoots them. Put stone-brick walls in front to absorb melee attacks; drag to build a joined wall line. Walls repair after 10 seconds without a hit. Spitters can fire over walls.</dd>
+      <dt>Assemblers</dt><dd>An assembler makes one thing: gears (2 iron plates each), copper cable (2 from a copper plate), circuits (an iron plate and 3 cables), firearm magazines (4 iron plates) or piercing magazines (a firearm magazine, 2 copper plates and a gear). Tap it (no tool picked) to pick what it makes; the icon over it shows what that is, and a question mark means it hasn't been told. Feed it with inserters and take what it makes out with another, or add and take by hand from its panel. Changing what it makes gives you back what it holds. A line like copper plates → cable assembler → inserter → circuit assembler runs on its own.</dd>
+      <dt>Defense</dt><dd>Gun turrets need no power and shoot enemies within ${BUILDINGS.turret.range} tiles; the ring shown while placing one marks its range. Make firearm magazines by hand or in an assembler from 4 iron plates. Each magazine gives 10 shots. Piercing magazines (from milestone 4) hit harder and mostly ignore armour, so they kill brutes several times faster. A turret holds one kind at a time. Belts and inserters keep 5 magazines in a turret, or load up to 10 by hand. Tap a turret for ammo, kills and damage. An amber sign means empty; an alert warns when enemies are nearby. Enemies turn on the turret that shoots them. Put stone-brick walls in front to absorb melee attacks; drag to build a joined wall line. Walls repair after 10 seconds without a hit. Spitters stop to spit at a wall in their way from 12 tiles off, and can fire over walls at what's behind them; turrets outrange them.</dd>
+      <dt>Clearing nests</dt><dd>A gun turret with no enemies in range shoots any nest within its range, so turrets built near a base and loaded from their panel clear it. Each nest has ${NEST_HEALTH} health and mends once it's left alone for 10 s. When one is hit, every nest of its base sends out all its units to attack that turret, so bring several turrets, walls round them and plenty of ammunition: a base near the factory, full of units, is much harder than a quiet one far away. Destroying a nest raises evolution a little. A cleared base's land is free to build on, and any ore under it can be mined.</dd>
       <dt>Power</dt><dd>Miners, inserters and assemblers run on electricity; belts and furnaces don't. A coal generator burns coal to make up to 600 kW, and only burns what's used. Power poles carry it: a pole powers any building within 3 tiles of it (generators included) and wires itself to every pole up to 7 tiles away, and wired poles make one network. While you place something electric, the ground the poles power is tinted blue, and a new pole shows its area and the wires it will get. When the machines on a network ask for more than its generators make, they all slow down by the same amount and show an amber bolt. Tap a pole or a generator to see what its network makes and uses. Feed generators by hand, with an inserter, or straight from a miner on coal.</dd>
       <dt>Crafting by hand</dt><dd>The inventory panel (tap the resource bar) has Craft by hand: +1 or +5 of gears, cable or circuits. Parts you need along the way are crafted first, so a circuit can be made straight from plates. Hands work twice as fast as an assembler, one craft at a time; the bar above the buttons shows progress, and ✕ in the queue calls a craft off and gives back its ingredients. When you pick a building you can't afford, Craft next to Done makes the parts you're missing.</dd>
       <dt>Inventory</dt><dd>The resource bar shows what you carry. Ore is drawn as a rock, plates as plates, bricks as bricks, gears as gears, cable as a spool and circuits as green boards, each in its own colour. You start with a small kit.</dd>
@@ -735,7 +747,7 @@ function help(el) {
     <dl>
       <dt>Production</dt><dd>The bar chart button at the top (or G) lists every item made or used over the last minute, 10 minutes or hour: how many a minute, with a graph of both (green made, amber used). Made is what miners dig, furnaces smelt, assemblers make and you mine or craft by hand; used is what furnaces, assemblers and hand-crafts make things from, the coal furnaces and generators burn, and what the HUB is given. Items moved from one building to another count as neither. Under the items, Power shows how many kW the generators made and the machines on their networks asked for (when they ask for more than is made, every machine slows down), and Pollution how much was given off and taken in. The numbers are saved with the game.</dd>
       <dt>Machines</dt><dd>A miner's, furnace's or assembler's panel says how much of the last minute it spent working, and what held it up the rest of the time (no input, output full, no power…). A machine slowed by a network short of power counts the time it waits as no power. A line that's starved or backed up shows up there.</dd>
-      <dt>Enemies</dt><dd>Out on the map, from about ${SAFE} tiles from the start, are bases of 2 to 6 nests, more and bigger further out; the map view shows the charted ones in pink. A nest takes in the pollution that reaches it and hatches units with it: quick mites at first, then armoured brutes and spitters that attack from a distance as evolution goes up (Stats shows it). With enemies on, a nest with enough units sends a group at the building that pollutes most nearby, keeping a few at home. They go round water, walk over belts and poles, and chew through other buildings, going round a short line of them and through a long one. New games default to enemies on and offer Peaceful; the pause menu changes it (a peaceful game's nests never attack).</dd>
+      <dt>Enemies</dt><dd>Out on the map, from about ${SAFE} tiles from the start, are bases of 2 to 6 nests, more and bigger further out; the map view shows the charted ones in pink. A nest takes in the pollution that reaches it and hatches units with it: quick mites at first, then armoured brutes and spitters that attack from a distance as evolution goes up (Stats shows it). With enemies on, a nest with enough units sends a group at the building that pollutes most nearby, keeping a few at home. They go round water, walk over belts and poles, and chew through other buildings, going round a short line of them and through a long one. Now and then (more often as evolution rises) a few units leave a base to found a new nest on empty land nearby, never in the safe zone round the start or within ${EXPANSION.clear} tiles of a building. New games default to enemies on and offer Peaceful; the pause menu changes it (a peaceful game's nests only fight back when their base is attacked).</dd>
       <dt>Damage and ruins</dt><dd>A damaged building shows a health bar, and repairs itself for free once it hasn't been hit for 10 s. One that's destroyed is gone with everything in it, and leaves a ruin that remembers what stood there. Tap a ruin (no tool picked) to build it again as it was, paid from your inventory; Remove clears one. When anything is attacked or destroyed, a warning button shows by the clock with how many ruins and attacks there are: tap it to go to the latest and see the list, with Rebuild all.</dd>
       <dt>Pollution</dt><dd>Machines give off pollution while they work: a miner ${BUILDINGS.miner.pollution} a minute, a furnace ${BUILDINGS.furnace.pollution}, an assembler ${BUILDINGS.assembler.pollution}, and a coal generator ${BUILDINGS.generator.pollution} at full power. Belts, inserters, poles and radars give off none, and an idle machine none. It spreads out from chunk to chunk and the ground takes it in, a lake five times as fast, so a factory has a cloud round it that grows with it and then stops growing. In the map view, the Pollution switch above the build bar tints polluted land red. Stats shows how much is made and taken in a minute, and how much is in the air; machines' panels say how much they give off. Nests that absorb it hatch attackers when enemies are on.</dd>
     </dl>
@@ -747,7 +759,7 @@ function help(el) {
     <h2>The map</h2>
     <dl>
       <dt>Endless</dt><dd>The map goes on in every direction. There's a patch of each ore round the start (iron is blue, copper orange, coal black and stone pale sand) and a lake a little further out. Further away, patches are spread out, and bigger and richer the further they are from the start. Nothing can be built on water.</dd>
-      <dt>Map view</dt><dd>Zoom far out (pinch, or scroll) and the playfield turns into the map: flat colours, ore brighter where more is left, buildings as blocks. It only shows charted land: what you've looked at on the playfield, and what radars have scanned. The rest is fog. Tap the map to zoom in there.</dd>
+      <dt>Map view</dt><dd>Zoom far out (pinch, or scroll) and the playfield turns into the map: flat colours, ore brighter where more is left, buildings as blocks. It only shows charted land: what you've looked at on the playfield, and what radars have scanned. The rest is fog. Tap the map to zoom in there. Enemy bases have a ring round them, lilac for weak, pink for medium and red for strong, by how many units they have; tap one (or a nest on the playfield) to see its nests' health, its units and what they're doing.</dd>
       <dt>Radar</dt><dd>Scans the land round it for the map, a chunk (32 × 32 tiles) at a time, nearest first, out to ${RADAR_TILES} tiles. Each chunk takes ${RADAR_SECONDS} s at full power, and it uses ${RADAR_KW} kW while it scans; the dish turns while it works. Tap it to see how far it has got.</dd>
       <dt>Seeds</dt><dd>Add <code>?seed=42</code> (any number or word) to the /play address to start a new game on that map; the same seed always gives the same map.</dd>
     </dl>

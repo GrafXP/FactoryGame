@@ -35,6 +35,12 @@ export const MILESTONES = [
     unlocks: { buildings: ["assembler", "sorter"], recipes: [] },
   },
   {
+    name: "Defense",
+    about: "Make magazines in an assembler and bricks for walls, to hold a line against the nests, then push into them.",
+    needs: { "firearm-magazine": 50, "stone-brick": 100 },
+    unlocks: { buildings: [], recipes: ["piercing-magazine"] },
+  },
+  {
     name: "Circuit production",
     about: "Build a line of assemblers that makes circuits on its own, and belt them to the HUB.",
     needs: { "electronic-circuit": 150 },

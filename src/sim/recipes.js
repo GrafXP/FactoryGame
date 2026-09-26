@@ -26,6 +26,7 @@ export const FUEL_ENERGY = {
 // hand-craft all of them, HAND_SPEED times as fast.
 export const RECIPES = {
   "firearm-magazine": { in: { "iron-plate": 4 }, n: 1, time: 120 },
+  "piercing-magazine": { in: { "firearm-magazine": 1, "copper-plate": 2, "iron-gear": 1 }, n: 1, time: 180 },
   "iron-gear": { in: { "iron-plate": 2 }, n: 1, time: 120 },
   "copper-cable": { in: { "copper-plate": 1 }, n: 2, time: 60 },
   "electronic-circuit": { in: { "iron-plate": 1, "copper-cable": 3 }, n: 1, time: 150 },

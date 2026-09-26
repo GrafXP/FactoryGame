@@ -460,8 +460,7 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
         return rebuildRuins([ruinAt(world, t.x, t.y)]);
       } else {
         inspected = tileAt(world, t.x, t.y);
-        onInspect?.(inspected);
-        if (inspected?.nest) onMessage?.("A nest. It takes in the pollution that reaches it and hatches units that attack the factory.");
+        onInspect?.(inspected); // a nest's opens its base's panel
       }
       refresh();
     },

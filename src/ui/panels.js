@@ -325,15 +325,15 @@ const PANELS = {
     html: () => `${heading("Wall")}<p class="meta">Stone walls join their neighbours and block enemies. They repair after 10 seconds without damage.</p>`,
   },
   turret: {
-    key: (t, world) => `${t.status} ${JSON.stringify(t.ammo)} ${t.shots} ${t.kills} ${t.damage} ${world.inventory.version}`,
+    key: (t, world) => `${t.status} ${!!t.nest} ${JSON.stringify(t.ammo)} ${t.shots} ${t.kills} ${t.damage} ${world.inventory.version}`,
     html: (t, world) => {
       const adds = addButtons(Object.keys(AMMO), world.inventory, id => turretRoom(t, id));
       return `${heading("Gun turret")}
-        <p class="status" data-status="${t.status}">${t.status === "no-ammo" ? "Out of ammunition" : t.status === "working" ? "Firing at enemies" : "Watching for enemies"}</p>
+        <p class="status" data-status="${t.status}">${t.status === "no-ammo" ? "Out of ammunition" : t.status !== "working" ? "Watching for enemies" : t.nest ? "Firing at a nest" : "Firing at enemies"}</p>
         ${amountBar()}<ul class="items slots">${slotRow("Magazines", t.ammo, 'data-slot="ammo"')}</ul>
         ${adds ? `<div class="actions">${adds}</div>` : ""}
         <p class="meta">${t.shots} shots loaded · ${t.kills} kills · ${t.damage} damage dealt</p>
-        <p class="meta">Range ${BUILDINGS.turret.range} tiles. Needs no power. Each magazine has 10 shots; belts and inserters stock up to 5 magazines, or load 10 by hand. The loaded magazine stays here; dismantling loses its remaining shots.</p>`;
+        <p class="meta">Range ${BUILDINGS.turret.range} tiles. Needs no power. It shoots the nearest enemy, and a nest in range once no enemies are. Each magazine has 10 shots, piercing ones harder and through armour; it holds one kind at a time. Belts and inserters stock up to 5 magazines, or load 10 by hand. The loaded magazine stays here; dismantling loses its remaining shots.</p>`;
     },
   },
   generator: {

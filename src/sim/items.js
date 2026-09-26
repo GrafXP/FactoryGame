@@ -5,6 +5,7 @@ import { ORE } from "./map.js";
 // item is drawn, on belts and in icons: a rock unless it says otherwise.
 export const ITEMS = {
   "firearm-magazine": { name: "Firearm magazine", plural: "Firearm magazines", shape: "magazine" },
+  "piercing-magazine": { name: "Piercing magazine", plural: "Piercing magazines", shape: "magazine" },
   "iron-ore": { name: "Iron ore" },
   "copper-ore": { name: "Copper ore" },
   coal: { name: "Coal" },

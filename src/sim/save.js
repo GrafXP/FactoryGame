@@ -10,15 +10,15 @@
 // is, since a craft under way has taken its ingredients, and so are progress
 // towards the HUB's milestones and the production statistics (not the machines'
 // activity, which is only the last minute), and the enemies: whether they're on,
-// evolution, the nests that have taken in pollution or been destroyed, the units and
-// groups out and the paths they're waiting for, with the buildings they've damaged
-// and the ruins of those they've destroyed.
+// evolution, the nests that have taken in pollution, been hit, been destroyed or
+// been founded, the units and groups out and the paths they're waiting for, with the
+// buildings they've damaged and the ruins of those they've destroyed.
 //
 // SAVE_VERSION goes up whenever the format changes. Add a step to MIGRATIONS that
 // turns a save of the old version into the next one, so old saves keep loading.
 import { createWorld, addEntity, canFit, initialState } from "./world.js";
 import { CHUNK, LIMIT, chunkKey, keyChunk, newChunk, getChunk, markNests } from "./chunks.js";
-import { WATER } from "./map.js";
+import { NEST, WATER } from "./map.js";
 import { SCAN, SCAN_ORDER } from "./radar.js";
 import { BUILDINGS, DIRS } from "./buildings.js";
 import { ITEMS } from "./items.js";
@@ -29,12 +29,12 @@ import { SWING } from "./inserter.js";
 import { usesPower } from "./power.js";
 import { MILESTONES } from "./progress.js";
 import { SERIES_LEN, NOT_ITEMS } from "./stats.js";
-import { enemyState, addUnit, nestOf, saveSearch, loadSearch, UNITS } from "./enemies.js";
+import { enemyState, addUnit, nestOf, saveSearch, loadSearch, UNITS, NEST_HEALTH, EXPANSION, FOUNDED } from "./enemies.js";
 import { AMMO } from "./turret.js";
-import { maxHealth } from "./health.js";
+import { maxHealth, REPAIR_AFTER } from "./health.js";
 
 export const SAVE_FORMAT = "factory-save";
-export const SAVE_VERSION = 11;
+export const SAVE_VERSION = 12;
 
 // What a save from before power gets, so its stopped machines can be started
 // again: the parts for a coal generator and ten poles, and coal to burn.
@@ -68,8 +68,8 @@ export const MIGRATIONS = {
   },
   // 5 added the HUB and its milestones, which lock buildings until they're reached.
   // A save from before was built without them, so it gets everything unlocked and
-  // only the last milestone, the goal, still to do.
-  4: (data) => ({ ...data, progress: { milestone: MILESTONES.length - 1, delivered: {} } }),
+  // only the last milestone, the goal, still to do: the fourth, as there were then.
+  4: (data) => ({ ...data, progress: { milestone: 3, delivered: {} } }),
   // 6 added underground belts, splitters and sorters. A version 5 save has none,
   // so it loads as it is.
   5: (data) => data,
@@ -112,6 +112,23 @@ export const MIGRATIONS = {
   9: (data) => ({ ...data, enemies: saveEnemies(enemyState(data.seed)), damaged: [], ruins: [] }),
   // 11 adds turrets and magazines; existing worlds keep their enemy preference.
   10: (data) => data,
+  // 12 gave nests health and let bases spread: nests with state are whole, groups
+  // out are attacking, no nests have been founded yet and the first try is ten
+  // minutes off, and turrets aim at no nest. A new milestone 4, Defense, came
+  // before circuit production: a save that had got past milestone 3 counts it done.
+  11: (data) => ({
+    ...data,
+    progress: { ...data.progress, milestone: Math.min(MILESTONES.length, data.progress.milestone + (data.progress.milestone >= 3 ? 1 : 0)) },
+    entities: data.entities.map((e) => (e.type === "turret" ? { ...e, nest: 0 } : e)),
+    enemies: {
+      ...data.enemies,
+      expandAt: data.tick + EXPANSION.every,
+      founded: [],
+      nests: data.enemies.nests.map((n) => ({ ...n, hp: NEST_HEALTH, hit: -REPAIR_AFTER })),
+      groups: data.enemies.groups.map((g) => ({ ...g, kind: "attack" })),
+      search: data.enemies.search && { ...data.enemies.search, solid: false },
+    },
+  }),
 };
 
 // A save that can't be loaded. The message is written for the player.
@@ -165,8 +182,10 @@ function saveEnemies(en) {
     rand: en.rand,
     nextId: en.nextId,
     absorbed: en.absorbed,
-    nests: [...en.nests].map(([id, s]) => ({ id, points: s.points, home: Uint8Array.from(s.home), next: s.next, group: s.group })),
+    nests: [...en.nests].map(([id, s]) => ({ id, points: s.points, home: Uint8Array.from(s.home), next: s.next, group: s.group, hp: s.hp, hit: s.hit })),
     dead: Float64Array.from([...en.dead].sort((a, b) => a - b)),
+    founded: [...en.founded.values()].map(({ id, x, y }) => ({ id, x, y })),
+    expandAt: en.expandAt,
     units: [...en.units.values()].map(({ key, ...u }) => u),
     groups: [...en.groups.values()].map((g) => ({ ...g, goal: { ...g.goal }, path: g.path && g.path.slice(), units: [...g.units] })),
     queue: [...en.queue],
@@ -181,6 +200,9 @@ function savePollution(world) {
 
 // The items in { item: n } with a count, since stats keep the rest at 0.
 const counted = (items) => Object.fromEntries(Object.entries(items).filter(([, n]) => n > 0));
+
+// What's saved of a turret besides its magazines.
+const TURRET_KEYS = ["loaded", "shots", "cool", "target", "nest", "aim", "fired", "kills", "damage", "warned", "status"];
 
 function saveEntity(e) {
   const out = { id: e.id, type: e.type, x: e.x, y: e.y, rot: e.rot };
@@ -202,7 +224,7 @@ function saveEntity(e) {
   }
   if (e.type === "generator") Object.assign(out, { fuel: e.fuel && { item: e.fuel.item, n: e.fuel.n }, burn: e.burn, status: e.status });
   if (e.type === "turret") {
-    for (const key of ["loaded", "shots", "cool", "target", "aim", "fired", "kills", "damage", "warned", "status"]) out[key] = e[key];
+    for (const key of TURRET_KEYS) out[key] = e[key];
     out.ammo = e.ammo && { ...e.ammo };
   }
   if (e.type === "radar") Object.assign(out, { next: e.next, progress: e.progress, status: e.status });
@@ -253,6 +275,7 @@ function load(data) {
   world.tick = tick;
   check(enemies?.dead instanceof Float64Array && enemies.dead.every((id) => Number.isSafeInteger(id)), "bad nests");
   for (const id of enemies.dead) world.enemies.dead.add(id); // before any chunk is made, so they stay gone
+  loadFounded(world, enemies.founded); // likewise, so they're there
   for (const c of map.chunks) {
     const key = checkChunkAt(c?.cx, c?.cy);
     check(!world.chunks.has(key), "a map chunk twice");
@@ -308,10 +331,10 @@ function load(data) {
     if (s.type === "turret") {
       check(s.ammo === null || (Object.hasOwn(AMMO, s.ammo?.item) && Number.isInteger(s.ammo.n) && s.ammo.n > 0 && s.ammo.n <= BUILDINGS.turret.stack), `${where}: bad ammo`);
       check(Number.isInteger(s.shots) && s.shots >= 0 && (s.shots === 0 ? s.loaded === null : Object.hasOwn(AMMO, s.loaded) && s.shots < AMMO[s.loaded].shots), `${where}: bad loaded magazine`);
-      check(["cool", "target", "kills", "damage"].every(k => Number.isSafeInteger(s[k]) && s[k] >= 0) && s.cool <= BUILDINGS.turret.rate, `${where}: bad turret`);
+      check(["cool", "target", "nest", "kills", "damage"].every(k => Number.isSafeInteger(s[k]) && s[k] >= 0) && s.cool <= BUILDINGS.turret.rate, `${where}: bad turret`);
       check(Number.isFinite(s.aim) && Number.isSafeInteger(s.fired) && s.fired >= -1 && s.fired <= tick && Number.isSafeInteger(s.warned) && s.warned >= -600 && s.warned <= tick, `${where}: bad turret timing`);
       check(["working", "idle", "no-ammo"].includes(s.status), `${where}: bad turret status`);
-      for (const key of ["loaded", "shots", "cool", "target", "aim", "fired", "kills", "damage", "warned", "status"]) e[key] = s[key];
+      for (const key of TURRET_KEYS) e[key] = s[key];
       e.ammo = s.ammo && { ...s.ammo };
     }
     if (s.type === "radar") {
@@ -454,25 +477,44 @@ function loadHealth(world, damaged, ruins) {
   }
 }
 
+// The nests groups have founded, destroyed ones too: on the map, the living ones
+// apart from each other, with ids from FOUNDED up.
+function loadFounded(world, list) {
+  const en = world.enemies;
+  check(Array.isArray(list), "bad founded nests");
+  for (const n of list) {
+    check(Number.isSafeInteger(n?.id) && n.id >= FOUNDED && !en.founded.has(n.id), "bad founded nest");
+    check(Number.isInteger(n.x) && Number.isInteger(n.y) && Math.abs(n.x) < LIMIT && Math.abs(n.y) < LIMIT, "bad founded nest");
+    const alive = (m) => !en.dead.has(m.id);
+    const overlaps = alive(n) && [...en.founded.values()].some((m) => alive(m) && Math.abs(m.x - n.x) < NEST && Math.abs(m.y - n.y) < NEST);
+    check(!overlaps, "bad founded nest");
+    en.founded.set(n.id, { id: n.id, x: n.x, y: n.y });
+    world.nests.set(n.id, en.founded.get(n.id));
+  }
+}
+
 // The enemies: nests with state, units and the groups they're in, all pointing at
 // each other the right way.
 function loadEnemies(world, s) {
   const en = world.enemies;
   check(typeof s.on === "boolean" && Number.isFinite(s.evolution) && s.evolution >= 0 && s.evolution < 1, "bad enemies");
   check(Number.isInteger(s.rand) && s.rand >= 0 && Number.isInteger(s.nextId) && s.nextId > 0, "bad enemies");
-  check(Number.isSafeInteger(s.absorbed) && s.absorbed >= 0, "bad enemies");
-  Object.assign(en, { on: s.on, evolution: s.evolution, rand: s.rand >>> 0, nextId: s.nextId, absorbed: s.absorbed });
+  check(Number.isSafeInteger(s.absorbed) && s.absorbed >= 0 && Number.isSafeInteger(s.expandAt), "bad enemies");
+  Object.assign(en, { on: s.on, evolution: s.evolution, rand: s.rand >>> 0, nextId: s.nextId, absorbed: s.absorbed, expandAt: s.expandAt });
+  check([...en.founded.keys()].every((id) => id < FOUNDED + s.nextId), "bad founded nest");
   const kind = (k) => Number.isInteger(k) && k >= 0 && k < UNITS.length;
   check(Array.isArray(s.nests) && Array.isArray(s.units) && Array.isArray(s.groups) && Array.isArray(s.queue), "bad enemies");
   for (const n of s.nests) {
     check(nestOf(world, n?.id) && !en.dead.has(n.id) && !en.nests.has(n.id), "bad nest");
     check(Number.isSafeInteger(n.points) && n.points >= 0 && n.home instanceof Uint8Array && [...n.home].every(kind), "bad nest");
     check((n.next === -1 || kind(n.next)) && Number.isInteger(n.group) && n.group >= 0, "bad nest");
-    en.nests.set(n.id, { points: n.points, home: [...n.home], next: n.next, group: n.group });
+    check(Number.isInteger(n.hp) && n.hp > 0 && n.hp <= NEST_HEALTH && Number.isSafeInteger(n.hit), "bad nest");
+    en.nests.set(n.id, { points: n.points, home: [...n.home], next: n.next, group: n.group, hp: n.hp, hit: n.hit });
   }
   for (const g of s.groups) {
     check(Number.isInteger(g?.id) && g.id > 0 && g.id < s.nextId && !en.groups.has(g.id) && nestOf(world, g.nest), "bad group");
     check(["plan", "go", "home"].includes(g.mode) && Number.isInteger(g.target) && Number.isInteger(g.hit), "bad group");
+    check(["attack", "defend", "expand"].includes(g.kind) && (g.kind !== "expand" || g.target === 0), "bad group");
     check(g.path === null || (g.path instanceof Int32Array && g.path.length >= 2 && g.path.length % 2 === 0), "bad group");
     check(["x", "y", "w", "h"].every((k) => Number.isInteger(g.goal?.[k])) && Array.isArray(g.units) && g.units.length, "bad group");
     check(g.mode !== "go" || g.path, "bad group");

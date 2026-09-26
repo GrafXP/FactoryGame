@@ -14,7 +14,8 @@
 // Enemy nests (map.js, enemies.js) come with the land: when a chunk is made, the
 // tiles of every nest reaching into it that hasn't been destroyed get NEST_ID
 // instead of a building's id, so nothing can be built there, and the chunk lists
-// them in `nests`. world.nests keeps each nest seen so far ({ id, x, y }, by id).
+// them in `nests`. So do the nests enemies have founded since (enemies.js,
+// world.enemies.founded). world.nests keeps each nest seen so far ({ id, x, y }, by id).
 //
 // world.charted holds the chunks the map view shows (their keys, see chunkKey):
 // the ones the player has looked at, and the ones radars have scanned (radar.js).
@@ -64,10 +65,21 @@ export function markNests(world, c) {
     if (world.enemies.dead.has(n.id)) continue;
     let nest = world.nests.get(n.id);
     if (!nest) world.nests.set(n.id, (nest = n));
-    c.nests.push(nest);
-    for (let y = Math.max(n.y, y0); y < Math.min(n.y + NEST, y0 + CHUNK); y++) {
-      for (let x = Math.max(n.x, x0); x < Math.min(n.x + NEST, x0 + CHUNK); x++) c.ids[tileIndex(x, y)] = NEST_ID;
-    }
+    markNest(c, nest);
+  }
+  for (const n of world.enemies.founded.values()) {
+    if (world.enemies.dead.has(n.id)) continue;
+    if (n.x + NEST > x0 && n.x < x0 + CHUNK && n.y + NEST > y0 && n.y < y0 + CHUNK) markNest(c, n);
+  }
+}
+
+// Marks the tiles of nest n that are in chunk c, and lists it there.
+export function markNest(c, n) {
+  const x0 = c.cx * CHUNK;
+  const y0 = c.cy * CHUNK;
+  c.nests.push(n);
+  for (let y = Math.max(n.y, y0); y < Math.min(n.y + NEST, y0 + CHUNK); y++) {
+    for (let x = Math.max(n.x, x0); x < Math.min(n.x + NEST, x0 + CHUNK); x++) c.ids[tileIndex(x, y)] = NEST_ID;
   }
 }
 

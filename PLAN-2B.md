@@ -250,7 +250,7 @@ The answer to phase 17, and the first HUB milestone that isn't about the factory
 - [ ] A turret with no ammo says so, and an alert says so while enemies are near it.
 - [ ] Walls in front of turrets take the damage, and repair themselves afterwards.
 
-### Phase 19: Pushing back
+### Phase 19: Pushing back ✅ (done)
 Defense holds the line. This phase lets the player take land back, and makes the
 enemies push too.
 - **Clearing nests.** Nests have health and fight back: their guards come out when a
@@ -266,6 +266,63 @@ enemies push too.
   unlocks piercing magazines. Circuit production moves to milestone 5.
 - **Map markers.** Bases on the map view are coloured by how strong they are, and a
   tap on one shows its nests and units.
+- Done as: nest health, defence and expansion in `sim/enemies.js`, nest targeting and
+  piercing ammunition in `sim/turret.js`, `ui/base.js` for the base panel.
+  - **Nests** have 500 health (no armour) in their state, which now also has `hp` and
+    `hit`; they mend 2% a second once not hit for 10 s. A nest's state starts with
+    3 mites at home (its guards), whether it wakes from pollution or from being shot.
+    A turret with no unit in range shoots the nearest nest in range (to the nest's
+    nearest tile), and keeps to it; it looks for nests again only when `mapVersion`
+    changes (`looked`, not saved). Kills count nests. Every hit on a nest makes each
+    nest of its base (the map square's nests, or a founded nest on its own) send
+    everything at home at that turret as a `defend` group, or add it to its
+    defenders already out. At 0 the nest is destroyed (as in phase 17) with a "Nest
+    destroyed" alert, or "Enemy base cleared" for the last of a base. Tried headless:
+    4 turrets clear a quiet 2-nest base in under 10 s; a 4-nest base holding 105 mites
+    overruns 4 bare turrets, and falls to 8 walled ones in under 30 s (under 20 s with
+    piercing), with no losses.
+  - **Peaceful mode**: turrets still shoot nests, and then only defenders (units of a
+    `defend` group), which fight back as in the enemies-on game. Other groups are
+    neither shot nor turned on the turret.
+  - **Groups** have a `kind`: attack, defend or expand. **Expansion**: once every ~10
+    minutes at evolution 0 (±25%, down to 40% of that at evolution 1), a random nest
+    with no group out and at least 3 + 5 units at home sends 5 of them to a spot 16–48
+    tiles away (12 random tries) that's outside the safe zone, on dry land, 2+ tiles
+    from any nest, and with no building or ruin within 30 tiles. Their path goes
+    round buildings (a `solid` search); a building in the way, or on the spot's
+    ground rules when they get there, sends them home. Once all have arrived they
+    found a nest (a base of its own, ids from 2^40, kept in `world.enemies.founded`
+    and saved, destroyed ones too) and stay in it. It happens in peaceful mode too.
+    Headless, a fed base next to a small factory founds 5 nests in an hour, all
+    50+ tiles from the buildings, and the hour takes ~0.25 s to simulate.
+  - **Spitters** look along their path every 4 ticks and stop to spit at the first
+    building in the way within their 12 tiles, so they hit walls from behind the
+    melee units; they still shoot over walls at their target once it's in reach.
+  - **Piercing magazine**: a firearm magazine, 2 copper plates and a gear, 3 s in an
+    assembler; 10 shots of 8, ignoring 3 of the target's armour (firearm: 6, none).
+    Against a brute (armour 4) that's 7 a shot to 2, so ~3.5× faster (tested).
+  - **Milestone 4, Defense**, asks for 50 firearm magazines and 100 stone bricks,
+    and unlocks piercing magazines; circuit production is milestone 5. Bricks stand in
+    for the walls the plan asked for, since walls are buildings, not items; that
+    comes back when military science needs walls (phase 21).
+  - **Map view**: a ring round each charted base, lilac/pink/red for under 10 / under
+    50 / 50+ units (a sleeping nest counts its 3 guards). A tap near a ring (or on a
+    nest on the playfield) opens the base panel: each nest's health and units at
+    home, units by kind and what the ones out are doing, evolution, and Go there.
+    Expansion groups aren't drawn as attacks.
+  - The realistic example makes piercing magazines too, from half the magazine belt
+    (a splitter), gears from the gear store and copper the circuit line can't take.
+  - Save format 12: nest health, group kinds, founded nests, the next expansion, the
+    search's `solid` and turrets' `nest`. A format 11 save gets whole nests, attack
+    groups and its first expansion try 10 minutes on, and one past milestone 3
+    (circuit production then) counts Defense as done.
+  - Automated: 12 new tests (turret creep and its alerts, defenders, clear land after
+    forgetting and loading, save/load mid-fight and mid-expansion, mending, peaceful
+    rules, piercing against brutes, the milestone and migration, an hour of spreading,
+    a founding called off by a new building, spitters at a wall, base markers and
+    the panel's numbers). Full suite: 234 tests. The benchmark tick is unchanged
+    (0.54 ms). The phone checks below are still manual: the rings, panel and alerts
+    were only checked headless, not on a screen.
 - [ ] A base cleared with turret creep stays clear, and the land can be built on.
 - [ ] Left alone for an hour, bases spread, but never into the safe zone or onto the factory.
 - [ ] Piercing magazines kill brutes clearly faster than firearm magazines do.

@@ -10,7 +10,7 @@ export const CATEGORIES = [
 ];
 
 export const ABOUT = {
-  turret: "Shoots enemies within 18 tiles. Feed firearm magazines by belt or inserter. Needs no power.",
+  turret: "Shoots enemies, and nests, within 18 tiles. Feed it magazines by belt, inserter or hand. Needs no power.",
   wall: "Protects the factory with stone bricks. Drag to build a connected line.",
   hub: "Where you deliver items to reach milestones, which unlock new buildings. You can only have one.",
   belt: "Carries items the way it points. Drag to lay a line.",
@@ -21,7 +21,7 @@ export const ABOUT = {
   miner: "Digs the ore under it, one piece a second. Needs power.",
   furnace: "Smelts ore into plates, burning coal.",
   chest: "Stores up to 5000 items.",
-  assembler: "Makes gears, cables, circuits or ammunition from what it's given. Tap it to pick which. Needs power.",
+  assembler: "Makes gears, cables, circuits or magazines from what it's given. Tap it to pick which. Needs power.",
   generator: "Burns coal to power the machines on its poles' network: 600 kW.",
   pole: "Carries power to machines within 3 tiles, and wires itself to poles up to 7 tiles away.",
   radar: "Scans the land round it, a chunk at a time, so it shows on the map (zoom far out). Needs power.",

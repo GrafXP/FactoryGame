@@ -119,7 +119,9 @@ export function realisticWorld() {
   build("inserter", -11, 6, 1);
   setRecipe(build("assembler", -10, 6), "firearm-magazine", world.inventory);
   build("inserter", -7, 6, 1);
-  horizontal(-6, 8, 6);
+  horizontal(-6, -5, 6);
+  build("splitter", -4, 6, 1); // half the magazines north, to the armoury, while it has room
+  horizontal(-3, 8, 6);
   build("underground", 9, 6, 1);
   build("underground", 13, 6, 1, { end: "out" });
   horizontal(14, 23, 6);
@@ -130,13 +132,27 @@ export function realisticWorld() {
   build("turret", 26, 6);
   for (let x = 24; x <= 29; x++) build("wall", x, 1);
 
+  // The armoury: piercing magazines from half the magazines on the ammunition belt,
+  // gears from the gear store and copper the circuit line has no room for, which
+  // leaves the copper sorter north, under the iron line and along to it.
+  build("belt", -17, 11, 1);
+  vertical(-16, 8, 11, 0);
+  build("underground", -16, 7, 0);
+  build("underground", -16, 5, 0, { end: "out" });
+  horizontal(-16, -6, 4);
+  setRecipe(build("assembler", -5, 2), "piercing-magazine", world.inventory);
+  build("inserter", -4, 1, 2);
+  build("belt", -4, 5, 0);
+  build("inserter", -2, 3, 1);
+  build("chest", -1, 3);
+
   // Poles follow service corridors beside the machines and the power yard.
   // The intermediate poles tie the smelters, fabrication and radar together.
   const poles = [];
   for (let x = -33; x <= 9; x += 6) poles.push([x, -15]);
   for (const y of [-3, 9]) for (let x = -31; x <= 29; x += 6) poles.push([x === 11 ? 12 : x, y]);
   for (const x of [-31, -13, 5, 29]) poles.push([x, 3]);
-  poles.push([-31, -9], [-25, -9], [-31, 15], [-25, 16], [-31, 21], [-25, 21], [-31, 27]);
+  poles.push([-31, -9], [-25, -9], [-31, 15], [-25, 16], [-31, 21], [-25, 21], [-31, 27], [-2, 1]);
   for (const [x, y] of poles) build("pole", x, y);
   world.inventory.items = {};
   give(world.inventory, { "iron-plate": 200, "copper-plate": 100, "iron-gear": 50, "copper-cable": 100, "electronic-circuit": 30, stone: 100, coal: 50 });

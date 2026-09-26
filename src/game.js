@@ -1,4 +1,5 @@
 import { createWorld, step, tileAt, TICK_RATE } from "./sim/world.js";
+import { baseNear } from "./sim/enemies.js";
 import { createView, DEFAULT_ZOOM } from "./render/view.js";
 import { chartArea, forgetChunks } from "./sim/chunks.js";
 import { createControls } from "./render/controls.js";
@@ -21,11 +22,12 @@ const KEEP_CHUNKS = 256; // below this many chunks, nothing is let go of
 //
 // What the player looks at on the playfield gets charted, as the land round a
 // Factorio character does, so the map view shows it. The map view is for looking:
-// a tap on it zooms in there, and nothing is built from it. onMapMode(on) is told
-// when it goes in and out of the map view (and once at the start).
+// a tap on an enemy base's ring calls onBase(key) with the base's key (enemies.js),
+// a tap anywhere else zooms in there, and nothing is built from it. onMapMode(on) is
+// told when it goes in and out of the map view (and once at the start).
 export function createGame(
   container,
-  { theme = "dark", world = null, seed, enemies = true, afterStep, onTick, onStats, onInspect, onTileHover, onBuildChange, onMessage, onMapMode } = {},
+  { theme = "dark", world = null, seed, enemies = true, afterStep, onTick, onStats, onInspect, onTileHover, onBuildChange, onMessage, onMapMode, onBase } = {},
 ) {
   world ||= createWorld({ seed, enemies });
   const view = createView(container, world, { theme });
@@ -43,7 +45,7 @@ export function createGame(
   const chartView = () => {
     if (view.mapMode !== wasMap) onMapMode?.((wasMap = view.mapMode));
     if (view.mapMode) {
-      if (!toldMap) onMessage?.("The map: only land you've seen or a radar has scanned shows. Tap it to zoom in there.");
+      if (!toldMap) onMessage?.("The map: only land you've seen or a radar has scanned shows. Tap it to zoom in there, or tap an enemy base's ring to see it.");
       toldMap = true;
       return;
     }
@@ -60,8 +62,10 @@ export function createGame(
       onTileHover?.(p && tileAt(world, Math.floor(p.x), Math.floor(p.y)));
     },
     onTap(p, pointerType) {
-      if (view.mapMode) view.cam.zoomTo(p.x, p.y, DEFAULT_ZOOM);
-      else builder.tap(p, pointerType);
+      if (!view.mapMode) return builder.tap(p, pointerType);
+      const base = baseNear(world, p.x, p.y, Math.max(12, view.cam.zoom / 16));
+      if (base !== null) onBase?.(base);
+      else view.cam.zoomTo(p.x, p.y, DEFAULT_ZOOM);
     },
     canPaint: (p) => !view.mapMode && builder.canPaint(p),
     onPaint: { start: builder.paintStart, move: builder.paintMove, end: builder.paintEnd, cancel: builder.paintCancel },
