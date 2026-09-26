@@ -17,6 +17,9 @@ import { createBuildMenu } from "./ui/build-menu.js";
 import { createResources } from "./ui/resources.js";
 import { createEntityPanel } from "./ui/panels.js";
 import { createStatsPanel } from "./ui/stats.js";
+import { createResearchPanel, effectsOf } from "./ui/research.js";
+import { TECHS } from "./sim/tech.js";
+import { buildingUnlocked } from "./sim/progress.js";
 import { createAlerts } from "./ui/alerts.js";
 import { createBasePanel } from "./ui/base.js";
 import { setEnemies, baseKey, nestAt, NEST_HEALTH, EXPANSION } from "./sim/enemies.js";
@@ -299,13 +302,13 @@ const speedLabel = (s) => `${s === 0.5 ? "½" : s}×`;
 // `bench` (its name), the benchmark factory `world`, whose `sinks` are drained
 // after every tick, never saving it.
 //
-// Top: Back, the clock, Stats, Undo and Pause, under them the resource bar (tap it
-// for the inventory), and under that the goal card (ui/goal.js; tap it for the
-// HUB). A banner drops in when a milestone is reached. Bottom: the build controls
+// Top: Back, the clock, Stats, Research (once labs are unlocked), Undo and Pause,
+// under them the resource bar (tap it for the inventory), and under that the goal
+// card (ui/goal.js; tap it for the HUB, or for Research once the HUB is done). A banner drops in when a milestone is reached. Bottom: the build controls
 // (ui/build-menu.js), with toasts and readouts stacked above them (in the map view,
 // the switch for the pollution overlay). Right: panels
-// for the tapped building, the inventory, production stats (ui/stats.js), alerts
-// (ui/alerts.js) and a tapped enemy base (ui/base.js).
+// for the tapped building, the inventory, production stats (ui/stats.js), research
+// (ui/research.js), alerts (ui/alerts.js) and a tapped enemy base (ui/base.js).
 // Pause holds the settings: game speed, enemies, theme, fullscreen, debug info.
 function playWorld(el, { world, seed, enemies = true, isNew = false, bench = null, sinks = [] }) {
   const $ = html(
@@ -317,6 +320,7 @@ function playWorld(el, { world, seed, enemies = true, isNew = false, bench = nul
           <div class="score"><b id="clock">0:00</b><span id="status">Running</span></div>
           <button class="icon-btn alert-btn" id="alerts" aria-label="Alerts" aria-expanded="false" hidden>${icon("alert")}<span class="badge" id="alert-count" hidden></span></button>
           <button class="icon-btn" id="stats" aria-label="Production stats (G)" title="Production stats (G)" aria-pressed="false">${icon("stats")}</button>
+          <button class="icon-btn" id="research" aria-label="Research (L)" title="Research (L)" aria-pressed="false" hidden>${icon("research")}</button>
           <button class="icon-btn" id="undo" aria-label="Undo (Z)" title="Undo (Z)" disabled>${icon("undo")}</button>
           <button class="icon-btn" id="pause" aria-label="Pause (P)">${icon("pause")}</button>
         </div>
@@ -334,6 +338,7 @@ function playWorld(el, { world, seed, enemies = true, isNew = false, bench = nul
           <div id="craft"></div>
         </div>
         <div class="panel" id="stats-panel" hidden></div>
+        <div class="panel" id="research-panel" hidden></div>
         <div class="panel" id="alerts-panel" hidden></div>
         <div class="panel" id="base-panel" hidden></div>
       </div>
@@ -413,6 +418,7 @@ function playWorld(el, { world, seed, enemies = true, isNew = false, bench = nul
       if (hub) game.focus(hub);
       else menu.open("base");
     },
+    research: () => toggleResearch(true),
   });
   let reached = world?.progress.milestone ?? 0;
   const banner = $("#banner");
@@ -461,10 +467,27 @@ function playWorld(el, { world, seed, enemies = true, isNew = false, bench = nul
   const toggleStats = (show) => $("#stats").setAttribute("aria-pressed", statsPanel.toggle(show));
   $("#stats").addEventListener("click", () => toggleStats());
 
+  // Research: the panel, and its button once there's anything to research with.
+  const researchPanel = createResearchPanel($("#research-panel"), { close: () => toggleResearch(false), toast });
+  const toggleResearch = (show) => $("#research").setAttribute("aria-pressed", researchPanel.toggle(show));
+  $("#research").addEventListener("click", () => toggleResearch());
+  let researchDone = -1;
+  const syncResearch = (world) => {
+    researchPanel.sync(world);
+    $("#research").hidden = !buildingUnlocked(world, "lab") && !world.research.done.size;
+    const n = world.research.done.size;
+    if (researchDone >= 0 && n > researchDone) {
+      const id = [...world.research.done].at(-1);
+      toast(`Research done: ${TECHS[id].name}. ${effectsOf(id).join(". ")}.`);
+    }
+    researchDone = n;
+  };
+
   const entityPanel = createEntityPanel($("#entity"), {
     close: () => game.builder.closeInspect(),
     changed: () => syncInventory(game.world),
     toast,
+    research: () => toggleResearch(true),
   });
   const basePanel = createBasePanel($("#base-panel"), {
     go: (x, y) => game.lookAt(x, y),
@@ -518,6 +541,7 @@ function playWorld(el, { world, seed, enemies = true, isNew = false, bench = nul
       entityPanel.sync(world);
       basePanel.sync(world);
       statsPanel.sync(world);
+      syncResearch(world);
       alerts?.sync(world);
       const s = Math.floor(world.tick / TICK_RATE);
       if (s === shownSeconds) return;
@@ -565,6 +589,7 @@ function playWorld(el, { world, seed, enemies = true, isNew = false, bench = nul
   syncInventory(game.world);
   crafting.sync(game.world);
   statsPanel.sync(game.world);
+  syncResearch(game.world);
   // A benchmark shows how big it is instead of the seed.
   const showBench = () => {
     const { buildings, belts, items } = benchCounts(game.world);
@@ -699,6 +724,7 @@ function playWorld(el, { world, seed, enemies = true, isNew = false, bench = nul
     else if (k === "r") game.builder.tool && game.builder.tool !== "remove" && game.builder.rotate();
     else if (k === "i") toggleInventory();
     else if (k === "g") toggleStats();
+    else if (k === "l" && !$("#research").hidden) toggleResearch();
     else if (k === "f") toggleFullscreen();
     else if (k === "t") toggleTheme();
     else if (k === "`") setDebug($("#debug").hidden);
@@ -743,7 +769,7 @@ function help(el) {
     </dl>
     <h2>The screen</h2>
     <dl>
-      <dt>Top</dt><dd>Back to the menu, the game clock, Stats, Undo and Pause. Under them, the resource bar shows everything you carry; tap it (or press I) for the inventory with full names.</dd>
+      <dt>Top</dt><dd>Back to the menu, the game clock, Stats, Research (a flask, once labs are unlocked), Undo and Pause. Under them, the resource bar shows everything you carry; tap it (or press I) for the inventory with full names.</dd>
       <dt>Bottom</dt><dd>Build opens every building, sorted into tabs, with what each one does, what it costs and how many you can afford. Next to it are quick slots for the buildings you picked last, then Select and Remove. The small number on a building is how many you can afford.</dd>
       <dt>Pause</dt><dd>Resume, the game speed (½× to 8×; the line under the clock shows it when it isn't 1×), enemies on or peaceful, light/dark mode, fullscreen, debug info (how fast the game runs, and the tapped tile), and Save and quit.</dd>
     </dl>
@@ -758,12 +784,13 @@ function help(el) {
       <dt>Paste</dt><dd>Copy or Cut picks up the selection as one ghost, placed like a building (touch: tap to put it down, then tap the ghost). It's green where each building fits and you can pay for it, red where not; pasting builds the green ones and says what was skipped. Assembler recipes and sorter settings come along, but not what the buildings held. Rotate turns it. It stays picked so you can paste again, and Select's Paste button (or V) brings back what you copied last.</dd>
       <dt>Undo</dt><dd>The arrow next to Pause (or Z) takes back the last build, removal, cut, paste or rotation, and again for the one before. Undoing a removal builds it again from your inventory.</dd>
       <dt>Moving around</dt><dd>A quick drag always moves the map, even with a tool picked. With a mouse, drag with the right button while laying belts.</dd>
-      <dt>Keys</dt><dd>G production stats, B build menu, 9 HUB, 1 belt, 2 miner, 3 chest, 4 furnace, 5 inserter, 6 assembler, 7 power pole, 8 coal generator, 0 radar, X remove, C select, V paste, R rotate, Z (or Ctrl+Z) undo, Q pick the building under the cursor, Esc put the tool away. With a selection: Ctrl+C copy, Ctrl+X cut, Delete remove.</dd>
+      <dt>Keys</dt><dd>G production stats, L research, B build menu, 9 HUB, 1 belt, 2 miner, 3 chest, 4 furnace, 5 inserter, 6 assembler, 7 power pole, 8 coal generator, 0 radar, X remove, C select, V paste, R rotate, Z (or Ctrl+Z) undo, Q pick the building under the cursor, Esc put the tool away. With a selection: Ctrl+C copy, Ctrl+X cut, Delete remove.</dd>
     </dl>
     <h2>Goals</h2>
     <dl>
       <dt>The HUB</dt><dd>A new game can only build the HUB, furnaces and chests. Build the HUB first (Build → Base); the goal card under the resource bar says what to do next, and tapping it takes you to the HUB. There's only one, and taking it down loses no progress.</dd>
-      <dt>Milestones</dt><dd>Each milestone asks for a batch of items delivered to the HUB: tap the HUB and deliver from your inventory, or run a belt or inserter into it (it only takes what the milestone still needs). Reaching one unlocks new buildings and recipes: 1. Power and mining (miners, belts, generators, poles, inserters), 2. Logistics and defense (underground belts, splitters, long inserters, radars, turrets, walls, circuits and firearm magazines), 3. Assembly (assemblers, sorters, sorting inserters), 4. Defense (magazines and bricks for walls; unlocks piercing magazines), and 5. Circuit production, the goal: 150 circuits, best made by a line of assemblers. Locked buildings show a padlock under Build, with the milestone that unlocks them.</dd>
+      <dt>Milestones</dt><dd>Each milestone asks for a batch of items delivered to the HUB: tap the HUB and deliver from your inventory, or run a belt or inserter into it (it only takes what the milestone still needs). Reaching one unlocks new buildings and recipes: 1. Power and mining (miners, belts, generators, poles, inserters), 2. Logistics and defense (underground belts, splitters, long inserters, radars, turrets, walls, circuits and firearm magazines), 3. Assembly (assemblers, sorters, sorting inserters), 4. Defense (magazines and bricks for walls; unlocks piercing magazines), and 5. Circuit production: 150 circuits, best made by a line of assemblers, which unlocks labs and red science packs. Locked buildings show a padlock under Build, with the milestone or research that unlocks them.</dd>
+      <dt>Research</dt><dd>Once the HUB's milestones are done, research unlocks the rest. Build labs (Build → Base) and feed them science packs: red ones are a copper plate and a gear, green ones two iron plates, a gear and a circuit (what an inserter and a belt are made of), made in assemblers or by hand. The flask at the top (or L), or the goal card, opens Research: what's under way, the queue, and every technology by the packs it takes, with its cost and what it does. Research one, or queue it behind the one under way; one that needs others first queues them too. Every lab works on the research under way, a unit at a time, taking one of each pack it needs for each unit. Technologies unlock recipes and buildings (Green science the green packs, Logistics 2 the sorting inserter), or make gun turrets hit harder and shoot faster and walls tougher.</dd>
     </dl>
     <h2>Items</h2>
     <dl>
@@ -777,16 +804,17 @@ function help(el) {
       <dt>Sorters</dt><dd>A splitter you set: tap it and set each way out (left, front, right) to Any item, one kind of item, or Overflow. An item goes out the ways set to it if there are any, otherwise those set to Any; if they're full, it takes the Overflow. An item nothing will take waits in the middle, holding up the line, and the sorter shows an amber sign. Small icons on the sorter show each way's setting.</dd>
       <dt>Inserters</dt><dd>An inserter swings items from the building behind it into the one in front, the way its arrow points: off a belt into a furnace, out of a furnace onto a belt, chest to chest. It only picks up what the building in front can use, so one inserter can feed a furnace both ore and coal off a mixed belt. It only takes finished plates out of a furnace. A long inserter (red) takes from the building right behind it and drops into the one two tiles in front, reaching over a belt, a pole or a gap in between; it swings a little slower. A sorting inserter (purple) only moves the item you set: tap it to pick one, and the icon over it shows which. Until it's set it shows a question mark and moves nothing.</dd>
       <dt>Assemblers</dt><dd>An assembler makes one thing: gears (2 iron plates each), copper cable (2 from a copper plate), circuits (an iron plate and 3 cables), firearm magazines (4 iron plates) or piercing magazines (a firearm magazine, 2 copper plates and a gear). Tap it (no tool picked) to pick what it makes; the icon over it shows what that is, and a question mark means it hasn't been told. Feed it with inserters and take what it makes out with another, or add and take by hand from its panel. Changing what it makes gives you back what it holds. A line like copper plates → cable assembler → inserter → circuit assembler runs on its own.</dd>
+      <dt>Labs</dt><dd>A lab takes science packs from belts and inserters, ${BUILDINGS.lab.feed} of each at most (${BUILDINGS.lab.stack} by hand), whether the research under way needs them or not. An inserter can pass packs from one lab to the next. The ring round its dome turns while it works, and a question mark over it means nothing is being researched. Its panel says what it's working on or short of, and has a button for Research.</dd>
       <dt>Defense</dt><dd>Gun turrets need no power and shoot enemies within ${BUILDINGS.turret.range} tiles; the ring shown while placing one marks its range. Make firearm magazines by hand or in an assembler from 4 iron plates. Each magazine gives 10 shots. Piercing magazines (from milestone 4) hit harder and mostly ignore armour, so they kill brutes several times faster. A turret holds one kind at a time. Belts and inserters keep 5 magazines in a turret, or load up to 10 by hand. Tap a turret for ammo, kills and damage. An amber sign means empty; an alert warns when enemies are nearby. Enemies turn on the turret that shoots them. Put stone-brick walls in front to absorb melee attacks; drag to build a joined wall line. Walls repair after 10 seconds without a hit. Spitters stop to spit at a wall in their way from 12 tiles off, and can fire over walls at what's behind them; turrets outrange them.</dd>
       <dt>Clearing nests</dt><dd>A gun turret with no enemies in range shoots any nest within its range, so turrets built near a base and loaded from their panel clear it. Each nest has ${NEST_HEALTH} health and mends once it's left alone for 10 s. When one is hit, every nest of its base sends out all its units to attack that turret, so bring several turrets, walls round them and plenty of ammunition: a base near the factory, full of units, is much harder than a quiet one far away. Destroying a nest raises evolution a little. A cleared base's land is free to build on, and any ore under it can be mined.</dd>
       <dt>Power</dt><dd>Miners, inserters and assemblers run on electricity; belts and furnaces don't. A coal generator burns coal to make up to 600 kW, and only burns what's used. Power poles carry it: a pole powers any building within 3 tiles of it (generators included) and wires itself to every pole up to 7 tiles away, and wired poles make one network. While you place something electric, the ground the poles power is tinted blue, and a new pole shows its area and the wires it will get. When the machines on a network ask for more than its generators make, they all slow down by the same amount and show an amber bolt. Tap a pole or a generator to see what its network makes and uses. Feed generators by hand, with an inserter, or straight from a miner on coal.</dd>
       <dt>Crafting by hand</dt><dd>The inventory panel (tap the resource bar) has Craft by hand: +1 or +5 of gears, cable or circuits. Parts you need along the way are crafted first, so a circuit can be made straight from plates. Hands work twice as fast as an assembler, one craft at a time; the bar above the buttons shows progress, and ✕ in the queue calls a craft off and gives back its ingredients. When you pick a building you can't afford, Craft next to Done makes the parts you're missing.</dd>
-      <dt>Inventory</dt><dd>The resource bar shows what you carry. Ore is drawn as a rock, plates as plates, bricks as bricks, gears as gears, cable as a spool and circuits as green boards, each in its own colour. You start with a small kit.</dd>
+      <dt>Inventory</dt><dd>The resource bar shows what you carry. Ore is drawn as a rock, plates as plates, bricks as bricks, gears as gears, cable as a spool, circuits as green boards and science packs as flasks, each in its own colour. You start with a small kit.</dd>
     </dl>
     <h2>Stats</h2>
     <dl>
       <dt>Production</dt><dd>The bar chart button at the top (or G) lists every item made or used over the last minute, 10 minutes or hour: how many a minute, with a graph of both (green made, amber used). Made is what miners dig, furnaces smelt, assemblers make and you mine or craft by hand; used is what furnaces, assemblers and hand-crafts make things from, the coal furnaces and generators burn, and what the HUB is given. Items moved from one building to another count as neither. Under the items, Power shows how many kW the generators made and the machines on their networks asked for (when they ask for more than is made, every machine slows down), and Pollution how much was given off and taken in. The numbers are saved with the game.</dd>
-      <dt>Machines</dt><dd>A miner's, furnace's or assembler's panel says how much of the last minute it spent working, and what held it up the rest of the time (no input, output full, no power…). A machine slowed by a network short of power counts the time it waits as no power. A line that's starved or backed up shows up there.</dd>
+      <dt>Machines</dt><dd>A miner's, furnace's, assembler's or lab's panel says how much of the last minute it spent working, and what held it up the rest of the time (no input, output full, no power…). A machine slowed by a network short of power counts the time it waits as no power. A line that's starved or backed up shows up there.</dd>
       <dt>Enemies</dt><dd>Out on the map, from about ${SAFE} tiles from the start, are bases of 2 to 6 nests, more and bigger further out; the map view shows the charted ones in pink. A nest takes in the pollution that reaches it and hatches units with it: quick mites at first, then armoured brutes and spitters that attack from a distance as evolution goes up (Stats shows it). With enemies on, a nest with enough units sends a group at the building that pollutes most nearby, keeping a few at home. They go round water, walk over belts and poles, and chew through other buildings, going round a short line of them and through a long one. Now and then (more often as evolution rises) a few units leave a base to found a new nest on empty land nearby, never in the safe zone round the start or within ${EXPANSION.clear} tiles of a building. New games default to enemies on and offer Peaceful; the pause menu changes it (a peaceful game's nests only fight back when their base is attacked).</dd>
       <dt>Damage and ruins</dt><dd>A damaged building shows a health bar, and repairs itself for free once it hasn't been hit for 10 s. One that's destroyed is gone with everything in it, and leaves a ruin that remembers what stood there. Tap a ruin (no tool picked) to build it again as it was, paid from your inventory; Remove clears one. When anything is attacked or destroyed, a warning button shows by the clock with how many ruins and attacks there are: tap it to go to the latest and see the list, with Rebuild all.</dd>
       <dt>Pollution</dt><dd>Machines give off pollution while they work: a miner ${BUILDINGS.miner.pollution} a minute, a furnace ${BUILDINGS.furnace.pollution}, an assembler ${BUILDINGS.assembler.pollution}, and a coal generator ${BUILDINGS.generator.pollution} at full power. Belts, inserters, poles and radars give off none, and an idle machine none. It spreads out from chunk to chunk and the ground takes it in, a lake five times as fast, so a factory has a cloud round it that grows with it and then stops growing. In the map view, the Pollution switch above the build bar tints polluted land red. Stats shows how much is made and taken in a minute, and how much is in the air; machines' panels say how much they give off. Nests that absorb it hatch attackers when enemies are on.</dd>
@@ -806,7 +834,7 @@ function help(el) {
     <h2>Speed</h2>
     <dl>
       <dt>Debug info</dt><dd>Pause → Show debug info (or \`) shows frames and ticks a second (60 of each is full speed), how many draw calls a frame takes, and how long a tick of the game and drawing a frame take.</dd>
-      <dt>Example factory</dt><dd><a href="/play?bench=realistic">/play?bench=realistic</a> loads a complete factory with mines, coal power, smelting, gears, cable, circuits, underground crossings, splitters, sorters, radar, ammunition production, a turret, walls and a HUB. Follow the belts from the western mines to circuit dispatch in the east. The HUB needs 150 circuits; surplus production stays in storage. Like the benchmarks, this example is never saved and leaves your saved game untouched.</dd>
+      <dt>Example factory</dt><dd><a href="/play?bench=realistic">/play?bench=realistic</a> loads a complete factory with mines, coal power, smelting, gears, cable, circuits, underground crossings, splitters, sorters, radar, ammunition production, a turret, walls, a HUB, and a science wing making red and green packs for two labs, with research queued. Follow the belts from the western mines to circuit dispatch in the east. The HUB needs 150 circuits; surplus production stays in storage. Like the benchmarks, this example is never saved and leaves your saved game untouched.</dd>
       <dt>Benchmark</dt><dd><a href="/play?bench=big">/play?bench=big</a> builds a factory of 3,120 buildings with 15,000 items on its belts, running flat out, and shows the debug info, to see how a big factory runs on this device. It's never saved, so your own game is left as it was. <code>?bench=small</code> is a quick one.</dd>
     </dl>
     <h2>Fullscreen</h2>

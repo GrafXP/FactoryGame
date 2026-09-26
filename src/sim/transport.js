@@ -28,6 +28,7 @@ import { add, count, take, total } from "./inventory.js";
 import { furnaceCanTake, furnaceAdd, furnaceTakeOne } from "./furnace.js";
 import { assemblerCanTake, assemblerAdd, assemblerTakeOne } from "./assembler.js";
 import { generatorCanTake, generatorAdd } from "./generator.js";
+import { labCanTake, labAdd, labTakeOne } from "./lab.js";
 import { stillNeeded, deliver } from "./progress.js";
 import { consumed } from "./stats.js";
 
@@ -54,13 +55,13 @@ export function setFilter(s, i, filter) {
 
 // Whether building e ever takes items from a neighbour.
 export const takesItems = (e) =>
-  isConveyor(e) || e.type === "furnace" || e.type === "assembler" || e.type === "generator" || e.type === "hub" || e.type === "turret" || !!e.inventory;
+  isConveyor(e) || e.type === "furnace" || e.type === "assembler" || e.type === "generator" || e.type === "hub" || e.type === "turret" || e.type === "lab" || !!e.inventory;
 
 // Whether building e can take `item` right now. Conveyors take items onto the
 // middle of their tile (where a miner's chute drops them); chests store them until they're full;
 // furnaces take ore and fuel into their slots (see furnace.js), assemblers their
-// recipe's ingredients (assembler.js), generators fuel (generator.js), and the HUB
-// what its milestone still needs (progress.js).
+// recipe's ingredients (assembler.js), generators fuel (generator.js), labs science
+// packs (lab.js), and the HUB what its milestone still needs (progress.js).
 export function canTake(e, item) {
   if (e.type === "turret") return turretCanTake(e, item);
   if (e.type === "hub") return stillNeeded(e.progress, item) > 0;
@@ -68,6 +69,7 @@ export function canTake(e, item) {
   if (e.type === "furnace") return furnaceCanTake(e, item);
   if (e.type === "assembler") return assemblerCanTake(e, item);
   if (e.type === "generator") return generatorCanTake(e, item);
+  if (e.type === "lab") return labCanTake(e, item);
   return !!e.inventory && total(e.inventory) < BUILDINGS[e.type].capacity;
 }
 
@@ -78,6 +80,7 @@ export function put(e, item) {
   else if (e.type === "furnace") furnaceAdd(e, item);
   else if (e.type === "assembler") assemblerAdd(e, item);
   else if (e.type === "generator") generatorAdd(e, item);
+  else if (e.type === "lab") labAdd(e, item);
   else if (e.type === "hub") {
     deliver(e.progress, item);
     consumed(e.stats, item);
@@ -88,8 +91,9 @@ export function put(e, item) {
 // Takes one item that building `target` can take right now out of building e, for
 // an inserter, and returns it (or null). Conveyors give up their frontmost such
 // item on their own tile (not one that's underground), chests any, furnaces and
-// assemblers only what they've made, generators and the HUB nothing. With `only`
-// (a sorting inserter's filter), it takes nothing but that item.
+// assemblers only what they've made, labs their packs but only into another lab,
+// generators and the HUB nothing. With `only` (a sorting inserter's filter), it
+// takes nothing but that item.
 export function takeOne(e, target, only) {
   const ok = (item) => (!only || item === only) && canTake(target, item);
   if (isConveyor(e)) {
@@ -103,6 +107,7 @@ export function takeOne(e, target, only) {
     if (!e.output || !ok(e.output.item)) return null;
     return e.type === "furnace" ? furnaceTakeOne(e) : assemblerTakeOne(e);
   }
+  if (e.type === "lab") return target.type === "lab" ? labTakeOne(e, ok) : null;
   if (!e.inventory) return null;
   for (const id in ITEMS) {
     if (count(e.inventory, id) && ok(id)) {

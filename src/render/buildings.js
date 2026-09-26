@@ -168,6 +168,13 @@ function makeParts() {
       { geometry: box(0.08, 0.1, 0.08, -0.25, 1.58, 0), color: "poleTop" },
       { geometry: box(0.08, 0.1, 0.08, 0.25, 1.58, 0), color: "poleTop" },
     ],
+    // A drum with a glass dome; the ring round the dome turns while it researches
+    // (render/machines.js).
+    lab: [
+      { geometry: box(2.9, 0.2, 2.9, 0, 0.1, 0), color: "assemblerBase" },
+      { geometry: new THREE.CylinderGeometry(1.25, 1.35, 0.7, 16).translate(0, 0.55, 0), color: "lab" },
+      { geometry: new THREE.SphereGeometry(0.95, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2).translate(0, 0.9, 0), color: "labDome" },
+    ],
     // A plinth and a mast; the dish on top turns while it scans (render/machines.js).
     radar: [
       { geometry: box(1.8, 0.2, 1.8, 0, 0.1, 0), color: "hubBase" },

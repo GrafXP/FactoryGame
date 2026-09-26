@@ -16,12 +16,13 @@ import { consumed } from "./stats.js";
 import { raise } from "./world.js";
 
 // What a magazine gives: `shots` shots of `damage`, less the target's armour, of
-// which `pierce` doesn't count.
+// which `pierce` doesn't count. Research raises the damage and how often a turret
+// shoots (world.upgrades, tech.js).
 export const AMMO = {
   "firearm-magazine": { shots: 10, damage: 6, pierce: 0 },
   "piercing-magazine": { shots: 10, damage: 8, pierce: 3 },
 };
-const { range: RANGE, rate: RATE, stack: STACK, feed: FEED } = BUILDINGS.turret;
+const { range: RANGE, stack: STACK, feed: FEED } = BUILDINGS.turret;
 export const turretState = () => ({ ammo: null, loaded: null, shots: 0, cool: 0, target: 0, nest: 0, aim: 0, fired: -1, kills: 0, damage: 0, warned: -600, status: "no-ammo", looked: -1 });
 const room = (t, item, limit) => Object.hasOwn(AMMO, item) && (!t.ammo || t.ammo.item === item) ? Math.max(0, limit - (t.ammo?.n || 0)) : 0;
 export const turretRoom = (t, item) => room(t, item, STACK);
@@ -102,7 +103,8 @@ export function stepTurret(world, t) {
     consumed(world.stats, t.loaded);
     if (!--t.ammo.n) t.ammo = null;
   }
-  const { damage, pierce } = AMMO[t.loaded];
+  const damage = world.upgrades.damage[t.loaded];
+  const { pierce } = AMMO[t.loaded];
   const hit = u ? hitUnit(world, u, damage, t, pierce) : hitNest(world, nest.id, damage, t);
   t.damage += hit.damage;
   if (hit.killed) {
@@ -111,6 +113,6 @@ export function stepTurret(world, t) {
     t.nest = 0;
   }
   if (!--t.shots) t.loaded = null;
-  t.cool = RATE;
+  t.cool = world.upgrades.rate;
   t.fired = world.tick;
 }

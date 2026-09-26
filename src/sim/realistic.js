@@ -1,6 +1,7 @@
 // A small, complete works: west-side mines and smelters, central fabrication,
-// an eastern circuit line and dispatch HUB, and a coal power yard to the north.
-// Everything is supplied by real mining; only the generators get startup fuel.
+// an eastern circuit line and dispatch HUB, a science wing to the south-east, and
+// a coal power yard to the north. Everything is supplied by real mining; only the
+// generators get startup fuel.
 import { createWorld, place, canPlace } from "./world.js";
 import { BUILDINGS } from "./buildings.js";
 import { ORE } from "./map.js";
@@ -9,10 +10,14 @@ import { give } from "./inventory.js";
 import { setRecipe } from "./assembler.js";
 import { generatorAdd } from "./generator.js";
 import { setInserterFilter } from "./inserter.js";
+import { queueResearch } from "./tech.js";
 import { MILESTONES } from "./progress.js";
 
 export function realisticWorld() {
-  const world = createWorld({ seed: 42, kit: {}, enemies: false, milestones: MILESTONES.length - 1 });
+  // Its last milestone, the circuit goal, is still to do, but it's built as if it
+  // were done, labs and all (see the end). Green packs and sorting inserters are
+  // researched.
+  const world = createWorld({ seed: 42, kit: {}, enemies: false, milestones: MILESTONES.length, research: ["green-science", "logistics-2"] });
   const terrain = (x, y, ore = ORE.NONE, amount = 0) => {
     const c = chunkOf(world, x, y);
     const i = tileIndex(x, y);
@@ -76,8 +81,9 @@ export function realisticWorld() {
   copper.filters = ["copper-plate", "overflow", "overflow"];
   horizontal(-17, -5, 24);
   build("chest", -4, 24);
-  vertical(-17, 13, 16);
-  build("chest", -17, 17);
+  // Copper the cable line has no room for goes south, then east to the science wing.
+  vertical(-17, 13, 17);
+  horizontal(-17, 6, 18);
 
   // Iron feeds gears and the circuit line. Copper feeds cable, which travels
   // directly to circuit assembly; no prefilled ingredient chests are needed.
@@ -110,8 +116,8 @@ export function realisticWorld() {
   dispatch.filters = ["electronic-circuit", "overflow", "overflow"];
   horizontal(22, 25, 12);
   build("hub", 26, 11);
-  vertical(21, 13, 16);
-  build("chest", 21, 17);
+  vertical(21, 13, 25); // circuits the HUB doesn't want, past the science wing
+  build("chest", 21, 26);
   build("radar", 26, 3);
 
   // Ammunition is another real iron consumer. Stock the defense post first,
@@ -148,6 +154,44 @@ export function realisticWorld() {
   build("inserter", -2, 3, 1);
   build("chest", -1, 3);
 
+  // The science wing. A gear assembler between a red pack and a green pack
+  // assembler feeds both; iron comes along the top from a smelter of its own (a
+  // miner on iron and one on coal feeding a furnace), under the circuit belt,
+  // copper down the west side and circuits down the east. The packs go along a
+  // belt past two labs, the second fed from the first, into a chest.
+  for (const [x0, y0, ore] of [[27, 21, ORE.IRON], [25, 23, ORE.COAL]]) {
+    for (let y = y0; y < y0 + 2; y++) for (let x = x0; x < x0 + 2; x++) terrain(x, y, ore, 12000);
+  }
+  build("furnace", 25, 21);
+  build("miner", 27, 21, 3);
+  build("miner", 25, 23, 0);
+  build("inserter", 24, 21, 3);
+  build("belt", 23, 21, 3);
+  build("underground", 22, 21, 3);
+  build("underground", 20, 21, 3, { end: "out" });
+  horizontal(14, 19, 21, 3);
+  build("chest", 13, 21);
+  vertical(7, 18, 25);
+  build("chest", 7, 26);
+  setRecipe(build("assembler", 9, 23), "red-pack", world.inventory);
+  setRecipe(build("assembler", 13, 23), "iron-gear", world.inventory);
+  setRecipe(build("assembler", 17, 23), "green-pack", world.inventory);
+  build("inserter", 14, 22, 2);
+  build("inserter", 18, 22, 2);
+  build("inserter", 8, 24, 1);
+  build("inserter", 12, 24, 3);
+  build("inserter", 16, 24, 1);
+  build("inserter", 20, 24, 3);
+  build("inserter", 10, 26, 2);
+  build("inserter", 18, 26, 2);
+  horizontal(10, 20, 27);
+  build("chest", 21, 27);
+  build("inserter", 19, 28, 2);
+  build("lab", 18, 29);
+  build("inserter", 17, 30, 3);
+  build("lab", 14, 29);
+  for (const id of ["weapon-damage-1", "shooting-speed-1", "stronger-walls", "weapon-damage-2", "shooting-speed-2"]) queueResearch(world, id);
+
   // Poles follow service corridors beside the machines and the power yard.
   // The intermediate poles tie the smelters, fabrication and radar together.
   const poles = [];
@@ -155,10 +199,12 @@ export function realisticWorld() {
   for (const y of [-3, 9]) for (let x = -31; x <= 29; x += 6) poles.push([x === 11 ? 12 : x, y]);
   for (const x of [-31, -13, 5, 29]) poles.push([x, 3]);
   poles.push([-31, -9], [-25, -9], [-31, 15], [-25, 16], [-31, 21], [-25, 21], [-31, 27], [-2, 1]);
+  poles.push([16, 15], [16, 22], [11, 21], [17, 28], [22, 24], [12, 26], [28, 24]); // the science wing
   for (const [x, y] of poles) build("pole", x, y);
   world.inventory.items = {};
   give(world.inventory, { "iron-plate": 200, "copper-plate": 100, "iron-gear": 50, "copper-cable": 100, "electronic-circuit": 30, stone: 100, coal: 50 });
   chartArea(world, -2, -1, 1, 1);
+  world.progress.milestone = MILESTONES.length - 1;
   // Real storage is deliberately retained, including after the HUB goal is met.
   return { world, sinks: [] };
 }

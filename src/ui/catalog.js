@@ -2,7 +2,7 @@
 // saying what it's for. Every building in BUILDINGS belongs to exactly one
 // category (test/catalog.test.js checks), so a new building has to be put here.
 export const CATEGORIES = [
-  { id: "base", name: "Base", buildings: ["hub", "chest", "radar"] },
+  { id: "base", name: "Base", buildings: ["hub", "chest", "lab", "radar"] },
   { id: "logistics", name: "Logistics", buildings: ["belt", "underground", "splitter", "sorter", "inserter", "long-inserter", "sorting-inserter"] },
   { id: "production", name: "Production", buildings: ["miner", "furnace", "assembler"] },
   { id: "defense", name: "Defense", buildings: ["turret", "wall"] },
@@ -26,6 +26,7 @@ export const ABOUT = {
   assembler: "Makes gears, cables, circuits or magazines from what it's given. Tap it to pick which. Needs power.",
   generator: "Burns coal to power the machines on its poles' network: 600 kW.",
   pole: "Carries power to machines within 3 tiles, and wires itself to poles up to 7 tiles away.",
+  lab: "Researches technologies with science packs, fed by inserters or by hand. Pick what to research under Research. Needs power.",
   radar: "Scans the land round it, a chunk at a time, so it shows on the map (zoom far out). Needs power.",
 };
 

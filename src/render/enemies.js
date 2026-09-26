@@ -203,7 +203,7 @@ export function drawHealthBars(world, list, icons) {
   for (const e of list) {
     const d = world.damaged.get(e.id);
     if (!d) continue;
-    const k = Math.max(1, Math.round((d.hp / maxHealth(e.type)) * HP_STEPS));
+    const k = Math.max(1, Math.round((d.hp / maxHealth(world, e.type)) * HP_STEPS));
     const { w, h } = footprint(e.type, e.rot);
     icons.add(icons.cell(`hp:${k}`, bar(k)), e.x + w / 2, 0.1, e.y + h + 0.3, Math.max(0.9, Math.min(w, 2)));
   }

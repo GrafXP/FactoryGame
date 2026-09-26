@@ -69,9 +69,9 @@ export function consumedAll(stats, items) {
 
 // The statuses a machine's activity counts; the first is working, the rest are
 // what held it up.
-export const ACTIVITY = ["working", "no-input", "no-fuel", "no-power", "full", "no-output", "no-resource", "no-recipe"];
+export const ACTIVITY = ["working", "no-input", "no-fuel", "no-power", "full", "no-output", "no-resource", "no-recipe", "no-research", "idle"];
 const CODE = Object.fromEntries(ACTIVITY.map((s, i) => [s, i]));
-export const TRACKED = new Set(["miner", "furnace", "assembler"]);
+export const TRACKED = new Set(["miner", "furnace", "assembler", "lab"]);
 
 const activityState = () => ({
   status: null,

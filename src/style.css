@@ -22,6 +22,8 @@
   --item-firearm-magazine: #bb9448;
   --item-piercing-magazine: #d0603c;
   --item-electronic-circuit: #3fbf6a;
+  --item-red-pack: #ff5a4f;
+  --item-green-pack: #8fe04a;
   /* Enemy bases by strength, as their rings on the map (src/render/view.js). */
   --tier-0: #c9a7f0;
   --tier-1: #e0487f;
@@ -51,6 +53,8 @@
   --item-firearm-magazine: #bb9448;
   --item-piercing-magazine: #b4462a;
   --item-electronic-circuit: #1f9a4a;
+  --item-red-pack: #d42a26;
+  --item-green-pack: #4f9a12;
   --tier-0: #7b52c4;
   --tier-1: #c0206a;
   --tier-2: #9a0a1e;
@@ -1603,4 +1607,96 @@ button.big.secondary {
   margin-left: auto;
   font-size: 0.75rem;
   color: var(--muted);
+}
+
+/* The Research panel: what's under way, the queue, and a card per technology. */
+.panel h4 {
+  margin: 12px 0 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.techs,
+.tech-queue {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tech {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3px 8px;
+  align-items: center;
+  margin-bottom: 6px;
+  padding: 8px 10px;
+  font-size: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.tech.now {
+  border-color: var(--accent);
+}
+
+.tech > :not(b):not(.tech-units):not(button) {
+  grid-column: 1 / -1;
+}
+
+.tech .tech-units {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.tech .tech-does,
+.tech small {
+  color: var(--muted);
+}
+
+.tech .tech-cost {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.tech .tech-cost .chip {
+  padding: 1px 6px 1px 3px;
+}
+
+.tech > button {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.tech-queue li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 0.85rem;
+}
+
+.tech-queue li span {
+  flex: 1;
+}
+
+.tech-queue .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.chips.done {
+  justify-content: flex-start;
+}
+
+.tech .take,
+.tech-queue .take {
+  display: grid;
+  place-items: center;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
 }

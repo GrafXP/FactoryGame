@@ -9,10 +9,11 @@ import { serialize, deserialize, SaveError } from "../src/sim/save.js";
 import { layoutOf, buildLayout } from "../src/sim/layout.js";
 import { ruinOf } from "../src/sim/health.js";
 import { lockedWhy } from "../src/sim/progress.js";
+import { TECHS } from "../src/sim/tech.js";
 import { charge, ALL, clearArea } from "./helpers.js";
 
 const KIT = { "iron-plate": 1000, "copper-plate": 1000, "iron-gear": 1000, "electronic-circuit": 1000, stone: 1000 };
-const setup = () => createWorld({ milestones: ALL, seed: 3, kit: { ...KIT } });
+const setup = () => createWorld({ milestones: ALL, research: Object.keys(TECHS), seed: 3, kit: { ...KIT } });
 const run = (world, ticks, each) => {
   for (let i = 0; i < ticks; i++) {
     each?.(i);
@@ -138,12 +139,12 @@ test("a save, a paste and a ruin keep a sorting inserter's filter, and loaded in
   assert.throws(() => deserialize(swung), SaveError);
 });
 
-test("long inserters unlock with logistics, and sorting inserters with assembly", () => {
-  const at = (milestones) => createWorld({ milestones, seed: 3 });
+test("long inserters unlock with logistics, and sorting inserters with the Logistics 2 research", () => {
+  const at = (milestones, research) => createWorld({ milestones, research, seed: 3 });
   assert.ok(lockedWhy(at(1), "long-inserter"));
   assert.equal(lockedWhy(at(2), "long-inserter"), null);
-  assert.ok(lockedWhy(at(2), "sorting-inserter"));
-  assert.equal(lockedWhy(at(3), "sorting-inserter"), null);
+  assert.equal(lockedWhy(at(ALL), "sorting-inserter"), "Locked: research Logistics 2 in a lab");
+  assert.equal(lockedWhy(at(ALL, ["green-science", "logistics-2"]), "sorting-inserter"), null);
   for (const type of ["long-inserter", "sorting-inserter"]) {
     assert.ok(BUILDINGS[type].draw, `${type} runs on power`);
   }

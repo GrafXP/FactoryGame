@@ -2,7 +2,7 @@ import { BUILDINGS } from "../sim/buildings.js";
 import { affordable } from "../sim/inventory.js";
 import { describe } from "../sim/items.js";
 import { planItems, canCraft } from "../sim/crafting.js";
-import { buildingUnlocked, buildingMilestone, MILESTONES } from "../sim/progress.js";
+import { buildingUnlocked, unlockText } from "../sim/progress.js";
 import { CATEGORIES, ABOUT } from "./catalog.js";
 import { icon } from "./icons.js";
 import { costChips } from "./format.js";
@@ -14,7 +14,8 @@ import { costChips } from "./format.js";
 //    takes over the slot used longest ago, so the others stay where they are.
 //    Slots only show unlocked buildings (progress.js); others fill in for the rest.
 //  - The build sheet: a tab per category, a card per building with what it's for,
-//    its cost and how many you can afford, or the milestone that unlocks it.
+//    its cost and how many you can afford, or the milestone or research that
+//    unlocks it.
 //  - The tool bar, just above the bottom bar while a tool is picked: what it is,
 //    its cost, Rotate and Done. When you can't afford the building but could
 //    hand-craft the parts it's missing, a Craft button calls `craft(cost)`.
@@ -157,10 +158,9 @@ export function createBuildMenu({ bar, info, sheet }, builder, { craft }) {
   const card = (t) => {
     const b = BUILDINGS[t];
     if (!unlocked(t)) {
-      const i = buildingMilestone(t);
       return `<button class="bcard" data-pick="${t}" data-locked="true">
         <span class="bcard-top">${icon(t)}<b>${b.name}</b><span class="badge lock">${icon("lock")}</span></span>
-        <span class="bcard-about">Unlocked by milestone ${i + 1} at the HUB: ${MILESTONES[i].name}.</span>
+        <span class="bcard-about">Unlocked by ${unlockText(t)}.</span>
       </button>`;
     }
     const n = affordable(inv, b.cost);

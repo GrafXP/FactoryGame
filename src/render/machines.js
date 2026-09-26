@@ -11,14 +11,16 @@ const netCapacity = (net) => Math.max(1, net?.avg.capacity || 0);
 // The moving parts of the machines in view, redrawn every frame: inserter arms swinging
 // between their pickup and drop sides with the item they carry, the fire in a
 // working furnace's or generator's mouth, the cog on an assembler, which turns
-// once per craft, a generator's flywheel and a radar's dish, which turns while it
-// scans. The still parts are in buildings.js.
+// once per craft, a generator's flywheel, a radar's dish, which turns while it
+// scans, and the ring round a lab's dome, which turns while it researches. The
+// still parts are in buildings.js.
 const ARM = 0.42; // pivot to hand
 const ARM_Y = 0.44;
 const HELD_Y = ARM_Y - 0.13;
 const FLYWHEEL = new THREE.Vector3(1.38, 0.65, 0); // from a generator's centre, facing north
 const FLYWHEEL_SPEED = 0.25; // radians a tick at full load
 const DISH_SPEED = 0.03; // radians a tick while a radar scans
+const RING_SPEED = 0.05; // radians a tick while a lab researches
 // Each kind of inserter's arm, in its own colour (see buildings.js); they share the hand.
 const ARMS = { inserter: "arm", "long-inserter": "longArm", "sorting-inserter": "sortArm" };
 
@@ -49,6 +51,8 @@ export function createMachineParts(parent) {
       color: "radarDish",
       side: THREE.DoubleSide,
     },
+    // Tilted, so it can be seen turning.
+    ring: { geometry: new THREE.TorusGeometry(1.1, 0.05, 6, 32).rotateX(Math.PI / 2).rotateZ(0.3).translate(0, 1.05, 0), color: "labRing" },
   };
   for (const k of Object.values(kinds)) {
     k.material = k.color
@@ -83,6 +87,7 @@ export function createMachineParts(parent) {
   const offset = new THREE.Vector3();
   const wheels = new Map(); // generator → { angle, tick }: its flywheel, run on by the load since `tick`
   const dishes = new Map(); // radar → its dish's angle
+  const rings = new Map(); // lab → its ring's angle
 
   return {
     // `items` is the item layer, for what the inserters hold, and `list` the
@@ -93,6 +98,7 @@ export function createMachineParts(parent) {
       let assemblers = 0;
       let generators = 0;
       let radars = 0;
+      let labs = 0;
       const turrets = list.filter(e => e.type === "turret");
       for (const k of [kinds.gun, kinds.barrel, kinds.flash]) ensure(k, turrets.length);
       for (const e of list) {
@@ -101,7 +107,9 @@ export function createMachineParts(parent) {
         else if (e.type === "assembler") assemblers++;
         else if (e.type === "generator") generators++;
         else if (e.type === "radar") radars++;
+        else if (e.type === "lab") labs++;
       }
+      ensure(kinds.ring, labs);
       ensure(kinds.dish, radars);
       for (const k in arms) ensure(kinds[k], arms[k]);
       ensure(kinds.hand, arms.arm + arms.longArm + arms.sortArm);
@@ -117,6 +125,7 @@ export function createMachineParts(parent) {
       let g = 0;
       let gf = 0;
       let d = 0;
+      let rg = 0;
       let guns = 0;
       let flashes = 0;
       const net = powerNetwork(world);
@@ -179,10 +188,18 @@ export function createMachineParts(parent) {
           const { w, h } = footprint(e.type, e.rot);
           q.setFromAxisAngle(up, -dish.angle);
           kinds.dish.mesh.setMatrixAt(d++, m.compose(pos.set(e.x + w / 2, 0, e.y + h / 2), q, one));
+        } else if (e.type === "lab") {
+          let ring = rings.get(e);
+          if (!ring) rings.set(e, (ring = { angle: e.id, tick: world.tick }));
+          if (e.status === "working") ring.angle = (ring.angle + RING_SPEED * (world.tick - ring.tick)) % (Math.PI * 2);
+          ring.tick = world.tick;
+          q.setFromAxisAngle(up, ring.angle);
+          kinds.ring.mesh.setMatrixAt(rg++, m.compose(pos.set(e.x + 1.5, 0, e.y + 1.5), q, one));
         }
       }
       for (const gen of wheels.keys()) if (!world.entities.has(gen.id)) wheels.delete(gen);
       for (const r of dishes.keys()) if (!world.entities.has(r.id)) dishes.delete(r);
+      for (const l of rings.keys()) if (!world.entities.has(l.id)) rings.delete(l);
       for (const [k, n] of [
         [kinds.gun, guns],
         [kinds.barrel, guns],
@@ -196,6 +213,7 @@ export function createMachineParts(parent) {
         [kinds.genFire, gf],
         [kinds.flywheel, g],
         [kinds.dish, d],
+        [kinds.ring, rg],
       ]) {
         k.mesh.count = n;
         k.mesh.visible = n > 0; // three binds a mesh's shaders even to draw nothing

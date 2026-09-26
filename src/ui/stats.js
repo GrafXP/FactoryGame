@@ -167,6 +167,8 @@ const HELD_UP = {
   "no-output": "nowhere to put it",
   "no-resource": "no ore",
   "no-recipe": "no recipe",
+  "no-research": "nothing to research",
+  idle: "other labs had it in hand",
 };
 
 // A machine's panel line on how it spent the last minute: how much it worked, and

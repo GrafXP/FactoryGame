@@ -87,6 +87,9 @@ export const BUILDINGS = {
   // Where milestones are delivered (see progress.js). There's only ever one.
   hub: { name: "HUB", w: 4, h: 4, cost: { "iron-plate": 10, stone: 10 }, health: 1000 },
   pole: { name: "Power pole", w: 1, h: 1, cost: { "iron-plate": 1, "copper-cable": 2 }, reach: 7, area: 3, health: 80 },
+  // Researches technologies with science packs (lab.js, tech.js). Belts and
+  // inserters keep up to `feed` of each pack in it, the player up to `stack`.
+  lab: { name: "Lab", w: 3, h: 3, cost: { "electronic-circuit": 10, "iron-gear": 10, "iron-plate": 4 }, draw: 1000, stack: 10, feed: 2, health: 150 },
   // Charts the map view (see radar.js): the chunks up to `range` chunks away, one
   // at a time, each taking `scan` ticks of work.
   radar: { name: "Radar", w: 2, h: 2, cost: { "iron-plate": 10, "iron-gear": 5, "electronic-circuit": 3 }, draw: 2000, range: 12, scan: 240, health: 250 },

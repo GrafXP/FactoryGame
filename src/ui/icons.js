@@ -49,6 +49,12 @@ export const ITEM_FACES = {
     ["dark", "M4.5 11.2a7.5 3 0 0 0 15 0v1.6a7.5 3 0 0 1-15 0z"],
     ["lit", "M4.5 8a7.5 3 0 1 0 15 0a7.5 3 0 1 0-15 0z"],
   ],
+  // A stoppered flask of coloured liquid.
+  pack: [
+    ["", "M9.5 4h5v5.2l5.3 9.3a1.7 1.7 0 0 1-1.5 2.5H5.7a1.7 1.7 0 0 1-1.5-2.5l5.3-9.3z"],
+    ["lit", "M8.8 1.8h6.4v2.6H8.8z"],
+    ["shade", "M6.4 14.5h11.2l2.2 4a1.7 1.7 0 0 1-1.5 2.5H5.7a1.7 1.7 0 0 1-1.5-2.5z"],
+  ],
   // A green board with a chip on it.
   circuit: [
     ["lit", "M2.5 13 8.5 7h13l-6 6z"],
@@ -83,6 +89,8 @@ const PATHS = {
   hub: "M3 20h18M5 20V10h10v10M15 20v-6h4v6M18 14V4M16 4h4M8 13h4",
   lock: "M6 11h12v9H6zM9 11V8a3 3 0 0 1 6 0v3",
   pole: "M12 21V4M6 6h12M7 6v2M17 6v2M9 21h6",
+  lab: "M3 20h18M4 20v-5h16v5M7 15a5 5 0 0 1 10 0M12 10V7M10 7h4",
+  research: "M9 3h6M10 3v6l-5.4 9.6A1.6 1.6 0 0 0 6 21h12a1.6 1.6 0 0 0 1.4-2.4L14 9V3M7.2 15h9.6",
   radar: "M5 21h14M12 21v-6M4.5 12.5a8 8 0 0 0 9-9zM9 8l6-6M15 2h3v3",
   remove: "M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13",
   rotate: "M19 12a7 7 0 1 1-2-4.9M19 4v4h-4",

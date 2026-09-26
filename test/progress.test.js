@@ -21,6 +21,7 @@ import {
   deliverAll,
 } from "../src/sim/progress.js";
 import { serialize, deserialize } from "../src/sim/save.js";
+import { TECHS } from "../src/sim/tech.js";
 import { charge, clearArea } from "./helpers.js";
 
 const run = (world, ticks) => {
@@ -33,18 +34,15 @@ const run = (world, ticks) => {
 const RICH = Object.fromEntries(Object.keys(RECIPES).concat(["iron-plate", "copper-plate", "stone", "stone-brick", "coal"]).map((id) => [id, 5000]));
 const fresh = () => createWorld({ seed: 3, kit: { ...RICH } });
 
-test("every building and recipe is unlocked at the start or by exactly one milestone", () => {
-  for (const type in BUILDINGS) {
-    const by = MILESTONES.filter((m) => m.unlocks.buildings.includes(type)).length + START.buildings.includes(type);
-    assert.equal(by, 1, type);
-  }
-  for (const id in RECIPES) {
-    const by = MILESTONES.filter((m) => m.unlocks.recipes.includes(id)).length + START.recipes.includes(id);
-    assert.equal(by, 1, id);
-  }
+test("every building and recipe is unlocked at the start, by exactly one milestone or by exactly one technology", () => {
+  const techs = Object.values(TECHS);
+  const by = (kind, id) =>
+    START[kind].includes(id) + MILESTONES.filter((m) => m.unlocks[kind].includes(id)).length + techs.filter((t) => t.unlocks[kind].includes(id)).length;
+  for (const type in BUILDINGS) assert.equal(by("buildings", type), 1, type);
+  for (const id in RECIPES) assert.equal(by("recipes", id), 1, id);
+  for (const t of techs) for (const kind of ["buildings", "recipes"]) for (const id of t.unlocks[kind]) assert.ok(kind === "buildings" ? BUILDINGS[id] : RECIPES[id], id);
   assert.ok(START.buildings.includes("hub"), "the HUB can always be built");
-  const last = MILESTONES.at(-1);
-  assert.equal(last.unlocks.buildings.length + last.unlocks.recipes.length, 0, "the last milestone is the goal");
+  assert.deepEqual(MILESTONES.at(-1).unlocks, { buildings: ["lab"], recipes: ["red-pack"] }, "the last milestone opens research");
 });
 
 test("a new game can only build the basics, and says what unlocks the rest", () => {
@@ -85,7 +83,7 @@ test("delivering a milestone's items by hand unlocks what it promises, and moves
   assert.equal(buildingUnlocked(world, "splitter"), false);
 });
 
-test("going through every milestone unlocks everything and ends the game's goals", () => {
+test("going through every milestone, then every technology, unlocks everything", () => {
   const world = fresh();
   for (const m of MILESTONES) {
     assert.equal(currentMilestone(world), m);
@@ -93,9 +91,13 @@ test("going through every milestone unlocks everything and ends the game's goals
   }
   assert.ok(allDone(world));
   assert.equal(currentMilestone(world), null);
+  assert.equal(stillNeeded(world.progress, "electronic-circuit"), 0);
+  assert.ok(buildingUnlocked(world, "lab") && recipeUnlocked(world, "red-pack"));
+  assert.equal(buildingUnlocked(world, "sorting-inserter"), false, "research does the rest");
+  assert.equal(recipeUnlocked(world, "green-pack"), false);
+  for (const id in TECHS) world.research.done.add(id);
   for (const type in BUILDINGS) assert.ok(buildingUnlocked(world, type), type);
   for (const id in RECIPES) assert.ok(recipeUnlocked(world, id), id);
-  assert.equal(stillNeeded(world.progress, "electronic-circuit"), 0);
 });
 
 test("a belt delivers to the HUB only what the milestone still needs", () => {
@@ -161,7 +163,8 @@ test("a save from before milestones gets every building and only the goal left",
   const { progress, ...v4 } = { ...serialize(world), version: 4 };
   const loaded = deserialize(structuredClone(v4));
   assert.equal(currentMilestone(loaded), MILESTONES.at(-1));
-  for (const type in BUILDINGS) assert.ok(buildingUnlocked(loaded, type), type);
+  // Everything but the lab, which comes with the goal, and what research unlocks.
+  for (const type in BUILDINGS) assert.equal(buildingUnlocked(loaded, type), !["lab", "sorting-inserter"].includes(type), type);
   assert.equal(buildingMilestone("hub"), -1);
 });
 

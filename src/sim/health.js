@@ -20,16 +20,17 @@ import { layoutOf, buildLayout } from "./layout.js";
 export const REPAIR_AFTER = 600; // 10 s
 export const REPAIR_SHARE = 2; // % of its health a second, so a wreck is whole again in under a minute
 
-export const maxHealth = (type) => BUILDINGS[type].health;
+// A building's full health; research can raise it (world.upgrades, tech.js).
+export const maxHealth = (world, type) => world.upgrades.health[type] ?? BUILDINGS[type].health;
 
 // What building e has left.
-export const healthOf = (world, e) => world.damaged.get(e.id)?.hp ?? maxHealth(e.type);
+export const healthOf = (world, e) => world.damaged.get(e.id)?.hp ?? maxHealth(world, e.type);
 
 // Takes n off building e's health, destroying it at 0. The first hit after a quiet
 // spell raises an "attacked" alert. Returns whether it was destroyed.
 export function damage(world, e, n) {
   let d = world.damaged.get(e.id);
-  if (!d) world.damaged.set(e.id, (d = { hp: maxHealth(e.type), hit: world.tick - REPAIR_AFTER }));
+  if (!d) world.damaged.set(e.id, (d = { hp: maxHealth(world, e.type), hit: world.tick - REPAIR_AFTER }));
   if (world.tick - d.hit >= REPAIR_AFTER) raise(world, "attacked", e);
   d.hit = world.tick;
   d.hp -= n;
@@ -42,7 +43,7 @@ export function damage(world, e, n) {
 export function stepRepair(world) {
   for (const [id, d] of world.damaged) {
     if (world.tick - d.hit < REPAIR_AFTER) continue;
-    const max = maxHealth(world.entities.get(id).type);
+    const max = maxHealth(world, world.entities.get(id).type);
     d.hp = Math.min(max, d.hp + Math.max(1, Math.floor((max * REPAIR_SHARE) / 100)));
     if (d.hp >= max) world.damaged.delete(id);
   }

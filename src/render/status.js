@@ -96,6 +96,7 @@ const ICON_FOR = {
   "no-fuel": "no-fuel",
   "no-recipe": "no-recipe",
   "no-filter": "no-recipe", // a sorting inserter that hasn't been set
+  "no-research": "no-recipe", // a lab with nothing being researched
   "no-power": "no-power",
   unconnected: "unconnected",
   "no-exit": "blocked", // a sorter holding an item no way out will take

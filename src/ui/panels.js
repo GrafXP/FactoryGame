@@ -7,6 +7,8 @@ import { fillFrom, emptySlot, furnaceRoom } from "../sim/furnace.js";
 import { setRecipe, fillAssembler, emptyAssembler, assemblerRoom } from "../sim/assembler.js";
 import { AMMO, loadTurret, emptyTurret, turretRoom } from "../sim/turret.js";
 import { setInserterFilter } from "../sim/inserter.js";
+import { fillLab, emptyLab, labRoom } from "../sim/lab.js";
+import { TECHS, PACKS } from "../sim/tech.js";
 import { fuelGenerator, emptyGenerator, generatorRoom } from "../sim/generator.js";
 import { powerNetwork, satisfaction } from "../sim/power.js";
 import { MILESTONES, currentMilestone, recipeUnlocked, stillNeeded } from "../sim/progress.js";
@@ -119,6 +121,18 @@ function networkSummary(net) {
     <p class="meta power" data-ok="${!why}">${verdict}</p>`;
 }
 
+const packList = (ids) => ids.map((p) => lower(p, 2)).join(" and ");
+const LAB_STATUS = {
+  working: (l) => `Researching ${TECHS[l.unit].name}`,
+  "no-input": (l, world) => {
+    const t = TECHS[world.research.current];
+    return `Waiting for ${packList(t.packs.filter((p) => !l.packs[p]))}: ${t.name} takes ${packList(t.packs)}.`;
+  },
+  "no-power": () => "Stopped: no power.",
+  "no-research": () => "Idle: nothing is being researched. Pick something under Research.",
+  idle: (l, world) => `Idle: other labs are doing the units of ${TECHS[world.research.current].name} that are left.`,
+};
+
 const RADAR_STATUS = {
   working: (r) => {
     const t = radarTarget(r);
@@ -206,7 +220,7 @@ const heading = (title) =>
 function healthLine(e, world) {
   const d = world.damaged.get(e.id);
   if (!d) return "";
-  const max = maxHealth(e.type);
+  const max = maxHealth(world, e.type);
   const mending = world.tick - d.hit >= REPAIR_AFTER;
   return `<p class="meta hp">Health ${d.hp} / ${max}${mending ? ", repairing itself" : `: under attack. It repairs itself ${REPAIR_AFTER / TICK_RATE} s after the last hit`}</p>`;
 }
@@ -355,18 +369,24 @@ const PANELS = {
   },
   // Fuel in and out like a furnace's, and the network it powers.
   wall: {
-    key: () => "wall",
-    html: () => `${heading("Wall")}<p class="meta">Stone walls join their neighbours and block enemies. They repair after 10 seconds without damage.</p>`,
+    key: (w, world) => `wall ${maxHealth(world, "wall")}`,
+    html: (w, world) => {
+      const more = world.upgrades.bonus.walls;
+      return `${heading("Wall")}<p class="meta">Stone walls join their neighbours and block enemies. They repair after 10 seconds without damage. Health ${maxHealth(world, "wall")}${more ? ` (${more}% more from research)` : ""}.</p>`;
+    },
   },
   turret: {
-    key: (t, world) => `${t.status} ${!!t.nest} ${JSON.stringify(t.ammo)} ${t.shots} ${t.kills} ${t.damage} ${world.inventory.version}`,
+    key: (t, world) => `${t.status} ${!!t.nest} ${JSON.stringify(t.ammo)} ${t.shots} ${t.kills} ${t.damage} ${world.inventory.version} ${world.upgrades.rate}`,
     html: (t, world) => {
       const adds = addButtons(Object.keys(AMMO), world.inventory, id => turretRoom(t, id));
+      const { damage, rate } = world.upgrades.bonus;
+      const research = damage || rate ? `<p class="meta">Research: ${[damage && `${damage}% more damage`, rate && `${rate}% faster shooting`].filter(Boolean).join(", ")}.</p>` : "";
       return `${heading("Gun turret")}
         <p class="status" data-status="${t.status}">${t.status === "no-ammo" ? "Out of ammunition" : t.status !== "working" ? "Watching for enemies" : t.nest ? "Firing at a nest" : "Firing at enemies"}</p>
         ${amountBar()}<ul class="items slots">${slotRow("Magazines", t.ammo, 'data-slot="ammo"')}</ul>
         ${adds ? `<div class="actions">${adds}</div>` : ""}
         <p class="meta">${t.shots} shots loaded · ${t.kills} kills · ${t.damage} damage dealt</p>
+        ${research}
         <p class="meta">Range ${BUILDINGS.turret.range} tiles. Needs no power. It shoots the nearest enemy, and a nest in range once no enemies are. Each magazine has 10 shots, piercing ones harder and through armour; it holds one kind at a time. Belts and inserters stock up to 5 magazines, or load 10 by hand. The loaded magazine stays here; dismantling loses its remaining shots.</p>`;
     },
   },
@@ -472,6 +492,30 @@ const PANELS = {
         <ol class="milestones">${list}</ol>`;
     },
   },
+  // What it researches and why it's stopped, its packs with buttons to add and take
+  // them, and a way to the Research panel.
+  lab: {
+    key: (l, world) => `${l.status} ${l.unit} ${JSON.stringify(l.packs)} ${world.research.current} ${world.inventory.version}`,
+    html: (l, world) => {
+      const rows = PACKS.map((p) => {
+        const n = l.packs[p] || 0;
+        return `<li>${itemIcon(p)}<span>${ITEMS[p].plural}</span><b>${n}</b>${n ? takeButton(p, n, `data-item="${p}"`) : ""}</li>`;
+      }).join("");
+      const adds = addButtons(PACKS, world.inventory, (p) => labRoom(l, p));
+      return `${heading("Lab")}
+        <p class="status" data-status="${l.status}">${LAB_STATUS[l.status](l, world)}</p>
+        <span class="bar"><i></i></span>
+        <div data-live="power"></div>
+        <div data-live="activity"></div>
+        ${amountBar()}
+        <ul class="items slots">${rows}</ul>
+        ${adds ? `<div class="actions">${adds}</div>` : ""}
+        <button class="wide" data-action="research">Research</button>
+        <p class="meta">Every lab works on the research under way, a unit at a time, and each unit takes one of each pack it needs. Belts and inserters keep ${BUILDINGS.lab.feed} of each pack in it, or add up to ${BUILDINGS.lab.stack} by hand. An inserter can pass packs from one lab to the next.</p>`;
+    },
+    progress: (l) => (l.unit ? l.progress / TECHS[l.unit].time : 0),
+    live: (l, world) => ({ power: powerLine(l, world), activity: activityLine(world, l) }),
+  },
   // What it's scanning, how much of its range is charted, and its power.
   radar: {
     key: (r, world) => `${r.status} ${r.next} ${world.chartVersion}`,
@@ -497,8 +541,9 @@ const PANELS = {
 };
 
 // `close` is called when the panel should go (its ✕, or the building is gone);
-// `changed` after items moved between the building and the player.
-export function createEntityPanel(el, { close, changed, toast }) {
+// `changed` after items moved between the building and the player; `research` to
+// open the Research panel (a lab's button).
+export function createEntityPanel(el, { close, changed, toast, research }) {
   loadAmount();
   let shown = null;
   let shownKey = "";
@@ -544,6 +589,7 @@ export function createEntityPanel(el, { close, changed, toast }) {
     else if (action === "empty") {
       const item = btn.dataset.item;
       if (asm) moved = emptyAssembler(shown, inv, item ?? null, max);
+      else if (shown.type === "lab") moved = emptyLab(shown, inv, item, max);
       else if (shown.type === "turret") moved = emptyTurret(shown, inv, max);
       else if (gen) moved = emptyGenerator(shown, inv, max);
       else if (chest) moved = { [item]: takeFromChest(world, shown, item, max) };
@@ -553,12 +599,14 @@ export function createEntityPanel(el, { close, changed, toast }) {
       let n;
       if (hub) n = deliverToHub(world, item, max);
       else if (asm) n = fillAssembler(shown, inv, item, max);
+      else if (shown.type === "lab") n = fillLab(shown, inv, item, max);
       else if (shown.type === "turret") n = loadTurret(shown, inv, item, max);
       else if (gen) n = fuelGenerator(shown, inv, item, max);
       else if (chest) n = putInChest(world, shown, item, max);
       else n = fillFrom(shown, inv, item, max);
       if (n) toast(`${hub ? "Delivered" : "Added"} ${describe({ [item]: n })}`);
-    } else if (action === "deliver") {
+    } else if (action === "research") return research();
+    else if (action === "deliver") {
       const moved = deliverAllToHub(world);
       if (Object.keys(moved).length) toast(`Delivered ${describe(moved)}`);
     } else if (action === "recipe") {

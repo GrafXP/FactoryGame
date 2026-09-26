@@ -8,8 +8,9 @@
 // chunk with any pollution is. Hand-mining isn't
 // saved either, since it only lasts while a finger is down. The hand-crafting queue
 // is, since a craft under way has taken its ingredients, and so are progress
-// towards the HUB's milestones and the production statistics (not the machines'
-// activity, which is only the last minute), and the enemies: whether they're on,
+// towards the HUB's milestones, research (what's done, under way and queued, and
+// the units done), the production statistics (not the machines' activity, which
+// is only the last minute), and the enemies: whether they're on,
 // evolution, the nests that have taken in pollution, been hit, been destroyed or
 // been founded, the units and groups out and the paths they're waiting for, with the
 // buildings they've damaged and the ruins of those they've destroyed.
@@ -31,10 +32,11 @@ import { MILESTONES } from "./progress.js";
 import { SERIES_LEN, NOT_ITEMS } from "./stats.js";
 import { enemyState, addUnit, nestOf, saveSearch, loadSearch, UNITS, NEST_HEALTH, EXPANSION, FOUNDED } from "./enemies.js";
 import { AMMO } from "./turret.js";
+import { TECHS, PACKS, upgradesOf } from "./tech.js";
 import { maxHealth, REPAIR_AFTER } from "./health.js";
 
 export const SAVE_FORMAT = "factory-save";
-export const SAVE_VERSION = 13;
+export const SAVE_VERSION = 14;
 
 // What a save from before power gets, so its stopped machines can be started
 // again: the parts for a coal generator and ten poles, and coal to burn.
@@ -132,6 +134,9 @@ export const MIGRATIONS = {
   // 13 added long and sorting inserters. A version 12 save has none, so it loads as
   // it is.
   12: (data) => data,
+  // 14 added science packs, labs and research. A version 13 save has researched
+  // nothing. (Sorting inserters now need research; ones already built stay.)
+  13: (data) => ({ ...data, research: { done: [], current: null, progress: {}, queue: [] } }),
 };
 
 // A save that can't be loaded. The message is written for the player.
@@ -166,6 +171,12 @@ export function serialize(world) {
       busy: world.craft.busy,
     },
     progress: { milestone: world.progress.milestone, delivered: { ...world.progress.delivered } },
+    research: {
+      done: [...world.research.done],
+      current: world.research.current,
+      progress: { ...world.research.progress },
+      queue: [...world.research.queue],
+    },
     stats: {
       since: world.stats.since,
       now: { made: counted(world.stats.now.made), used: counted(world.stats.now.used) },
@@ -232,6 +243,7 @@ function saveEntity(e) {
     out.ammo = e.ammo && { ...e.ammo };
   }
   if (e.type === "radar") Object.assign(out, { next: e.next, progress: e.progress, status: e.status });
+  if (e.type === "lab") Object.assign(out, { packs: { ...e.packs }, unit: e.unit, progress: e.progress, status: e.status });
   if (usesPower(e.type)) out.energy = e.energy;
   return out;
 }
@@ -269,7 +281,7 @@ function migrate(data, migrations, current) {
 }
 
 function load(data) {
-  const { seed, tick, nextId, map, charted, pollution, inventory, entities, craft, progress, stats, enemies, damaged, ruins } = data;
+  const { seed, tick, nextId, map, charted, pollution, inventory, entities, craft, progress, research, stats, enemies, damaged, ruins } = data;
   check(Number.isInteger(tick) && tick >= 0, "bad clock");
   check(Array.isArray(map?.chunks), "bad map");
   check(charted instanceof Int32Array && charted.length % 2 === 0, "bad charted map");
@@ -293,6 +305,8 @@ function load(data) {
   loadPollution(world, pollution);
   Object.assign(world.craft, checkCraft(craft));
   Object.assign(world.progress, checkProgress(progress)); // before the HUB is added, which refers to it
+  world.research = checkResearch(research);
+  world.upgrades = upgradesOf(world.research.done); // before damage is checked against full health
   Object.assign(world.stats, checkStats(stats, tick)); // likewise
 
   let maxId = 0;
@@ -344,6 +358,13 @@ function load(data) {
       check(["working", "idle", "no-ammo"].includes(s.status), `${where}: bad turret status`);
       for (const key of TURRET_KEYS) e[key] = s[key];
       e.ammo = s.ammo && { ...s.ammo };
+    }
+    if (s.type === "lab") {
+      const packs = checkItems(s.packs, where);
+      check(Object.entries(packs).every(([id, n]) => PACKS.includes(id) && n <= BUILDINGS.lab.stack + 1), `${where}: bad packs`); // + 1: a unit called off gives its packs back
+      check(s.unit === null || Object.hasOwn(TECHS, s.unit), `${where}: bad research`);
+      check(Number.isInteger(s.progress) && s.progress >= 0 && s.progress < (s.unit ? TECHS[s.unit].time : 1), `${where}: bad progress`);
+      Object.assign(e, { packs, unit: s.unit, progress: s.progress, status: String(s.status) });
     }
     if (s.type === "radar") {
       check(Number.isInteger(s.next) && s.next >= 0 && s.next <= SCAN_ORDER.length, `${where}: bad scan`);
@@ -454,6 +475,26 @@ function checkAssembler(s, where) {
   };
 }
 
+// Research: known technologies, done ones with what they need done, the one under
+// way and the queue each with what they need done or ahead of them, and units done
+// of ones that aren't.
+function checkResearch(r) {
+  const known = (id) => Object.hasOwn(TECHS, id);
+  check(Array.isArray(r?.done) && r.done.every(known) && new Set(r.done).size === r.done.length, "bad research");
+  const done = new Set(r.done);
+  check(r.done.every((id) => TECHS[id].needs.every((n) => done.has(n))), "bad research");
+  check((r.current === null || known(r.current)) && Array.isArray(r.queue) && (r.current !== null || !r.queue.length), "bad research queue");
+  const ahead = new Set(done);
+  for (const id of r.current === null ? [] : [r.current, ...r.queue]) {
+    check(known(id) && !ahead.has(id) && TECHS[id].needs.every((n) => ahead.has(n)), "bad research queue");
+    ahead.add(id);
+  }
+  check(r.progress && typeof r.progress === "object", "bad research progress");
+  const units = Object.entries(r.progress);
+  check(units.every(([id, n]) => known(id) && !done.has(id) && Number.isInteger(n) && n > 0 && n < TECHS[id].units), "bad research progress");
+  return { done, current: r.current, progress: Object.fromEntries(units), queue: [...r.queue] };
+}
+
 // Milestones done, and what's been delivered to the next: only what it needs, and
 // never all of it (that would have finished it).
 function checkProgress(p) {
@@ -472,7 +513,7 @@ function loadHealth(world, damaged, ruins) {
   for (const d of damaged) {
     const e = world.entities.get(d?.id);
     check(e && !world.damaged.has(d.id), "bad damage");
-    check(Number.isInteger(d.hp) && d.hp > 0 && d.hp <= maxHealth(e.type) && Number.isInteger(d.hit), "bad damage");
+    check(Number.isInteger(d.hp) && d.hp > 0 && d.hp <= maxHealth(world, e.type) && Number.isInteger(d.hit), "bad damage");
     world.damaged.set(d.id, { hp: d.hp, hit: d.hit });
   }
   for (const r of ruins) {

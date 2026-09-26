@@ -3,8 +3,10 @@
 // A new game can only build what START unlocks. Each milestone asks for a batch of
 // items delivered to the HUB, by hand from its panel or by belts and inserters, and
 // unlocks buildings and hand-crafting recipes once it has them all. Milestones come
-// one at a time, in order; the last is the goal of the game so far, automating
-// circuits, and unlocks nothing.
+// one at a time, in order; the last, automating circuits, unlocks labs and red
+// science packs, and research (tech.js) unlocks everything after that. Every
+// building and recipe is unlocked from the start, by one milestone or by one
+// technology.
 //
 // world.progress is { milestone, delivered }: how many milestones are done, and
 // what has been delivered to the one under way ({ item: count }). It belongs to the
@@ -12,6 +14,7 @@
 // loses nothing. The HUB holds a reference to it (see addEntity) so that belts and
 // inserters, which only see the building in front of them, can deliver to it.
 import { count, take } from "./inventory.js";
+import { TECHS, unlockingTech, researched } from "./tech.js";
 
 export const START = { buildings: ["hub", "furnace", "chest"], recipes: ["iron-gear", "copper-cable"] };
 
@@ -32,7 +35,7 @@ export const MILESTONES = [
     name: "Assembly",
     about: "Circuits are an iron plate and 3 copper cables; craft them by hand for now.",
     needs: { "electronic-circuit": 20, "iron-gear": 50, "stone-brick": 30 },
-    unlocks: { buildings: ["assembler", "sorter", "sorting-inserter"], recipes: [] },
+    unlocks: { buildings: ["assembler", "sorter"], recipes: [] },
   },
   {
     name: "Defense",
@@ -44,7 +47,7 @@ export const MILESTONES = [
     name: "Circuit production",
     about: "Build a line of assemblers that makes circuits on its own, and belt them to the HUB.",
     needs: { "electronic-circuit": 150 },
-    unlocks: { buildings: [], recipes: [] },
+    unlocks: { buildings: ["lab"], recipes: ["red-pack"] },
   },
 ];
 
@@ -54,21 +57,39 @@ export const progressState = (milestone = 0) => ({ milestone, delivered: {} });
 export const currentMilestone = (world) => MILESTONES[world.progress.milestone] || null;
 export const allDone = (world) => world.progress.milestone >= MILESTONES.length;
 
-// The milestone that unlocks a building or recipe: an index into MILESTONES, or -1
-// if it's there from the start.
-const unlockedBy = (kind, id) =>
-  START[kind].includes(id) ? -1 : MILESTONES.findIndex((m) => m.unlocks[kind].includes(id));
+// The milestone that unlocks a building or recipe: an index into MILESTONES, -1
+// if it's there from the start, or null if a technology unlocks it (or nothing).
+const unlockedBy = (kind, id) => {
+  if (START[kind].includes(id)) return -1;
+  const i = MILESTONES.findIndex((m) => m.unlocks[kind].includes(id));
+  return i < 0 ? null : i;
+};
 export const buildingMilestone = (type) => unlockedBy("buildings", type);
 export const recipeMilestone = (id) => unlockedBy("recipes", id);
+export const buildingTech = (type) => unlockingTech("buildings", type);
+export const recipeTech = (id) => unlockingTech("recipes", id);
 
-export const buildingUnlocked = (world, type) => buildingMilestone(type) < world.progress.milestone;
-export const recipeUnlocked = (world, id) => recipeMilestone(id) < world.progress.milestone;
+const unlocked = (world, milestone, tech) =>
+  milestone === null ? tech !== null && researched(world, tech) : milestone < world.progress.milestone;
+export const buildingUnlocked = (world, type) => unlocked(world, buildingMilestone(type), buildingTech(type));
+export const recipeUnlocked = (world, id) => unlocked(world, recipeMilestone(id), recipeTech(id));
+
+// What unlocks building `type`, for the player: "milestone 3 at the HUB:
+// Assembly", "research: Logistics 2", or null if it's there from the start.
+export function unlockText(type) {
+  const i = buildingMilestone(type);
+  if (i !== null) return i < 0 ? null : `milestone ${i + 1} at the HUB: ${MILESTONES[i].name}`;
+  const t = buildingTech(type);
+  return t && `research: ${TECHS[t].name}`;
+}
 
 // Why `type` can't be built yet, or null if it can.
 export function lockedWhy(world, type) {
   if (buildingUnlocked(world, type)) return null;
   const i = buildingMilestone(type);
-  return i < 0 ? "Can't be built" : `Locked: reach milestone ${i + 1}, ${MILESTONES[i].name}, at the HUB`;
+  if (i !== null) return `Locked: reach milestone ${i + 1}, ${MILESTONES[i].name}, at the HUB`;
+  const t = buildingTech(type);
+  return t ? `Locked: research ${TECHS[t].name} in a lab` : "Can't be built";
 }
 
 // How many more of `item` the milestone under way needs.

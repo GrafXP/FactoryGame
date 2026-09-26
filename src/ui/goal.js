@@ -1,6 +1,7 @@
 import { BUILDINGS } from "../sim/buildings.js";
 import { ITEMS } from "../sim/items.js";
 import { MILESTONES, currentMilestone } from "../sim/progress.js";
+import { TECHS } from "../sim/tech.js";
 import { itemIcon, icon } from "./icons.js";
 import { lower } from "./format.js";
 
@@ -27,16 +28,18 @@ export function findHub(world) {
   return hubCache.hub;
 }
 
-// The goal card: build the HUB, then each milestone's deliveries so far, then the
-// end. Tapping it calls `open(hub)` (the HUB, or null if there isn't one).
-export function createGoal(el, { open }) {
+// The goal card: build the HUB, then each milestone's deliveries so far, then,
+// once they're all done, the research under way. Tapping it calls `open(hub)`
+// (the HUB, or null if there isn't one), or `research()` once it shows research.
+export function createGoal(el, { open, research }) {
   let world = null;
   let shownKey = "";
-  el.addEventListener("click", () => world && open(findHub(world)));
+  const tap = () => (currentMilestone(world) ? open(findHub(world)) : research());
+  el.addEventListener("click", () => world && tap());
   el.addEventListener("keydown", (e) => {
     if (world && (e.key === "Enter" || e.key === " ")) {
       e.preventDefault();
-      open(findHub(world));
+      tap();
     }
   });
 
@@ -45,12 +48,18 @@ export function createGoal(el, { open }) {
       world = w;
       const hub = findHub(world);
       const { milestone, delivered } = world.progress;
-      const key = `${!!hub} ${milestone} ${JSON.stringify(delivered)}`;
+      const r = world.research;
+      const m = currentMilestone(world);
+      const key = m ? `${!!hub} ${milestone} ${JSON.stringify(delivered)}` : `research ${r.current} ${r.progress[r.current] || 0}`;
       if (key === shownKey) return;
       shownKey = key;
-      const m = currentMilestone(world);
       if (!m) {
-        el.innerHTML = `${icon("hub")}<b>Every milestone reached</b><span>You've automated circuits.</span>`;
+        const t = r.current && TECHS[r.current];
+        el.innerHTML = t
+          ? `${icon("research")}<b>${t.name}</b><span class="chips"><span class="chip">${r.progress[r.current] || 0}/${t.units}</span></span>`
+          : `${icon("research")}<b>Research</b><span>Pick what the labs work on next.</span>`;
+        el.setAttribute("aria-label", "Research: open the Research panel");
+        return;
       } else if (!hub) {
         el.innerHTML = `${icon("hub")}<b>Goal: build the HUB</b><span>Build → Base. Milestones are delivered there.</span>`;
       } else {
@@ -73,7 +82,8 @@ export function milestoneBanner(i) {
   const next = MILESTONES[i + 1];
   if (!next) {
     return `<h2>You've automated circuits!</h2>
-      <p>That was the last milestone: ${m.name}. The factory is yours to grow.</p>`;
+      <p>That was the last milestone: ${m.name}. It unlocked <b>${unlocksText(m)}</b>, and research takes over from here.</p>
+      <p class="meta">Build a lab, feed it red science packs, and pick what to research with the flask at the top.</p>`;
   }
   return `<h2>Milestone reached: ${m.name}</h2>
     <p>Unlocked: <b>${unlocksText(m)}</b>.${m.unlocks.buildings.length ? " New buildings are under Build." : ""}</p>

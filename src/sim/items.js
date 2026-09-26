@@ -16,6 +16,8 @@ export const ITEMS = {
   "iron-gear": { name: "Iron gear", plural: "Iron gears", shape: "gear" },
   "copper-cable": { name: "Copper cable", plural: "Copper cables", shape: "cable" },
   "electronic-circuit": { name: "Circuit", plural: "Circuits", shape: "circuit" },
+  "red-pack": { name: "Red science pack", plural: "Red science packs", shape: "pack" },
+  "green-pack": { name: "Green science pack", plural: "Green science packs", shape: "pack" },
 };
 
 // The item you get from mining each kind of ore tile.

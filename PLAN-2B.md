@@ -327,7 +327,7 @@ enemies push too.
 - [ ] Left alone for an hour, bases spread, but never into the safe zone or onto the factory.
 - [ ] Piercing magazines kill brutes clearly faster than firearm magazines do.
 
-### Phase 20: Science packs, labs and research
+### Phase 20: Science packs, labs and research ✅ (done)
 Research takes over from the HUB. The HUB's milestones stay the opening, and its
 last one now unlocks labs.
 - **Science packs.** A *red* pack is made from a copper plate and an iron gear, and a
@@ -354,6 +354,61 @@ last one now unlocks labs.
   `lockedWhy` says which milestone or technology a building needs. Number effects are
   worked out once when research finishes, not on every shot. The Stats panel counts
   packs used like any other items.
+- Done as: `sim/tech.js` (the tree, the queue, finishing units, the numbers bonuses
+  make), `sim/lab.js`, `ui/research.js`.
+  - **Packs.** Red: a copper plate and a gear, 5 s. Green: two iron plates, a gear
+    and a circuit, 6 s: what an inserter and a belt are made of, since buildings
+    aren't items. Both are flasks on belts and in icons.
+  - **Lab** (3×3, 60 kW, 10 circuits, 10 gears, 4 plates, so not from the starter
+    kit): belts and inserters keep 2 of each pack in it, the player 10. It takes a
+    pack whether the research needs it or not. For a unit it takes one of each pack
+    the technology needs, works its time using power, and counts the packs as used
+    when it's done. Labs never start more units than are left; a lab on a unit of
+    research that's been stopped or switched puts its packs back. Inserters take
+    packs out of a lab only into another lab, so labs chain. Statuses: working,
+    no-input (short of a pack), no-power, no-research (a question mark over it) and
+    idle (the units left are being done); labs count in machine activity. The ring
+    round the dome turns while it works.
+  - **The tree**, units × time a unit: *Green science* (10 × 5 s, red; unlocks green
+    packs: "the first technology"), *Weapon damage 1* (30 × 10 s, +20% damage),
+    *Shooting speed 1* (30 × 10 s, +20%), *Stronger walls* (20 × 10 s, +50% wall
+    health), and with green: *Weapon damage 2* (+30%), *Shooting speed 2* (+30%) and
+    *Logistics 2*, 40 × 15 s each. Logistics 2 unlocks the sorting inserter for now
+    (moved off milestone 3, like Factorio's filter inserter); phase 27 adds the Mk2
+    tier to it. Bonuses add up: all of them make a firearm magazine 9 a shot (6),
+    a piercing one 12 (8), 8 ticks between shots (12) and walls 1500 health (1000).
+    `world.upgrades` holds those numbers; it isn't saved but worked out from what's
+    done on loading.
+  - **Queue.** Queueing a technology queues what it needs first; with nothing under
+    way the first starts. Stopping one takes what needs it off the queue; units done
+    are kept. The next in the queue starts when one finishes, with a toast saying
+    what it did.
+  - **UI.** A flask button in the top bar (L), shown once labs are unlocked, opens
+    Research: the labs, what's under way with its units, the queue, then every
+    technology left by tier (red; red and green) with what it does, its cost and
+    Research / Queue (with what it needs). The goal card shows the research under way
+    once the milestones are done, and opens the panel. A lab's panel has its packs,
+    add and take buttons, its status and a Research button. Build shows "Unlocked
+    by research: Logistics 2" on locked cards. Turret and wall panels show what
+    research has added.
+  - **Milestone 5** (circuit production) unlocks labs and red packs; its banner says
+    research takes over.
+  - The realistic example has a science wing: its own iron smelter (a miner on iron
+    and one on coal feeding a furnace), a gear assembler between a red and a green
+    pack assembler, copper and circuits off the overflow lines, and two chained labs
+    on the pack belt, with five technologies queued. It gets through Weapon damage 1,
+    Shooting speed 1 and Stronger walls, and most of Weapon damage 2, in the 20
+    minutes the test runs. It's built as if the last milestone were done.
+  - Save format 14: research, and labs' packs, unit and progress. A format 13 save
+    has researched nothing; sorting inserters it has built stay.
+  - Automated: 9 new tests (a two-assembler red line feeding three chained labs
+    finishes Weapon damage 1 and turrets then hit harder; a lab short of a pack, of
+    power or of research; never more units than are left; the queue and stopping;
+    packs given back on switching and removal; labs only passing packs to labs;
+    the numbers; save/load mid-unit tick for tick and format 13 saves; green packs
+    in an assembler), and the unlock test now covers technologies. Full suite: 249
+    tests. The benchmark tick is unchanged (measured against the last commit on the
+    same machine). The phone checks below are still manual.
 - [ ] A line making red packs, feeding three labs, researches Weapon damage 1 on its own, and turrets hit harder afterwards.
 - [ ] A lab missing a pack, or power, says so.
 - [ ] Every building and recipe is unlocked by exactly one milestone or technology (tested), and the Research panel shows what each one unlocks.

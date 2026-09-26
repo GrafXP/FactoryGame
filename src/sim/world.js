@@ -21,6 +21,8 @@ import { statsState, produced, consumed, consumedAll, tally, rollStats, TRACKED,
 import { UNIT, emission, homeChunk, stepPollution } from "./pollution.js";
 import { enemyState, stepEnemies } from "./enemies.js";
 import { stepRepair, ruinOf, clearRuins } from "./health.js";
+import { labState, labContents, stepLab } from "./lab.js";
+import { researchState, upgradesOf } from "./tech.js";
 
 export { entityAt };
 
@@ -32,9 +34,9 @@ export const START_CHARTED = 2;
 // A new world, on the endless map for `seed` (chunks.js). The land round the start
 // is charted, unless `charted` is false (a save brings its own). `milestones`
 // starts it with that many milestones done (progress.js), e.g. all of them for tests
-// that build anything. Enemies are on by default; `enemies: false` makes it peaceful
-// (enemies.js).
-export function createWorld({ seed = 1, kit = START_KIT, milestones = 0, charted = true, enemies = true } = {}) {
+// that build anything. `research` is the technologies done (tech.js). Enemies are
+// on by default; `enemies: false` makes it peaceful (enemies.js).
+export function createWorld({ seed = 1, kit = START_KIT, milestones = 0, research = [], charted = true, enemies = true } = {}) {
   const world = {
     tick: 0,
     seed,
@@ -51,6 +53,8 @@ export function createWorld({ seed = 1, kit = START_KIT, milestones = 0, charted
     mining: null, // { x, y, item, progress } while the player is hand-mining a tile
     craft: craftState(), // the player's hand-crafting queue (crafting.js)
     progress: progressState(milestones), // milestones done and deliveries (progress.js)
+    research: researchState(research), // technologies done and under way (tech.js)
+    upgrades: upgradesOf(research), // the numbers research has changed (tech.js); not saved
     stats: statsState(), // what's been made and used (stats.js)
     polluted: new Set(), // the chunks with any pollution (pollution.js)
     pollutionVersion: 0, // bumped when pollution has spread, once a second
@@ -78,6 +82,7 @@ export function step(world) {
     else if (e.type === "furnace") stepFurnace(world, e);
     else if (e.type === "assembler") stepAssembler(world, e);
     else if (isInserter(e)) stepInserter(world, e, m.from, m.to);
+    else if (e.type === "lab") stepLab(world, e);
     else if (e.type === "radar") stepRadar(world, e);
     else if (e.type === "turret") stepTurret(world, e);
     if (m.tracked) {
@@ -109,7 +114,7 @@ export function step(world) {
 // gives off for each tick it works, into `chunk` (pollution.js). Worked out
 // from the layout and cached until it changes (world.version), like the belt
 // network; it isn't saved.
-const STEPPED = new Set(["miner", "furnace", "assembler", ...INSERTERS, "radar", "turret"]);
+const STEPPED = new Set(["miner", "furnace", "assembler", ...INSERTERS, "lab", "radar", "turret"]);
 function machines(world) {
   if (world.machines?.version === world.version) return world.machines.list;
   const list = [];
@@ -270,6 +275,7 @@ function takeDown(world, entity) {
   if (entity.type === "assembler") Object.assign(entity, assemblerState());
   if (entity.type === "generator") entity.fuel = null;
   if (entity.type === "turret") Object.assign(entity, turretState());
+  if (entity.type === "lab") Object.assign(entity, labState());
   if (entity.hand) entity.hand = null;
   return under;
 }
@@ -285,6 +291,7 @@ export function refundOf(entity, world = null) {
   if (entity.type === "assembler") for (const [id, n] of Object.entries(assemblerContents(entity))) add(id, n);
   if (entity.type === "generator" && entity.fuel) add(entity.fuel.item, entity.fuel.n);
   if (entity.type === "turret" && entity.ammo) add(entity.ammo.item, entity.ammo.n);
+  if (entity.type === "lab") for (const [id, n] of Object.entries(labContents(entity))) add(id, n);
   if (entity.hand) add(entity.hand);
   const entrance = world && entity.type === "underground" && entity.end === "out" && world.entities.get(entity.pair);
   if (entrance) for (const it of buried(entrance)) add(it.item);
@@ -342,6 +349,7 @@ function stateOf(type, opts) {
   if (INSERTERS.has(type)) return inserterState(type);
   if (type === "assembler") return assemblerState();
   if (type === "generator") return generatorState();
+  if (type === "lab") return labState();
   if (type === "radar") return radarState();
   if (type === "turret") return turretState();
   return {};
