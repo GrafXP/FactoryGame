@@ -13,6 +13,7 @@
 const TAP_SLOP = 10; // px a press may move and still count as a tap
 const LONG_PRESS_MS = 350;
 const KEY_PAN = 4; // tiles per arrow/WASD press at the default zoom
+const GHOST_CLICK_MS = 800; // how long after a press on the canvas ends its click may come
 
 export function createControls(canvas, cam, { onPoint, onTap, canPaint = () => false, onPaint = {} } = {}) {
   const pointers = new Map(); // pointerId → { x, y }
@@ -103,8 +104,24 @@ export function createControls(canvas, cam, { onPoint, onTap, canPaint = () => f
     }
   };
 
+  // A tap can open something over the spot it was on (a building's panel), and the
+  // browser's click that follows the press then lands on whatever is there now, such
+  // as an Add button. A click from a press that started on the canvas is only ever
+  // the canvas's, so one landing anywhere else is dropped. Keyboard clicks (detail 0)
+  // are left alone.
+  let pressEnded = -Infinity;
+  const onClick = (e) => {
+    if (e.target === canvas || !e.detail || e.timeStamp - pressEnded > GHOST_CLICK_MS) return;
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  const onAnyDown = (e) => {
+    if (e.target !== canvas) pressEnded = -Infinity; // a press of its own elsewhere clicks as normal
+  };
+
   const onUp = (e) => {
     if (!pointers.delete(e.pointerId)) return;
+    pressEnded = e.timeStamp;
     const up = e.type === "pointerup";
     if (painting) stopPainting(up);
     else if (press?.id === e.pointerId && up) {
@@ -148,10 +165,14 @@ export function createControls(canvas, cam, { onPoint, onTap, canPaint = () => f
   canvas.addEventListener("wheel", onWheel, { passive: false });
   canvas.addEventListener("contextmenu", (e) => e.preventDefault());
   window.addEventListener("keydown", onKey);
+  window.addEventListener("click", onClick, true);
+  window.addEventListener("pointerdown", onAnyDown, true);
 
   return () => {
     clearTimeout(longPress);
     window.removeEventListener("keydown", onKey);
+    window.removeEventListener("click", onClick, true);
+    window.removeEventListener("pointerdown", onAnyDown, true);
     // The canvas is removed with the view, taking its listeners with it.
   };
 }
