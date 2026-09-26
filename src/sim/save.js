@@ -25,7 +25,7 @@ import { SMELTING, FUEL, FUEL_ENERGY, RECIPES } from "./recipes.js";
 import { SWING } from "./inserter.js";
 import { usesPower } from "./power.js";
 import { MILESTONES } from "./progress.js";
-import { SERIES_LEN, POLLUTION } from "./stats.js";
+import { SERIES_LEN, NOT_ITEMS } from "./stats.js";
 
 export const SAVE_FORMAT = "factory-save";
 export const SAVE_VERSION = 9;
@@ -398,20 +398,27 @@ function loadPollution(world, p) {
 }
 
 // Production statistics: counting started no later than now, and counts of known
-// items and pollution.
+// items, pollution and power.
 function checkStats(s, tick) {
   check(Number.isInteger(s?.since) && s.since >= 0 && s.since <= tick, "bad statistics");
   const counts = (items) => {
-    const { [POLLUTION]: n, ...rest } = items || {};
-    check(n === undefined || (Number.isSafeInteger(n) && n > 0), "bad statistics");
-    return { ...checkItems(rest, "statistics"), ...(n && { [POLLUTION]: n }) };
+    const rest = { ...items };
+    const out = {};
+    for (const id of NOT_ITEMS) {
+      const n = rest[id];
+      delete rest[id];
+      check(n === undefined || (Number.isSafeInteger(n) && n > 0), "bad statistics");
+      if (n) out[id] = n;
+    }
+    return { ...checkItems(rest, "statistics"), ...out };
   };
   const now = { made: counts(s.now?.made), used: counts(s.now?.used) };
   check(s.series && typeof s.series === "object", "bad statistics");
   const series = {};
   for (const [id, a] of Object.entries(s.series)) {
-    const type = id === POLLUTION ? Float64Array : Uint32Array;
-    check((id === POLLUTION || Object.hasOwn(ITEMS, id)) && a instanceof type && a.length === SERIES_LEN, "bad statistics");
+    const other = NOT_ITEMS.includes(id);
+    const type = other ? Float64Array : Uint32Array;
+    check((other || Object.hasOwn(ITEMS, id)) && a instanceof type && a.length === SERIES_LEN, "bad statistics");
     series[id] = a.slice();
   }
   return { since: s.since, now, series };

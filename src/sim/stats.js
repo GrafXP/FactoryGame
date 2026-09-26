@@ -21,7 +21,10 @@
 //
 // Besides items, it counts pollution (POLLUTION, see pollution.js): what machines
 // give off as made and what the ground takes in as used, in the sim's whole
-// numbers. Those can outgrow a Uint32Array's hour, so its series is a Float64Array.
+// numbers; and electricity (POWER, see power.js), in joules: what generators
+// deliver as made and what the machines on a network ask for as used, so a network
+// short of power shows as more used than made. Those can outgrow a Uint32Array's
+// hour, so their series are Float64Arrays.
 //
 // Machines (miners, furnaces, assemblers) count the ticks they spend in each
 // status (ACTIVITY), in `activity`: what it's doing (`status`) and since which tick
@@ -45,7 +48,9 @@ export const SERIES_LEN = WINDOWS.length * 2 * BUCKETS;
 const PER_BUCKET = WINDOWS.map((w, i) => (i ? w.ticks / WINDOWS[i - 1].ticks : 1)); // finer buckets in each
 
 export const POLLUTION = "pollution";
-const newSeries = (id) => (id === POLLUTION ? new Float64Array(SERIES_LEN) : new Uint32Array(SERIES_LEN));
+export const POWER = "power";
+export const NOT_ITEMS = [POLLUTION, POWER]; // what's counted besides items
+const newSeries = (id) => (NOT_ITEMS.includes(id) ? new Float64Array(SERIES_LEN) : new Uint32Array(SERIES_LEN));
 
 export const statsState = (since = 0) => ({ since, now: { made: {}, used: {} }, series: {} });
 

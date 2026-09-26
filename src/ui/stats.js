@@ -1,13 +1,13 @@
 import { ITEMS } from "../sim/items.js";
 import { TICK_RATE } from "../sim/world.js";
-import { WINDOWS, MADE, USED, BUCKETS, POLLUTION, covered, history, perMinute, itemsSeen, activityOf } from "../sim/stats.js";
+import { WINDOWS, MADE, USED, BUCKETS, POLLUTION, POWER, covered, history, perMinute, itemsSeen, activityOf } from "../sim/stats.js";
 import { UNIT, emission, pollutionTotal } from "../sim/pollution.js";
 import { itemIcon, icon } from "./icons.js";
 
 // The Stats panel: for every item made or used over the window picked (the last
 // minute, 10 minutes or hour), how many a minute, with a small graph of both over
-// the window, and under them the same for pollution: given off and taken in by the
-// ground. Redrawn when a new bucket of that window is in.
+// the window, and under them the same for power (made and asked for, in kW) and
+// pollution (given off and taken in by the ground). Redrawn when a new bucket of that window is in.
 const WINDOW_KEY = "factory:stats-window";
 
 // A rate a minute, short: "0.5", "12", "1.2k".
@@ -71,6 +71,7 @@ export function createStatsPanel(el, { close }) {
              <ul class="items stats"><li class="head"><span></span><b class="made">Made</b><b class="used">Used</b></li>${rows}</ul>`
           : none
       }
+      ${powerRows(world, w)}
       ${pollutionRows(world, w)}`;
   };
 
@@ -97,6 +98,27 @@ export function createStatsPanel(el, { close }) {
   };
 }
 
+// Power delivered by generators and asked for by machines over window w, in kW
+// on average, and how much of what was asked for was delivered. Left out while
+// no network has made or wanted any.
+const TO_KW = 60 / 1000 / TICK_RATE / 60; // joules a minute → kW
+function powerRows(world, w) {
+  const made = history(world, POWER, w, MADE);
+  const used = history(world, POWER, w, USED);
+  if (!made.some((v) => v > 0) && !used.some((v) => v > 0)) return "";
+  const per = (kind) => {
+    const n = perMinute(world, POWER, w, kind);
+    return n === null ? null : n * TO_KW;
+  };
+  const [m, u] = [per(MADE), per(USED)];
+  const short = u > 0 && m < u * 0.995;
+  const note = u === null ? "" : short ? `Short of power: machines got ${Math.round((m / u) * 100)}% of what they asked for.` : "Enough for every machine.";
+  return `<h3>Power</h3>
+    <p class="meta">kW on average, over ${span(world, w)}. ${note}</p>
+    <ul class="items stats wide"><li class="head"><span></span><b class="made">Made</b><b class="used">Asked</b></li>
+      <li>${icon("generator")}<span>Electricity</span><b class="made">${rate(m)}</b><b class="used">${rate(u)}</b>${spark(made, used)}</li></ul>`;
+}
+
 // Pollution given off and taken in over window w, a minute, and how much is in the
 // air now. Left out while there's never been any.
 function pollutionRows(world, w) {
@@ -110,7 +132,7 @@ function pollutionRows(world, w) {
   };
   return `<h3>Pollution</h3>
     <p class="meta">${Math.round(air).toLocaleString("en")} in the air now. Machines give it off while they work, and the ground takes it in, water more.</p>
-    <ul class="items stats pollution"><li class="head"><span></span><b class="made">Made</b><b class="used">Absorbed</b></li>
+    <ul class="items stats wide"><li class="head"><span></span><b class="made">Made</b><b class="used">Absorbed</b></li>
       <li>${icon("pollution")}<span>Pollution</span><b class="made">${per(MADE)}</b><b class="used">${per(USED)}</b>${spark(made, used)}</li></ul>`;
 }
 

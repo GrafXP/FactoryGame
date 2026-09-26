@@ -20,6 +20,7 @@
 import { BUILDINGS, footprint } from "./buildings.js";
 import { entityAt } from "./grid.js";
 import { generatorAvailable, burnGenerator } from "./generator.js";
+import { produced, consumed, POWER } from "./stats.js";
 
 const { reach: REACH, area: AREA } = BUILDINGS.pole;
 const SMOOTHING = 0.05; // for the averages the panels show, about a second
@@ -167,9 +168,12 @@ export function powerNetwork(world) {
 // What each consumer asks for this tick, reused from tick to tick.
 let asked = new Float64Array(64);
 
-// Hands out this tick's power, before the machines step.
+// Hands out this tick's power, before the machines step. What's delivered and
+// what's asked for go into the statistics (stats.js).
 export function stepPower(world) {
   const { nets, loose } = powerNetwork(world);
+  let made = 0;
+  let wanted = 0;
   for (const net of nets) {
     const { consumers, draws } = net;
     if (asked.length < consumers.length) asked = new Float64Array(consumers.length * 2);
@@ -211,8 +215,12 @@ export function stepPower(world) {
     net.demand = demand;
     net.capacity = capacity;
     net.supplied = given;
+    made += given;
+    wanted += demand;
     for (const k of ["demand", "capacity", "supplied"]) net.avg[k] += (net[k] - net.avg[k]) * SMOOTHING;
   }
+  if (made) produced(world.stats, POWER, made);
+  if (wanted) consumed(world.stats, POWER, wanted);
   // A generator near no pole has nothing to power.
   for (const g of loose) g.status = g.burn || g.fuel ? "unconnected" : "no-fuel";
 }

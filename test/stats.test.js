@@ -10,7 +10,7 @@ import { stillNeeded } from "../src/sim/progress.js";
 import { ORE } from "../src/sim/map.js";
 import { ITEMS } from "../src/sim/items.js";
 import { serialize, deserialize } from "../src/sim/save.js";
-import { MADE, USED, BUCKETS, produced, perMinute, history, covered, itemsSeen, activityOf } from "../src/sim/stats.js";
+import { MADE, USED, BUCKETS, POWER, produced, perMinute, history, covered, itemsSeen, activityOf } from "../src/sim/stats.js";
 import { charge, ALL, clearArea, oreBlock } from "./helpers.js";
 
 const MINUTE = 60 * TICK_RATE;
@@ -219,4 +219,39 @@ test("machines short of power count the ticks they wait for it", () => {
   const { share } = activityOf(world, assemblers[5]);
   assert.ok(Math.abs(share.working - 0.5) < 0.05, `working ${share.working}`);
   assert.ok(Math.abs(share["no-power"] - 0.5) < 0.05, `no power ${share["no-power"]}`);
+});
+
+test("power made and asked for are counted, and a network short of power asks for more than it gets", () => {
+  const world = setup();
+  const { x, y } = clearArea(world, 10);
+  const gen = place(world, "generator", x, y, 0);
+  fuelGenerator(gen, world.inventory, "coal", 5);
+  place(world, "pole", x + 3, y + 2, 0);
+  const a = place(world, "assembler", x + 4, y + 3, 0);
+  setRecipe(a, "iron-gear", world.inventory);
+  fillAssembler(a, world.inventory, "iron-plate");
+  for (let i = 0; i < MINUTE; i++) step(world);
+  const made = total(world, POWER, ONE_MIN, MADE);
+  assert.ok(made > 0);
+  assert.equal(total(world, POWER, ONE_MIN, USED), made, "with enough power, it gets all it asks for");
+  assert.equal(made, 5 * 4_000_000 - gen.burn - (gen.fuel?.n || 0) * 4_000_000, "what the coal it burnt made");
+
+  // 16 assemblers on one generator: they ask for twice what it makes.
+  const short = setup();
+  const { x: sx, y: sy } = clearArea(short, 22);
+  for (let j = 0; j < 4; j++) {
+    for (let i = 0; i < 4; i++) {
+      const m = place(short, "assembler", sx + 4 * i, sy + 4 * j, 0);
+      setRecipe(m, "iron-gear", short.inventory);
+      fillAssembler(m, short.inventory, "iron-plate");
+    }
+  }
+  for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) place(short, "pole", sx + 3 + 4 * i, sy + 3 + 4 * j, 0);
+  place(short, "pole", sx + 3, sy + 15, 0);
+  fuelGenerator(place(short, "generator", sx, sy + 16, 0), short.inventory, "coal");
+  for (let i = 0; i < MINUTE; i++) step(short);
+  const ratio = perMinute(short, POWER, ONE_MIN, MADE) / perMinute(short, POWER, ONE_MIN, USED);
+  assert.ok(Math.abs(ratio - 0.5) < 0.05, `got ${ratio} of what was asked for`);
+  const loaded = deserialize(structuredClone(serialize(short)));
+  assert.deepEqual(loaded.stats.series[POWER], short.stats.series[POWER], "and it's saved");
 });
