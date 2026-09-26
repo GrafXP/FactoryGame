@@ -54,7 +54,7 @@ export function benchWorld(name = "big") {
   const size = BENCHES[name];
   if (!size) throw new Error(`No benchmark called "${name}"`);
   if (size.factory) return size.factory();
-  const world = createWorld({ seed: 1, kit: {}, milestones: MILESTONES.length });
+  const world = createWorld({ seed: 1, kit: {}, enemies: false, milestones: MILESTONES.length });
   const sinks = [];
 
   // Everything is built at the grid's top-left (x0, y0), with the loops under the

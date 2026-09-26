@@ -44,10 +44,12 @@ test("describe lists items in words", () => {
   assert.equal(describe({ "iron-plate": 2, "copper-plate": 1 }), "2 iron plates, 1 copper plate");
 });
 
-test("a new game starts with the kit, and every building is affordable from it", () => {
+test("the starter kit builds machinery, while walls require smelted bricks", () => {
   const world = createWorld({ milestones: ALL, seed: 1 });
   assert.deepEqual(world.inventory.items, START_KIT);
-  for (const type in BUILDINGS) assert.ok(affordable(world.inventory, BUILDINGS[type].cost) >= 1, type);
+  for (const type in BUILDINGS) {
+    assert.equal(affordable(world.inventory, BUILDINGS[type].cost) >= 1, type !== "wall", type);
+  }
 });
 
 test("placing pays the cost, and removing refunds it", () => {

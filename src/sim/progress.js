@@ -23,10 +23,10 @@ export const MILESTONES = [
     unlocks: { buildings: ["miner", "belt", "generator", "pole", "inserter"], recipes: [] },
   },
   {
-    name: "Logistics",
+    name: "Logistics and defense",
     about: "Let miners and furnaces do the work: miners need power from a generator and poles.",
     needs: { "iron-plate": 100, "copper-plate": 50, "iron-gear": 20 },
-    unlocks: { buildings: ["underground", "splitter", "radar"], recipes: ["electronic-circuit"] },
+    unlocks: { buildings: ["underground", "splitter", "radar", "turret", "wall"], recipes: ["electronic-circuit", "firearm-magazine"] },
   },
   {
     name: "Assembly",

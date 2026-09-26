@@ -89,6 +89,7 @@ const ICONS = {
 // Which icon each machine status shows. Statuses not listed (e.g. "working", or an
 // inserter "waiting" for room, which is normal) show none.
 const ICON_FOR = {
+  "no-ammo": "blocked",
   "no-resource": "no-resource",
   "no-output": "blocked",
   full: "blocked",

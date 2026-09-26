@@ -29,6 +29,7 @@ function gearPath(teeth, r, R, h) {
 }
 
 export const ITEM_FACES = {
+  magazine: [["", "M6 7h12v14H6z"], ["lit", "M7 7V4l2-2 2 2v3M13 7V4l2-2 2 2v3"], ["dark", "M8 11h2v7H8zM14 11h2v7h-2z"]],
   rock: [
     ["", "M4.5 15.5 7 8l6-3.5 6.5 4 1 7.5-4.5 4h-7z"],
     ["lit", "M7 8l6-3.5 6.5 4-6 2.5z"],
@@ -65,6 +66,8 @@ export const itemIcon = (id) =>
 
 // Line icons for buildings and buttons, drawn in the current text colour.
 const PATHS = {
+  turret: "M3 21h18M5 21v-7h14v7M8 14V9h8v5M12 9V2M10 2h4",
+  wall: "M3 20V6h5v4h3V6h4v4h3V6h3v14zM3 15h18M8 15v5M15 15v5",
   belt: "M3 7h18v10H3zM8 12h7M12 9l3 3-3 3",
   underground: "M3 17h5v-5h8v5h5M8 12V9h8v3M12 14v4",
   splitter: "M4 12h6M10 12l4-6h6M10 12h10M10 12l4 6h6M17 4l3 2-3 2M17 10l3 2-3 2M17 16l3 2-3 2",

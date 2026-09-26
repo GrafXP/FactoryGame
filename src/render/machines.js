@@ -24,6 +24,9 @@ export function createMachineParts(parent) {
   // Modelled pointing south (+z) from the pivot: that's the pickup side of a
   // north-facing inserter, where the arm rests.
   const kinds = {
+    gun: { geometry: new THREE.BoxGeometry(0.75, 0.4, 0.75).translate(0, 0.98, 0), color: "minerTop" },
+    barrel: { geometry: new THREE.BoxGeometry(0.15, 0.15, 1.15).translate(0, 1.05, -0.7), color: "generatorBase" },
+    flash: { geometry: new THREE.SphereGeometry(0.18, 6, 4).translate(0, 1.05, -1.35), color: null },
     arm: { geometry: new THREE.BoxGeometry(0.07, 0.06, ARM).translate(0, ARM_Y, ARM / 2), color: "inserterArm" },
     hand: { geometry: new THREE.BoxGeometry(0.2, 0.05, 0.08).translate(0, ARM_Y - 0.04, ARM), color: "inserter" },
     // Just in front of a furnace's mouth (see buildings.js). It stands on the
@@ -84,6 +87,8 @@ export function createMachineParts(parent) {
       let assemblers = 0;
       let generators = 0;
       let radars = 0;
+      const turrets = list.filter(e => e.type === "turret");
+      for (const k of [kinds.gun, kinds.barrel, kinds.flash]) ensure(k, turrets.length);
       for (const e of list) {
         if (e.type === "inserter") inserters++;
         else if (e.type === "furnace") furnaces++;
@@ -105,9 +110,17 @@ export function createMachineParts(parent) {
       let g = 0;
       let gf = 0;
       let d = 0;
+      let guns = 0;
+      let flashes = 0;
       const net = powerNetwork(world);
       for (const e of list) {
-        if (e.type === "inserter") {
+        if (e.type === "turret") {
+          q.setFromAxisAngle(up, -e.aim);
+          m.compose(pos.set(e.x + 1, 0, e.y + 1), q, one);
+          kinds.gun.mesh.setMatrixAt(guns, m);
+          kinds.barrel.mesh.setMatrixAt(guns++, m);
+          if (e.fired >= 0 && world.tick - e.fired < 4) kinds.flash.mesh.setMatrixAt(flashes++, m);
+        } else if (e.type === "inserter") {
           // Round through the inserter's right-hand side, from pickup to drop.
           const angle = (e.swing / SWING) * Math.PI - (e.rot * Math.PI) / 2;
           m.compose(pos.set(e.x + 0.5, 0, e.y + 0.5), q.setFromAxisAngle(up, angle), one);
@@ -158,6 +171,9 @@ export function createMachineParts(parent) {
       for (const gen of wheels.keys()) if (!world.entities.has(gen.id)) wheels.delete(gen);
       for (const r of dishes.keys()) if (!world.entities.has(r.id)) dishes.delete(r);
       for (const [k, n] of [
+        [kinds.gun, guns],
+        [kinds.barrel, guns],
+        [kinds.flash, flashes],
         [kinds.arm, a],
         [kinds.hand, a],
         [kinds.fire, f],

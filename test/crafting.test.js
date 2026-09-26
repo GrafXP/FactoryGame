@@ -88,9 +88,9 @@ test("queueing a building's missing parts crafts just those", () => {
   assert.equal(affordable(world.inventory, BUILDINGS.miner.cost), 1);
 });
 
-test("every building can be had from the start kit, crafting parts by hand", () => {
+test("machinery can be hand-crafted from the kit; walls need smelted bricks", () => {
   for (const type in BUILDINGS) {
-    assert.equal(planItems(createInventory(START_KIT), BUILDINGS[type].cost).missing, null, type);
+    assert.deepEqual(planItems(createInventory(START_KIT), BUILDINGS[type].cost).missing, type === "wall" ? { "stone-brick": 5 } : null, type);
   }
 });
 

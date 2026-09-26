@@ -20,6 +20,7 @@
 // With nowhere to go it waits at the middle, holding up everything behind it.
 // status says how the last item fared: "working", "waiting" (its ways out are full)
 // or "no-exit" (none will take it).
+import { turretCanTake, turretAdd } from "./turret.js";
 import { BUILDINGS, DIRS } from "./buildings.js";
 import { entityAt } from "./grid.js";
 import { ITEMS } from "./items.js";
@@ -53,7 +54,7 @@ export function setFilter(s, i, filter) {
 
 // Whether building e ever takes items from a neighbour.
 export const takesItems = (e) =>
-  isConveyor(e) || e.type === "furnace" || e.type === "assembler" || e.type === "generator" || e.type === "hub" || !!e.inventory;
+  isConveyor(e) || e.type === "furnace" || e.type === "assembler" || e.type === "generator" || e.type === "hub" || e.type === "turret" || !!e.inventory;
 
 // Whether building e can take `item` right now. Conveyors take items onto the
 // middle of their tile (where a miner's chute drops them); chests store them until they're full;
@@ -61,6 +62,7 @@ export const takesItems = (e) =>
 // recipe's ingredients (assembler.js), generators fuel (generator.js), and the HUB
 // what its milestone still needs (progress.js).
 export function canTake(e, item) {
+  if (e.type === "turret") return turretCanTake(e, item);
   if (e.type === "hub") return stillNeeded(e.progress, item) > 0;
   if (isConveyor(e)) return roomAt(e, MID);
   if (e.type === "furnace") return furnaceCanTake(e, item);
@@ -71,7 +73,8 @@ export function canTake(e, item) {
 
 // Gives e an item. Check canTake first.
 export function put(e, item) {
-  if (isConveyor(e)) insertAt(e, item, MID);
+  if (e.type === "turret") turretAdd(e, item);
+  else if (isConveyor(e)) insertAt(e, item, MID);
   else if (e.type === "furnace") furnaceAdd(e, item);
   else if (e.type === "assembler") assemblerAdd(e, item);
   else if (e.type === "generator") generatorAdd(e, item);

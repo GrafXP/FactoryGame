@@ -349,3 +349,20 @@ test("the tools say what to do when there's nothing selected or copied", () => {
   builder.tap(at(40, 40), "touch");
   assert.equal(out.messages.at(-1), "Press and hold, then drag a box over buildings to select them");
 });
+
+test("wall dragging builds a line with brick costs, previews and undo", () => {
+  const { world, builder, out } = setup();
+  world.inventory.items["stone-brick"] = 15;
+  builder.setTool("wall");
+  builder.paintStart(at(10, 10));
+  builder.paintMove(at(12, 10));
+  assert.deepEqual(out.ghosts.map(g => [g.type, g.x, g.y, g.ok]), [
+    ["wall", 10, 10, true], ["wall", 11, 10, true], ["wall", 12, 10, true],
+  ]);
+  builder.paintEnd();
+  for (let x = 10; x <= 12; x++) assert.equal(entityAt(world, x, 10)?.type, "wall");
+  assert.equal(world.inventory.items["stone-brick"] || 0, 0);
+  builder.undo();
+  for (let x = 10; x <= 12; x++) assert.equal(entityAt(world, x, 10), null);
+  assert.equal(world.inventory.items["stone-brick"], 15);
+});

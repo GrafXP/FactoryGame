@@ -11,7 +11,7 @@ import { generatorAdd } from "./generator.js";
 import { MILESTONES } from "./progress.js";
 
 export function realisticWorld() {
-  const world = createWorld({ seed: 42, kit: {}, milestones: MILESTONES.length - 1 });
+  const world = createWorld({ seed: 42, kit: {}, enemies: false, milestones: MILESTONES.length - 1 });
   const terrain = (x, y, ore = ORE.NONE, amount = 0) => {
     const c = chunkOf(world, x, y);
     const i = tileIndex(x, y);
@@ -111,6 +111,24 @@ export function realisticWorld() {
   vertical(21, 13, 16);
   build("chest", 21, 17);
   build("radar", 26, 3);
+
+  // Ammunition is another real iron consumer. Stock the defense post first,
+  // then keep spare magazines in a chest; the peaceful example can be inspected.
+  vertical(-17, 1, 5);
+  horizontal(-17, -12, 6);
+  build("inserter", -11, 6, 1);
+  setRecipe(build("assembler", -10, 6), "firearm-magazine", world.inventory);
+  build("inserter", -7, 6, 1);
+  horizontal(-6, 8, 6);
+  build("underground", 9, 6, 1);
+  build("underground", 13, 6, 1, { end: "out" });
+  horizontal(14, 23, 6);
+  const ammo = build("sorter", 24, 6, 1);
+  ammo.filters = ["firearm-magazine", "overflow", "overflow"];
+  build("chest", 24, 7);
+  build("belt", 25, 6, 1);
+  build("turret", 26, 6);
+  for (let x = 24; x <= 29; x++) build("wall", x, 1);
 
   // Poles follow service corridors beside the machines and the power yard.
   // The intermediate poles tie the smelters, fabrication and radar together.

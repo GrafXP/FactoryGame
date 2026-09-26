@@ -6,6 +6,7 @@ import { ORE_ITEM, START_KIT, describe } from "./items.js";
 import { createInventory, add, give, missing, take, move, moveAll, total } from "./inventory.js";
 import { inMap, entityAt } from "./grid.js";
 import { chunkOf, tileIndex, setIdAt, chartArea, NEST_ID } from "./chunks.js";
+import { turretState, stepTurret } from "./turret.js";
 import { radarState, stepRadar } from "./radar.js";
 import { stepBelts, takesItems, canTake, put, splitterState, ANY_FILTERS } from "./transport.js";
 import { undergroundState, undergroundWhy, pairUp, unpair, buried } from "./underground.js";
@@ -31,9 +32,9 @@ export const START_CHARTED = 2;
 // A new world, on the endless map for `seed` (chunks.js). The land round the start
 // is charted, unless `charted` is false (a save brings its own). `milestones`
 // starts it with that many milestones done (progress.js), e.g. all of them for tests
-// that build anything. `enemies` turns the enemies on; otherwise it's peaceful
+// that build anything. Enemies are on by default; `enemies: false` makes it peaceful
 // (enemies.js).
-export function createWorld({ seed = 1, kit = START_KIT, milestones = 0, charted = true, enemies = false } = {}) {
+export function createWorld({ seed = 1, kit = START_KIT, milestones = 0, charted = true, enemies = true } = {}) {
   const world = {
     tick: 0,
     seed,
@@ -78,6 +79,7 @@ export function step(world) {
     else if (e.type === "assembler") stepAssembler(world, e);
     else if (e.type === "inserter") stepInserter(world, e, m.from, m.to);
     else if (e.type === "radar") stepRadar(world, e);
+    else if (e.type === "turret") stepTurret(world, e);
     if (m.tracked) {
       tally(world, e);
       if (m.emits && e.status === "working" && e.starved !== world.tick) {
@@ -107,7 +109,7 @@ export function step(world) {
 // gives off for each tick it works, into `chunk` (pollution.js). Worked out
 // from the layout and cached until it changes (world.version), like the belt
 // network; it isn't saved.
-const STEPPED = new Set(["miner", "furnace", "assembler", "inserter", "radar"]);
+const STEPPED = new Set(["miner", "furnace", "assembler", "inserter", "radar", "turret"]);
 function machines(world) {
   if (world.machines?.version === world.version) return world.machines.list;
   const list = [];
@@ -239,7 +241,7 @@ export function destroy(world, e) {
   raise(world, "destroyed", e);
 }
 
-// Notes an alert about building e for the UI: "attacked" or "destroyed".
+// Notes an alert about building e: "attacked", "destroyed" or "no-ammo".
 export function raise(world, kind, e) {
   const { w, h } = footprint(e.type, e.rot);
   world.alerts.push({ kind, type: e.type, x: e.x + w / 2, y: e.y + h / 2, tick: world.tick });
@@ -261,6 +263,7 @@ function takeDown(world, entity) {
   if (entity.type === "furnace") Object.assign(entity, furnaceState());
   if (entity.type === "assembler") Object.assign(entity, assemblerState());
   if (entity.type === "generator") entity.fuel = null;
+  if (entity.type === "turret") Object.assign(entity, turretState());
   if (entity.hand) entity.hand = null;
   return under;
 }
@@ -275,6 +278,7 @@ export function refundOf(entity, world = null) {
   if (entity.type === "furnace") for (const [id, n] of Object.entries(furnaceContents(entity))) add(id, n);
   if (entity.type === "assembler") for (const [id, n] of Object.entries(assemblerContents(entity))) add(id, n);
   if (entity.type === "generator" && entity.fuel) add(entity.fuel.item, entity.fuel.n);
+  if (entity.type === "turret" && entity.ammo) add(entity.ammo.item, entity.ammo.n);
   if (entity.hand) add(entity.hand);
   const entrance = world && entity.type === "underground" && entity.end === "out" && world.entities.get(entity.pair);
   if (entrance) for (const it of buried(entrance)) add(it.item);
@@ -333,6 +337,7 @@ function stateOf(type, opts) {
   if (type === "assembler") return assemblerState();
   if (type === "generator") return generatorState();
   if (type === "radar") return radarState();
+  if (type === "turret") return turretState();
   return {};
 }
 

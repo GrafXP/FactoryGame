@@ -5,6 +5,7 @@ import { takeAll, oreLeftUnder, chestRoom, takeFromChest, putInChest, deliverToH
 import { SMELTING, FUEL, FUEL_ENERGY, RECIPES } from "../sim/recipes.js";
 import { fillFrom, emptySlot, furnaceRoom } from "../sim/furnace.js";
 import { setRecipe, fillAssembler, emptyAssembler, assemblerRoom } from "../sim/assembler.js";
+import { AMMO, loadTurret, emptyTurret, turretRoom } from "../sim/turret.js";
 import { fuelGenerator, emptyGenerator, generatorRoom } from "../sim/generator.js";
 import { powerNetwork, satisfaction } from "../sim/power.js";
 import { MILESTONES, currentMilestone, recipeUnlocked, stillNeeded } from "../sim/progress.js";
@@ -319,6 +320,22 @@ const PANELS = {
     live: (e, world) => ({ power: powerLine(e, world) }),
   },
   // Fuel in and out like a furnace's, and the network it powers.
+  wall: {
+    key: () => "wall",
+    html: () => `${heading("Wall")}<p class="meta">Stone walls join their neighbours and block enemies. They repair after 10 seconds without damage.</p>`,
+  },
+  turret: {
+    key: (t, world) => `${t.status} ${JSON.stringify(t.ammo)} ${t.shots} ${t.kills} ${t.damage} ${world.inventory.version}`,
+    html: (t, world) => {
+      const adds = addButtons(Object.keys(AMMO), world.inventory, id => turretRoom(t, id));
+      return `${heading("Gun turret")}
+        <p class="status" data-status="${t.status}">${t.status === "no-ammo" ? "Out of ammunition" : t.status === "working" ? "Firing at enemies" : "Watching for enemies"}</p>
+        ${amountBar()}<ul class="items slots">${slotRow("Magazines", t.ammo, 'data-slot="ammo"')}</ul>
+        ${adds ? `<div class="actions">${adds}</div>` : ""}
+        <p class="meta">${t.shots} shots loaded · ${t.kills} kills · ${t.damage} damage dealt</p>
+        <p class="meta">Range ${BUILDINGS.turret.range} tiles. Needs no power. Each magazine has 10 shots; belts and inserters stock up to 5 magazines, or load 10 by hand. The loaded magazine stays here; dismantling loses its remaining shots.</p>`;
+    },
+  },
   generator: {
     key: (g, world) => `${g.status} ${JSON.stringify(g.fuel)} ${world.inventory.version}`,
     html: (g, world) => {
@@ -493,6 +510,7 @@ export function createEntityPanel(el, { close, changed, toast }) {
     else if (action === "empty") {
       const item = btn.dataset.item;
       if (asm) moved = emptyAssembler(shown, inv, item ?? null, max);
+      else if (shown.type === "turret") moved = emptyTurret(shown, inv, max);
       else if (gen) moved = emptyGenerator(shown, inv, max);
       else if (chest) moved = { [item]: takeFromChest(world, shown, item, max) };
       else moved = emptySlot(shown, btn.dataset.slot, inv, max);
@@ -501,6 +519,7 @@ export function createEntityPanel(el, { close, changed, toast }) {
       let n;
       if (hub) n = deliverToHub(world, item, max);
       else if (asm) n = fillAssembler(shown, inv, item, max);
+      else if (shown.type === "turret") n = loadTurret(shown, inv, item, max);
       else if (gen) n = fuelGenerator(shown, inv, item, max);
       else if (chest) n = putInChest(world, shown, item, max);
       else n = fillFrom(shown, inv, item, max);

@@ -11,6 +11,7 @@ import { gearGeometry } from "./shapes.js";
 // their bottoms are where a rock's is (0.09 below).
 function makeShapes() {
   return {
+    magazine: new THREE.BoxGeometry(0.18, 0.2, 0.1).translate(0, 0.01, 0),
     rock: new THREE.DodecahedronGeometry(0.13, 0),
     plate: new THREE.BoxGeometry(0.26, 0.05, 0.2).translate(0, -0.065, 0),
     brick: new THREE.BoxGeometry(0.24, 0.1, 0.13).translate(0, -0.04, 0),

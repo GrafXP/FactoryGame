@@ -30,10 +30,11 @@ import { usesPower } from "./power.js";
 import { MILESTONES } from "./progress.js";
 import { SERIES_LEN, NOT_ITEMS } from "./stats.js";
 import { enemyState, addUnit, nestOf, saveSearch, loadSearch, UNITS } from "./enemies.js";
+import { AMMO } from "./turret.js";
 import { maxHealth } from "./health.js";
 
 export const SAVE_FORMAT = "factory-save";
-export const SAVE_VERSION = 10;
+export const SAVE_VERSION = 11;
 
 // What a save from before power gets, so its stopped machines can be started
 // again: the parts for a coal generator and ten poles, and coal to burn.
@@ -109,6 +110,8 @@ export const MIGRATIONS = {
   // 10 added enemies, health and ruins. A version 9 save loads peaceful, with its
   // buildings whole; the pause menu can turn the enemies on.
   9: (data) => ({ ...data, enemies: saveEnemies(enemyState(data.seed)), damaged: [], ruins: [] }),
+  // 11 adds turrets and magazines; existing worlds keep their enemy preference.
+  10: (data) => data,
 };
 
 // A save that can't be loaded. The message is written for the player.
@@ -198,6 +201,10 @@ function saveEntity(e) {
     Object.assign(out, { progress: e.progress, crafting: e.crafting, status: e.status });
   }
   if (e.type === "generator") Object.assign(out, { fuel: e.fuel && { item: e.fuel.item, n: e.fuel.n }, burn: e.burn, status: e.status });
+  if (e.type === "turret") {
+    for (const key of ["loaded", "shots", "cool", "target", "aim", "fired", "kills", "damage", "warned", "status"]) out[key] = e[key];
+    out.ammo = e.ammo && { ...e.ammo };
+  }
   if (e.type === "radar") Object.assign(out, { next: e.next, progress: e.progress, status: e.status });
   if (usesPower(e.type)) out.energy = e.energy;
   return out;
@@ -298,6 +305,15 @@ function load(data) {
       Object.assign(e, { hand: s.hand, swing: s.swing, status: String(s.status) });
     }
     if (s.type === "generator") Object.assign(e, checkGenerator(s, where));
+    if (s.type === "turret") {
+      check(s.ammo === null || (Object.hasOwn(AMMO, s.ammo?.item) && Number.isInteger(s.ammo.n) && s.ammo.n > 0 && s.ammo.n <= BUILDINGS.turret.stack), `${where}: bad ammo`);
+      check(Number.isInteger(s.shots) && s.shots >= 0 && (s.shots === 0 ? s.loaded === null : Object.hasOwn(AMMO, s.loaded) && s.shots < AMMO[s.loaded].shots), `${where}: bad loaded magazine`);
+      check(["cool", "target", "kills", "damage"].every(k => Number.isSafeInteger(s[k]) && s[k] >= 0) && s.cool <= BUILDINGS.turret.rate, `${where}: bad turret`);
+      check(Number.isFinite(s.aim) && Number.isSafeInteger(s.fired) && s.fired >= -1 && s.fired <= tick && Number.isSafeInteger(s.warned) && s.warned >= -600 && s.warned <= tick, `${where}: bad turret timing`);
+      check(["working", "idle", "no-ammo"].includes(s.status), `${where}: bad turret status`);
+      for (const key of ["loaded", "shots", "cool", "target", "aim", "fired", "kills", "damage", "warned", "status"]) e[key] = s[key];
+      e.ammo = s.ammo && { ...s.ammo };
+    }
     if (s.type === "radar") {
       check(Number.isInteger(s.next) && s.next >= 0 && s.next <= SCAN_ORDER.length, `${where}: bad scan`);
       check(Number.isInteger(s.progress) && s.progress >= 0 && s.progress < SCAN, `${where}: bad scan`);

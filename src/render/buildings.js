@@ -49,7 +49,24 @@ function makeParts() {
     ];
   }
 
+  const wall = mask => {
+    const parts = [
+      { geometry: box(0.7, 0.9, 0.7, 0, 0.45, 0), color: "furnace" },
+      { geometry: box(0.8, 0.15, 0.8, 0, 0.98, 0), color: "furnaceTop" },
+    ];
+    for (let r = 0; r < 4; r++) if (mask & (1 << r)) {
+      parts.push({ geometry: box(0.6, 0.8, 0.5, 0, 0.4, -0.25).rotateY(-r * Math.PI / 2), color: "furnace" });
+    }
+    return parts;
+  };
   return {
+    wall: wall(0),
+    ...Object.fromEntries(Array.from({ length: 16 }, (_, mask) => [`wall-${mask}`, wall(mask)])),
+    turret: [
+      { geometry: box(1.8, 0.25, 1.8, 0, 0.125, 0), color: "generatorBase" },
+      { geometry: new THREE.CylinderGeometry(0.55, 0.7, 0.55, 12).translate(0, 0.5, 0), color: "miner" },
+      // Moving gun and flash are drawn in machines.js.
+    ],
     belt: [
       { geometry: box(0.9, 0.08, 1, 0, 0.04, 0), color: "belt" },
       { geometry: arrow, color: "beltArrow" },

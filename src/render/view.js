@@ -2,6 +2,8 @@ import * as THREE from "three";
 import { ORE } from "../sim/map.js";
 import { MINE_TICKS } from "../sim/world.js";
 import { ORE_ITEM } from "../sim/items.js";
+import { entityAt } from "../sim/grid.js";
+import { BUILDINGS, DIRS } from "../sim/buildings.js";
 import { beltNetwork } from "../sim/transport.js";
 import { CHUNK, LIMIT } from "../sim/chunks.js";
 import { createTerrain } from "./terrain.js";
@@ -87,6 +89,7 @@ const PALETTES = {
       "stone-brick": 0xb65a3c,
       "iron-gear": 0xa9b4c2,
       "copper-cable": 0xf0a24a,
+      "firearm-magazine": 0xbb9448,
       "electronic-circuit": 0x3fbf6a,
     },
     ok: 0x5be38a,
@@ -154,6 +157,7 @@ const PALETTES = {
       "stone-brick": 0xa0442a,
       "iron-gear": 0x6b7788,
       "copper-cable": 0xc4661a,
+      "firearm-magazine": 0xbb9448,
       "electronic-circuit": 0x1f9a4a,
     },
     ok: 0x10a84f,
@@ -211,6 +215,13 @@ export function createView(container, world, { theme = "dark" } = {}) {
   const recipeIcons = createRecipeIcons();
   const power = createPowerLayer(play);
   const ghosts = createBuildingLayer(play, { ghost: true });
+  const turretRange = new THREE.Mesh(
+    new THREE.RingGeometry(BUILDINGS.turret.range - 0.12, BUILDINGS.turret.range, 96),
+    new THREE.MeshBasicMaterial({ color: 0xf2b84b, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }),
+  );
+  turretRange.rotation.x = -Math.PI / 2;
+  turretRange.visible = false;
+  play.add(turretRange);
   // Enemies (enemies.js), and the ruins of destroyed buildings, see-through.
   const enemies = createEnemyLayer(play);
   const ruins = createBuildingLayer(play, { ghost: true, tint: "ruin" });
@@ -473,9 +484,16 @@ export function createView(container, world, { theme = "dark" } = {}) {
         const { shape } = beltNetwork(world);
         const models = { left: "belt-left", right: "belt-right" };
         buildings.set(
-          list.map((e) =>
-            e.type === "belt" ? { ...e, model: models[shape.get(e)] } : e.type === "underground" ? { ...e, model: `underground-${e.end}` } : e,
-          ),
+          list.map((e) => {
+            if (e.type === "wall") {
+              const mask = DIRS.reduce((bits, [dx, dy], r) =>
+                bits | (entityAt(world, e.x + dx, e.y + dy)?.type === "wall" ? 1 << r : 0), 0);
+              return { ...e, rot: 0, model: `wall-${mask}` };
+            }
+            if (e.type === "belt") return { ...e, model: models[shape.get(e)] };
+            if (e.type === "underground") return { ...e, model: `underground-${e.end}` };
+            return e;
+          }),
         );
       }
       // Loose items: on belts, and one at most in each inserter's hand.
@@ -536,6 +554,9 @@ export function createView(container, world, { theme = "dark" } = {}) {
     // Ghost previews: [{ type, x, y, rot, ok }], green where ok, red where not.
     setGhosts(list) {
       ghosts.set(list);
+      const turret = list.find(e => e.type === "turret");
+      turretRange.visible = !!turret;
+      if (turret) turretRange.position.set(turret.x + 1, 0.06, turret.y + 1);
     },
     setTheme(name) {
       COLORS = PALETTES[name] || PALETTES.dark;

@@ -99,7 +99,7 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
 
   const planned = () => {
     if (paint) {
-      return beltLine(paint.start.x, paint.start.y, paint.end.x, paint.end.y, rot).map((t) => ({ type: "belt", ...t }));
+      return beltLine(paint.start.x, paint.start.y, paint.end.x, paint.end.y, rot).map((t) => ({ type: tool, ...t }));
     }
     const at = pointer || pending;
     if (!at || !BUILDINGS[tool]) return [];
@@ -370,7 +370,7 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
     // Belts are dragged out in lines and selections in boxes; with no tool, holding
     // on bare ore mines it.
     canPaint(p) {
-      if (tool === "belt" || tool === "select") return "drag";
+      if (tool === "belt" || tool === "wall" || tool === "select") return "drag";
       if (tool !== null) return false;
       const t = tileAt(world, Math.floor(p.x), Math.floor(p.y));
       return t && t.ore && !t.entity ? "hold" : false;
@@ -467,7 +467,7 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
     },
 
     paintStart(p) {
-      if (tool === "belt") {
+      if (tool === "belt" || tool === "wall") {
         gesture = "belt";
         paint = { start: tileOf(p), end: tileOf(p) };
       } else if (tool === "select") {
@@ -519,9 +519,9 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
       if (built.length) record(built);
       const placed = built.length;
       const unpaid = line.length - placed - blocked;
-      const short = unpaid && describe(missing(world.inventory, BUILDINGS.belt.cost, unpaid));
+      const short = unpaid && describe(missing(world.inventory, BUILDINGS[line[0].type].cost, unpaid));
       if (line.length > 1) rot = line[0].rot; // keep facing the way you dragged
-      if (unpaid && placed) onMessage?.(`Built ${placed} of ${placed + unpaid} belts: missing ${short}`);
+      if (unpaid && placed) onMessage?.(`Built ${placed} of ${placed + unpaid} ${BUILDINGS[line[0].type].name.toLowerCase()}s: missing ${short}`);
       else if (unpaid) onMessage?.(`Can't build: missing ${short}`);
       else if (blocked === line.length) onMessage?.("Can't build here: something is in the way");
       changed();

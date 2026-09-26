@@ -25,7 +25,7 @@ const KEEP_CHUNKS = 256; // below this many chunks, nothing is let go of
 // when it goes in and out of the map view (and once at the start).
 export function createGame(
   container,
-  { theme = "dark", world = null, seed, enemies = false, afterStep, onTick, onStats, onInspect, onTileHover, onBuildChange, onMessage, onMapMode } = {},
+  { theme = "dark", world = null, seed, enemies = true, afterStep, onTick, onStats, onInspect, onTileHover, onBuildChange, onMessage, onMapMode } = {},
 ) {
   world ||= createWorld({ seed, enemies });
   const view = createView(container, world, { theme });

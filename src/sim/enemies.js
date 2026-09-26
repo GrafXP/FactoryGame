@@ -291,8 +291,34 @@ function removeUnit(world, u, g) {
   g.units.splice(g.units.indexOf(u.id), 1);
   if (g.units.length) return;
   en.groups.delete(g.id);
+  en.queue = en.queue.filter(id => id !== g.id);
+  if (en.search?.group === g.id) en.search = null;
   const s = en.nests.get(g.nest);
   if (s && s.group === g.id) s.group = 0;
+}
+
+// A turret hit uses whole-number damage after armour, and redirects the group
+// toward the gun. Keep the path up to its leading unit, then extend it through
+// the normal budgeted path search; walls and water still constrain retaliation.
+export function hitUnit(world, u, amount, attacker) {
+  const dealt = Math.min(u.hp, Math.max(1, amount - UNITS[u.kind].armor));
+  u.hp -= dealt;
+  const g = world.enemies.groups.get(u.group);
+  const killed = u.hp <= 0;
+  if (killed) removeUnit(world, u, g);
+  if (world.enemies.on && world.enemies.groups.has(g.id) && g.target !== attacker.id) {
+    g.target = attacker.id;
+    g.goal = rectOf(attacker);
+    if (g.path) {
+      const leading = Math.max(...g.units.map(id => world.enemies.units.get(id).step));
+      g.path = g.path.slice(0, Math.min(g.path.length, 2 * (leading + 1)));
+    }
+    for (const id of g.units) world.enemies.units.get(id).target = 0;
+    g.mode = "plan";
+    if (world.enemies.search?.group === g.id) world.enemies.search = null;
+    if (!world.enemies.queue.includes(g.id)) world.enemies.queue.push(g.id);
+  }
+  return { damage: dealt, killed };
 }
 
 // Unit u is back at its nest, and joins the others at home.
@@ -377,6 +403,20 @@ function inReach(u, e, reach) {
   return dx * dx + dy * dy <= reach * reach;
 }
 
+// Melee cannot reach through a wall to the building behind it. Ranged spitters
+// still shoot over low walls. Trace the short line to the intended target.
+function meleeTarget(world, u, target) {
+  const { w, h } = footprint(target.type, target.rot);
+  const x = u.x / TILE, y = u.y / TILE;
+  const dx = target.x + w / 2 - x, dy = target.y + h / 2 - y;
+  const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) * 4));
+  for (let i = 0; i <= steps; i++) {
+    const e = entityAt(world, Math.floor(x + dx * i / steps), Math.floor(y + dy * i / steps));
+    if (e && !walkable(e)) return e;
+  }
+  return target;
+}
+
 // A unit attacks what it's chewing through, or its group's target once that's in
 // reach; otherwise it walks the path, forwards or, going home, backwards.
 function stepUnit(world, u) {
@@ -387,7 +427,7 @@ function stepUnit(world, u) {
   if (!foe) {
     u.target = 0;
     const t = g.mode === "home" ? null : world.entities.get(g.target);
-    if (t && inReach(u, t, kind.reach)) foe = t;
+    if (t && inReach(u, t, kind.reach)) foe = u.kind === SPITTER ? t : meleeTarget(world, u, t);
   }
   if (foe) {
     if (u.cool > 0) return;

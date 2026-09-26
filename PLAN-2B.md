@@ -194,7 +194,7 @@ so until phase 18 new games default to peaceful, and this phase is tried with en
 - [ ] In peaceful mode, nothing attacks.
 - [ ] A save during an attack loads with the attack still going, tick for tick.
 
-### Phase 18: Turrets, walls and ammunition
+### Phase 18: Turrets, walls and ammunition ✅ (done)
 The answer to phase 17, and the first HUB milestone that isn't about the factory.
 - **Gun turret** (2×2, no power). It shoots the nearest enemy within 18 tiles, turning
   to aim. It holds up to 10 magazines, and inserters and belts top it up to 5, like a
@@ -215,6 +215,36 @@ The answer to phase 17, and the first HUB milestone that isn't about the factory
   only look again when their target dies or leaves range. Damage is whole numbers,
   and armour takes off a flat amount per hit (never below 1). Magazines are items, and
   turrets accept them with `canTake`.
+- Done as: `sim/turret.js`, with transport, enemy retaliation, rendering, panels,
+  alerts and save support wired into the existing systems.
+  - Gun turrets have 400 health, an 18-tile range, and fire every 12 ticks without
+    electricity. Firearm magazines cost 4 iron plates, take 2 seconds in an
+    assembler (1 second by hand), and give 10 shots of 6 damage before armour.
+    Turrets keep their target until it dies or leaves range, then use the enemy
+    chunk index to find the nearest. Kills and actual damage are counted per gun.
+  - Belts and inserters fill the magazine slot to 5, and the panel to 10. Opening a
+    magazine counts it as consumed; remaining shots stay loaded, survive saves,
+    and are lost when the turret is dismantled. Unopened magazines are refunded.
+    Empty turrets show an amber sign and raise an alert at most every 10 seconds
+    while enemies are in range. The panel shows ammunition, kills and damage.
+  - Walls cost 5 stone bricks and have 1,000 health. Dragging places a line with
+    previews, cost handling and undo; models connect to the four neighbouring
+    walls. Melee enemies hit the wall in front of a gun instead of reaching
+    through it; spitters can fire over walls. Retaliation extends the group's
+    route with the same budgeted path search, respecting terrain and obstacles.
+  - Turrets have a rotating gun, muzzle flash and placement range ring. Defense
+    has its own build-menu category. Milestone 2 is *Logistics and defense* and
+    unlocks turrets, walls and firearm magazines. New games default to enemies
+    on; existing saves keep their choice. Save format 11 preserves magazines,
+    loaded shots, targets, cooldowns, aim and combat counters.
+  - The realistic example now includes an automated ammunition line, a supplied
+    turret and walls. Like the performance presets it remains peaceful and never
+    replaces a saved game. Piercing magazines remain with phase 19's milestone.
+  - Automated checks cover ammunition crafting and resupply, shot counts, armour,
+    range, peaceful mode, retaliation, wall damage and repair, early attacks,
+    save/load during combat, migration and wall dragging. Full suite: 222 tests.
+    Production build and CPU-side render geometry checks pass. The phone checks
+    below are still manual; browser appearance and touch have not been verified.
 - [ ] Two turrets with a magazine inserter each hold off an early attack with no losses.
 - [ ] A turret line fed by a belt of magazines keeps shooting as long as the belt is fed.
 - [ ] A turret with no ammo says so, and an alert says so while enemies are near it.

@@ -19,7 +19,7 @@ const ago = (world, tick) => {
   const s = Math.max(0, Math.round((world.tick - tick) / TICK_RATE));
   return s < 60 ? `${s} s ago` : `${Math.floor(s / 60)} min ago`;
 };
-const TEXT = { attacked: "under attack", destroyed: "destroyed" };
+const TEXT = { attacked: "under attack", destroyed: "destroyed", "no-ammo": "out of ammunition" };
 
 // The attack groups that have hit something lately.
 export const fighting = (world) => [...world.enemies.groups.values()].filter((g) => g.hit >= 0 && world.tick - g.hit < REPAIR_AFTER);
@@ -42,13 +42,15 @@ export function createAlerts({ button, count, panel }, { go, rebuildAll, toast }
       const lost = list.filter((a) => a.kind === "destroyed");
       if (lost.length === 1) toast(`${BUILDINGS[lost[0].type].name} destroyed`);
       else if (lost.length > 1) toast(`${lost.length} buildings destroyed`);
+      else if (list.some(a => a.kind === "no-ammo")) toast("Gun turret out of ammunition near enemies");
       else if (list.some((a) => a.kind === "attacked") && world.tick - toastedAttack >= TOAST_EVERY) {
         toastedAttack = world.tick;
         const a = list.find((x) => x.kind === "attacked");
         toast(`${BUILDINGS[a.type].name} under attack`);
       }
     }
-    const n = world.ruins.length + fighting(world).length;
+    const empty = [...world.entities.values()].filter(e => e.type === "turret" && e.status === "no-ammo" && world.enemies.units.has(e.target)).length;
+    const n = world.ruins.length + fighting(world).length + empty;
     button.hidden = n === 0 && panel.hidden;
     count.textContent = n > 99 ? "99+" : String(n);
     count.hidden = n === 0;
