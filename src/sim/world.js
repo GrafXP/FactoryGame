@@ -15,7 +15,8 @@ import { assemblerState, assemblerContents, stepAssembler } from "./assembler.js
 import { craftState, stepCraft } from "./crafting.js";
 import { generatorState } from "./generator.js";
 import { stepPower, usePower, usesPower } from "./power.js";
-import { progressState, lockedWhy } from "./progress.js";
+import { progressState, lockedWhy, deliverFrom, deliverAll } from "./progress.js";
+import { statsState, produced, consumed, consumedAll, tally, rollStats, TRACKED } from "./stats.js";
 
 export { entityAt };
 
@@ -45,6 +46,7 @@ export function createWorld({ seed = 1, kit = START_KIT, milestones = 0, charted
     mining: null, // { x, y, item, progress } while the player is hand-mining a tile
     craft: craftState(), // the player's hand-crafting queue (crafting.js)
     progress: progressState(milestones), // milestones done and deliveries (progress.js)
+    stats: statsState(), // what's been made and used (stats.js)
   };
   if (charted) chartArea(world, -START_CHARTED, -START_CHARTED, START_CHARTED - 1, START_CHARTED - 1);
   return world;
@@ -55,22 +57,26 @@ export function step(world) {
   stepMining(world);
   stepCraft(world);
   stepPower(world);
-  for (const m of machines(world)) {
+  const list = machines(world);
+  for (const m of list) {
     const e = m.e;
     if (e.type === "miner") stepMiner(world, e, m);
-    else if (e.type === "furnace") stepFurnace(e);
+    else if (e.type === "furnace") stepFurnace(world, e);
     else if (e.type === "assembler") stepAssembler(world, e);
     else if (e.type === "inserter") stepInserter(world, e, m.from, m.to);
     else if (e.type === "radar") stepRadar(world, e);
+    if (m.tracked) tally(world, e);
   }
   stepBelts(world);
+  if (world.tick % TICK_RATE === 0) rollStats(world, list.filter((m) => m.tracked).map((m) => m.e));
 }
 
 // The buildings that do something each tick, in the order they were built (the
 // order step() has always gone in, so a loaded world runs like the saved one), with
 // what each one needs of its neighbours: the building on a miner's output tile and
 // the tiles under it, as [chunk, index, ...]; an inserter's source and target.
-// Belts move in stepBelts, and chests and poles do nothing on their own. Worked out
+// Belts move in stepBelts, and chests and poles do nothing on their own. `tracked`
+// says whether its activity is counted (stats.js). Worked out
 // from the layout and cached until it changes (world.version), like the belt
 // network; it isn't saved.
 const STEPPED = new Set(["miner", "furnace", "assembler", "inserter", "radar"]);
@@ -79,7 +85,7 @@ function machines(world) {
   const list = [];
   for (const e of world.entities.values()) {
     if (!STEPPED.has(e.type)) continue;
-    const m = { e, from: null, to: null, ground: null };
+    const m = { e, from: null, to: null, ground: null, tracked: TRACKED.has(e.type) };
     if (e.type === "miner") {
       const out = outputTile(e);
       m.to = entityAt(world, out.x, out.y);
@@ -157,7 +163,10 @@ export function place(world, type, x, y, rot = 0, opts = {}) {
 // Puts a finished entity into the world without paying for it. Loading a save uses
 // this too; the caller has checked that it fits.
 export function addEntity(world, entity) {
-  if (entity.type === "hub") entity.progress = world.progress; // where deliveries go
+  if (entity.type === "hub") {
+    entity.progress = world.progress; // where deliveries go
+    entity.stats = world.stats; // which count them as used
+  }
   world.entities.set(entity.id, entity);
   fill(world, entity, entity.id);
   changed(world, entity);
@@ -227,24 +236,43 @@ export const takeFromChest = (world, chest, item, max = Infinity) => move(chest.
 export const putInChest = (world, chest, item, max = Infinity) =>
   move(world.inventory, chest.inventory, item, Math.min(max, chestRoom(chest)));
 
+// Delivers up to `max` of `item` from the player's inventory to the HUB, as far as
+// the milestone under way needs it, or everything it needs that the inventory has
+// (deliverAllToHub). Each returns what went, which counts as used.
+export function deliverToHub(world, item, max = Infinity) {
+  const n = deliverFrom(world.progress, world.inventory, item, max);
+  if (n) consumed(world.stats, item, n);
+  return n;
+}
+export function deliverAllToHub(world) {
+  const moved = deliverAll(world.progress, world.inventory);
+  consumedAll(world.stats, moved);
+  return moved;
+}
+
 // State a new building starts with. Miners track their dig and why they're stopped,
 // chests hold items, conveyors carry them (see transport.js and underground.js);
 // furnaces, inserters, assemblers and generators are in their own files. Machines
-// that run on power start with an empty store of energy (see power.js). `opts`
-// says which end an underground belt is ({ end: "in" | "out" }).
+// that run on power start with an empty store of energy and `starved`, the tick
+// they last waited for it (see power.js); those whose activity is counted with
+// room for it (stats.js), so that every building of a type has the same fields.
+// `opts` says which end an underground belt is ({ end: "in" | "out" }).
 export function initialState(type, opts = {}) {
-  const power = usesPower(type) ? { energy: 0 } : {};
-  if (type === "miner") return { progress: 0, status: "working", item: null, ...power };
+  return { ...stateOf(type, opts), ...(usesPower(type) && { energy: 0, starved: -1 }), ...(TRACKED.has(type) && { activity: null }) };
+}
+
+function stateOf(type, opts) {
+  if (type === "miner") return { progress: 0, status: "working", item: null };
   if (type === "chest") return { inventory: createInventory() };
   if (type === "belt") return { items: [] };
   if (type === "underground") return undergroundState(opts.end);
   if (type === "splitter") return splitterState();
   if (type === "sorter") return { ...splitterState(), filters: [...ANY_FILTERS] };
   if (type === "furnace") return furnaceState();
-  if (type === "inserter") return { ...inserterState(), ...power };
-  if (type === "assembler") return { ...assemblerState(), ...power };
+  if (type === "inserter") return inserterState();
+  if (type === "assembler") return assemblerState();
   if (type === "generator") return generatorState();
-  if (type === "radar") return { ...radarState(), ...power };
+  if (type === "radar") return radarState();
   return {};
 }
 
@@ -290,6 +318,7 @@ function stepMiner(world, m, at) {
     m.progress = 0;
     dig(world, c, i);
     put(target, item);
+    produced(world.stats, item);
   }
 }
 
@@ -339,6 +368,7 @@ function stepMining(world) {
     return;
   }
   add(world.inventory, m.item);
+  produced(world.stats, m.item);
   dig(world, c, i);
   if (!c.ore[i]) world.mining = null;
 }

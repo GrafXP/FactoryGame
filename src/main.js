@@ -16,6 +16,7 @@ import { BUILDING_KEYS } from "./ui/catalog.js";
 import { createBuildMenu } from "./ui/build-menu.js";
 import { createResources } from "./ui/resources.js";
 import { createEntityPanel } from "./ui/panels.js";
+import { createStatsPanel } from "./ui/stats.js";
 import { createCrafting } from "./ui/crafting.js";
 import { createGoal, milestoneBanner } from "./ui/goal.js";
 import { queueItems } from "./sim/crafting.js";
@@ -264,11 +265,12 @@ const DEBUG_KEY = "factory:debug";
 // `bench` (its name), the benchmark factory `world`, whose `sinks` are drained
 // after every tick, never saving it.
 //
-// Top: Back, the clock, Undo and Pause, under them the resource bar (tap it for the
-// inventory), and under that the goal card (ui/goal.js; tap it for the HUB). A
-// banner drops in when a milestone is reached. Bottom: the build controls
-// (ui/build-menu.js), with toasts and readouts stacked above them. Right: panels for the tapped building and the
-// inventory. Pause holds the settings: theme, fullscreen, debug info.
+// Top: Back, the clock, Stats, Undo and Pause, under them the resource bar (tap it
+// for the inventory), and under that the goal card (ui/goal.js; tap it for the
+// HUB). A banner drops in when a milestone is reached. Bottom: the build controls
+// (ui/build-menu.js), with toasts and readouts stacked above them. Right: panels
+// for the tapped building, the inventory and production stats (ui/stats.js).
+// Pause holds the settings: theme, fullscreen, debug info.
 function playWorld(el, { world, seed, isNew = false, bench = null, sinks = [] }) {
   const $ = html(
     el,
@@ -277,6 +279,7 @@ function playWorld(el, { world, seed, isNew = false, bench = null, sinks = [] })
         <div class="hud">
           <a href="/" data-link class="icon-btn" aria-label="Back">${icon("back")}</a>
           <div class="score"><b id="clock">0:00</b><span id="status">Running</span></div>
+          <button class="icon-btn" id="stats" aria-label="Production stats (G)" title="Production stats (G)" aria-pressed="false">${icon("stats")}</button>
           <button class="icon-btn" id="undo" aria-label="Undo (Z)" title="Undo (Z)" disabled>${icon("undo")}</button>
           <button class="icon-btn" id="pause" aria-label="Pause (P)">${icon("pause")}</button>
         </div>
@@ -293,6 +296,7 @@ function playWorld(el, { world, seed, isNew = false, bench = null, sinks = [] })
           <h3>Craft by hand</h3>
           <div id="craft"></div>
         </div>
+        <div class="panel" id="stats-panel" hidden></div>
       </div>
       <div class="bottom-stack">
         <div class="toast" id="toast" hidden></div>
@@ -407,6 +411,10 @@ function playWorld(el, { world, seed, isNew = false, bench = null, sinks = [] })
   // The crafting readout is left out while the inventory's own queue is showing.
   const crafting = createCrafting($("#craft"), $("#crafting"), { toast, showReadout: () => $("#inventory").hidden });
 
+  const statsPanel = createStatsPanel($("#stats-panel"), { close: () => toggleStats(false) });
+  const toggleStats = (show) => $("#stats").setAttribute("aria-pressed", statsPanel.toggle(show));
+  $("#stats").addEventListener("click", () => toggleStats());
+
   const entityPanel = createEntityPanel($("#entity"), {
     close: () => game.builder.closeInspect(),
     changed: () => syncInventory(game.world),
@@ -444,6 +452,7 @@ function playWorld(el, { world, seed, isNew = false, bench = null, sinks = [] })
       syncMining(world);
       crafting.sync(world);
       entityPanel.sync(world);
+      statsPanel.sync(world);
       const s = Math.floor(world.tick / TICK_RATE);
       if (s === shownSeconds) return;
       shownSeconds = s;
@@ -461,6 +470,7 @@ function playWorld(el, { world, seed, isNew = false, bench = null, sinks = [] })
   menu = createBuildMenu({ bar: $("#buildbar"), info: $("#toolinfo"), sheet: $("#sheet") }, game.builder, { craft: craftParts });
   syncInventory(game.world);
   crafting.sync(game.world);
+  statsPanel.sync(game.world);
   // A benchmark shows how big it is instead of the seed.
   const showBench = () => {
     const { buildings, belts, items } = benchCounts(game.world);
@@ -565,6 +575,7 @@ function playWorld(el, { world, seed, isNew = false, bench = null, sinks = [] })
     else if (k === "b") menu.toggle();
     else if (k === "r") game.builder.tool && game.builder.tool !== "remove" && game.builder.rotate();
     else if (k === "i") toggleInventory();
+    else if (k === "g") toggleStats();
     else if (k === "f") toggleFullscreen();
     else if (k === "t") toggleTheme();
     else if (k === "`") setDebug($("#debug").hidden);
@@ -607,7 +618,7 @@ function help(el) {
     </dl>
     <h2>The screen</h2>
     <dl>
-      <dt>Top</dt><dd>Back to the menu, the game clock, Undo and Pause. Under them, the resource bar shows everything you carry; tap it (or press I) for the inventory with full names.</dd>
+      <dt>Top</dt><dd>Back to the menu, the game clock, Stats, Undo and Pause. Under them, the resource bar shows everything you carry; tap it (or press I) for the inventory with full names.</dd>
       <dt>Bottom</dt><dd>Build opens every building, sorted into tabs, with what each one does, what it costs and how many you can afford. Next to it are quick slots for the buildings you picked last, then Select and Remove. The small number on a building is how many you can afford.</dd>
       <dt>Pause</dt><dd>Resume, light/dark mode, fullscreen, debug info (how fast the game runs, and the tapped tile), and Save and quit.</dd>
     </dl>
@@ -622,7 +633,7 @@ function help(el) {
       <dt>Paste</dt><dd>Copy or Cut picks up the selection as one ghost, placed like a building (touch: tap to put it down, then tap the ghost). It's green where each building fits and you can pay for it, red where not; pasting builds the green ones and says what was skipped. Assembler recipes and sorter settings come along, but not what the buildings held. Rotate turns it. It stays picked so you can paste again, and Select's Paste button (or V) brings back what you copied last.</dd>
       <dt>Undo</dt><dd>The arrow next to Pause (or Z) takes back the last build, removal, cut, paste or rotation, and again for the one before. Undoing a removal builds it again from your inventory.</dd>
       <dt>Moving around</dt><dd>A quick drag always moves the map, even with a tool picked. With a mouse, drag with the right button while laying belts.</dd>
-      <dt>Keys</dt><dd>B build menu, 9 HUB, 1 belt, 2 miner, 3 chest, 4 furnace, 5 inserter, 6 assembler, 7 power pole, 8 coal generator, 0 radar, X remove, C select, V paste, R rotate, Z (or Ctrl+Z) undo, Q pick the building under the cursor, Esc put the tool away. With a selection: Ctrl+C copy, Ctrl+X cut, Delete remove.</dd>
+      <dt>Keys</dt><dd>G production stats, B build menu, 9 HUB, 1 belt, 2 miner, 3 chest, 4 furnace, 5 inserter, 6 assembler, 7 power pole, 8 coal generator, 0 radar, X remove, C select, V paste, R rotate, Z (or Ctrl+Z) undo, Q pick the building under the cursor, Esc put the tool away. With a selection: Ctrl+C copy, Ctrl+X cut, Delete remove.</dd>
     </dl>
     <h2>Goals</h2>
     <dl>
@@ -644,6 +655,11 @@ function help(el) {
       <dt>Power</dt><dd>Miners, inserters and assemblers run on electricity; belts and furnaces don't. A coal generator burns coal to make up to 600 kW, and only burns what's used. Power poles carry it: a pole powers any building within 3 tiles of it (generators included) and wires itself to every pole up to 7 tiles away, and wired poles make one network. While you place something electric, the ground the poles power is tinted blue, and a new pole shows its area and the wires it will get. When the machines on a network ask for more than its generators make, they all slow down by the same amount and show an amber bolt. Tap a pole or a generator to see what its network makes and uses. Feed generators by hand, with an inserter, or straight from a miner on coal.</dd>
       <dt>Crafting by hand</dt><dd>The inventory panel (tap the resource bar) has Craft by hand: +1 or +5 of gears, cable or circuits. Parts you need along the way are crafted first, so a circuit can be made straight from plates. Hands work twice as fast as an assembler, one craft at a time; the bar above the buttons shows progress, and ✕ in the queue calls a craft off and gives back its ingredients. When you pick a building you can't afford, Craft next to Done makes the parts you're missing.</dd>
       <dt>Inventory</dt><dd>The resource bar shows what you carry. Ore is drawn as a rock, plates as plates, bricks as bricks, gears as gears, cable as a spool and circuits as green boards, each in its own colour. You start with a small kit.</dd>
+    </dl>
+    <h2>Stats</h2>
+    <dl>
+      <dt>Production</dt><dd>The bar chart button at the top (or G) lists every item made or used over the last minute, 10 minutes or hour: how many a minute, with a graph of both (green made, amber used). Made is what miners dig, furnaces smelt, assemblers make and you mine or craft by hand; used is what furnaces, assemblers and hand-crafts make things from, the coal furnaces and generators burn, and what the HUB is given. Items moved from one building to another count as neither. The numbers are saved with the game.</dd>
+      <dt>Machines</dt><dd>A miner's, furnace's or assembler's panel says how much of the last minute it spent working, and what held it up the rest of the time (no input, output full, no power…). A machine slowed by a network short of power counts the time it waits as no power. A line that's starved or backed up shows up there.</dd>
     </dl>
     <h2>Saving</h2>
     <dl>

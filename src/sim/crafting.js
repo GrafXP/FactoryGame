@@ -12,6 +12,7 @@
 import { RECIPES, HAND_SPEED } from "./recipes.js";
 import { add, take, give } from "./inventory.js";
 import { recipeUnlocked } from "./progress.js";
+import { produced, consumedAll } from "./stats.js";
 
 export const craftState = () => ({ queue: [], progress: 0, busy: false, dropped: 0, lastDropped: null });
 
@@ -126,6 +127,8 @@ export function stepCraft(world) {
   }
   if (++c.progress < handTime(head.recipe)) return;
   add(world.inventory, head.recipe, r.n);
+  consumedAll(world.stats, r.in); // only now, since a craft called off gives them back
+  produced(world.stats, head.recipe, r.n);
   c.busy = false;
   c.progress = 0;
   if (--head.n === 0) c.queue.shift();

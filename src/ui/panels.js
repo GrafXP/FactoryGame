@@ -1,13 +1,13 @@
 import { BUILDINGS, kW } from "../sim/buildings.js";
 import { ITEMS, describe, itemName } from "../sim/items.js";
 import { count, total } from "../sim/inventory.js";
-import { takeAll, oreLeftUnder, chestRoom, takeFromChest, putInChest } from "../sim/world.js";
+import { takeAll, oreLeftUnder, chestRoom, takeFromChest, putInChest, deliverToHub, deliverAllToHub } from "../sim/world.js";
 import { SMELTING, FUEL, FUEL_ENERGY, RECIPES } from "../sim/recipes.js";
 import { fillFrom, emptySlot, furnaceRoom } from "../sim/furnace.js";
 import { setRecipe, fillAssembler, emptyAssembler, assemblerRoom } from "../sim/assembler.js";
 import { fuelGenerator, emptyGenerator, generatorRoom } from "../sim/generator.js";
 import { powerNetwork, satisfaction } from "../sim/power.js";
-import { MILESTONES, currentMilestone, recipeUnlocked, stillNeeded, deliverFrom, deliverAll } from "../sim/progress.js";
+import { MILESTONES, currentMilestone, recipeUnlocked, stillNeeded } from "../sim/progress.js";
 import { unlocksText } from "./goal.js";
 import { beltNetwork, setFilter } from "../sim/transport.js";
 import { REACH, buried } from "../sim/underground.js";
@@ -15,6 +15,7 @@ import { RANGE, SCAN, radarTarget, radarCoverage } from "../sim/radar.js";
 import { CHUNK } from "../sim/map.js";
 import { TICK_RATE } from "../sim/world.js";
 import { itemIcon, icon } from "./icons.js";
+import { activityLine } from "./stats.js";
 import { lower } from "./format.js";
 
 // The panel for the building tapped with no tool: what it holds and what it's
@@ -235,9 +236,10 @@ const PANELS = {
       <p class="status" data-status="${m.status}">${MINER_STATUS[m.status](m)}</p>
       <p class="meta">Ore left under it: ${oreLeftUnder(world, m)}</p>
       <span class="bar"><i></i></span>
-      <div data-live="power"></div>`,
+      <div data-live="power"></div>
+      <div data-live="activity"></div>`,
     progress: (m) => m.progress / BUILDINGS.miner.period,
-    live: (m, world) => ({ power: powerLine(m, world) }),
+    live: (m, world) => ({ power: powerLine(m, world), activity: activityLine(world, m) }),
   },
   // The player can add ore and fuel from the inventory, take them back, and take what it made.
   furnace: {
@@ -247,12 +249,14 @@ const PANELS = {
       return `${heading("Furnace")}
         <p class="status" data-status="${f.status}">${FURNACE_STATUS[f.status](f)}</p>
         <span class="bar"><i></i></span>
+        <div data-live="activity"></div>
         ${amountBar()}
         <ul class="items slots">${slotRow("Ore", f.input, `data-slot="input"`)}${slotRow("Fuel", f.fuel, `data-slot="fuel"`)}${slotRow("Made", f.output)}</ul>
         ${adds ? `<div class="actions">${adds}</div>` : ""}
         ${takeOutput(f.output)}`;
     },
     progress: (f) => (f.smelting ? f.progress / SMELTING[f.smelting].time : 0),
+    live: (f, world) => ({ activity: activityLine(world, f) }),
   },
   // Without a recipe (or when changing it) the panel is a recipe picker. Then it
   // works like a furnace's: add ingredients, take them back, take what it made.
@@ -282,6 +286,7 @@ const PANELS = {
         <p class="status" data-status="${a.status}">${ASSEMBLER_STATUS[a.status](a)}</p>
         <span class="bar"><i></i></span>
         <div data-live="power"></div>
+        <div data-live="activity"></div>
         <div class="makes">${itemIcon(a.recipe)}<span>${recipeText(a.recipe)}</span><button class="take" data-action="pick">Change</button></div>
         ${amountBar()}
         <ul class="items slots">${ins}${slotRow("Made", a.output)}</ul>
@@ -289,7 +294,7 @@ const PANELS = {
         ${takeOutput(a.output)}`;
     },
     progress: (a) => (a.crafting ? a.progress / RECIPES[a.recipe].time : 0),
-    live: (a, world) => ({ power: powerLine(a, world) }),
+    live: (a, world) => ({ power: powerLine(a, world), activity: activityLine(world, a) }),
   },
   inserter: {
     key: (e) => `${e.status} ${e.hand}`,
@@ -479,14 +484,14 @@ export function createEntityPanel(el, { close, changed, toast }) {
     } else if (action === "fill") {
       const item = btn.dataset.item;
       let n;
-      if (hub) n = deliverFrom(world.progress, inv, item, max);
+      if (hub) n = deliverToHub(world, item, max);
       else if (asm) n = fillAssembler(shown, inv, item, max);
       else if (gen) n = fuelGenerator(shown, inv, item, max);
       else if (chest) n = putInChest(world, shown, item, max);
       else n = fillFrom(shown, inv, item, max);
       if (n) toast(`${hub ? "Delivered" : "Added"} ${describe({ [item]: n })}`);
     } else if (action === "deliver") {
-      const moved = deliverAll(world.progress, inv);
+      const moved = deliverAllToHub(world);
       if (Object.keys(moved).length) toast(`Delivered ${describe(moved)}`);
     } else if (action === "recipe") {
       view.picking = false;

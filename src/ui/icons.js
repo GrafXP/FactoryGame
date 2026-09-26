@@ -86,6 +86,7 @@ const PATHS = {
   cut: "M4 17a3 3 0 1 0 6 0a3 3 0 1 0-6 0M14 17a3 3 0 1 0 6 0a3 3 0 1 0-6 0M9 14.5 17 3M15 14.5 7 3",
   paste: "M9 3h6v3H9zM9 4.5H5V21h14V4.5h-4",
   undo: "M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11",
+  stats: "M3 20h18M6 17v-5M10 17V7M14 17v-7M18 17V4",
   build: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM16.5 13v7M13 16.5h7",
   back: "M15 5l-7 7 7 7",
   pause: "M9 5v14M15 5v14",

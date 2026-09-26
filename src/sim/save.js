@@ -6,8 +6,9 @@
 // watches. Of the map, only the chunks that have been dug into are saved, since the
 // rest come back from the seed, and which chunks are charted. Hand-mining isn't
 // saved either, since it only lasts while a finger is down. The hand-crafting queue
-// is, since a craft under way has taken its ingredients, and so is progress
-// towards the HUB's milestones.
+// is, since a craft under way has taken its ingredients, and so are progress
+// towards the HUB's milestones and the production statistics (not the machines'
+// activity, which is only the last minute).
 //
 // SAVE_VERSION goes up whenever the format changes. Add a step to MIGRATIONS that
 // turns a save of the old version into the next one, so old saves keep loading.
@@ -23,9 +24,10 @@ import { SMELTING, FUEL, FUEL_ENERGY, RECIPES } from "./recipes.js";
 import { SWING } from "./inserter.js";
 import { usesPower } from "./power.js";
 import { MILESTONES } from "./progress.js";
+import { SERIES_LEN } from "./stats.js";
 
 export const SAVE_FORMAT = "factory-save";
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 
 // What a save from before power gets, so its stopped machines can be started
 // again: the parts for a coal generator and ten poles, and coal to burn.
@@ -94,6 +96,8 @@ export const MIGRATIONS = {
       entities: entities.map((e) => ({ ...e, x: e.x - half, y: e.y - half })),
     };
   },
+  // 8 added production statistics. A version 7 save starts counting when it's loaded.
+  7: (data) => ({ ...data, stats: { since: data.tick, now: { made: {}, used: {} }, series: {} } }),
 };
 
 // A save that can't be loaded. The message is written for the player.
@@ -123,11 +127,19 @@ export function serialize(world) {
       busy: world.craft.busy,
     },
     progress: { milestone: world.progress.milestone, delivered: { ...world.progress.delivered } },
+    stats: {
+      since: world.stats.since,
+      now: { made: counted(world.stats.now.made), used: counted(world.stats.now.used) },
+      series: Object.fromEntries(Object.entries(world.stats.series).map(([id, s]) => [id, s.slice()])),
+    },
     // In the order they were built: the sim steps them in that order, so keeping it
     // makes a loaded world carry on exactly as the saved one would have.
     entities: [...world.entities.values()].map(saveEntity),
   };
 }
+
+// The items in { item: n } with a count, since stats keep the rest at 0.
+const counted = (items) => Object.fromEntries(Object.entries(items).filter(([, n]) => n > 0));
 
 function saveEntity(e) {
   const out = { id: e.id, type: e.type, x: e.x, y: e.y, rot: e.rot };
@@ -186,7 +198,7 @@ function migrate(data, migrations, current) {
 }
 
 function load(data) {
-  const { seed, tick, nextId, map, charted, inventory, entities, craft, progress } = data;
+  const { seed, tick, nextId, map, charted, inventory, entities, craft, progress, stats } = data;
   check(Number.isInteger(tick) && tick >= 0, "bad clock");
   check(Array.isArray(map?.chunks), "bad map");
   check(charted instanceof Int32Array && charted.length % 2 === 0, "bad charted map");
@@ -204,6 +216,7 @@ function load(data) {
   for (let i = 0; i < charted.length; i += 2) world.charted.add(checkChunkAt(charted[i], charted[i + 1]));
   Object.assign(world.craft, checkCraft(craft));
   Object.assign(world.progress, checkProgress(progress)); // before the HUB is added, which refers to it
+  Object.assign(world.stats, checkStats(stats, tick)); // likewise
 
   let maxId = 0;
   for (const s of entities) {
@@ -358,6 +371,19 @@ function checkProgress(p) {
   const done = Object.keys(needs).every((id) => (delivered[id] || 0) >= needs[id]);
   check(Object.entries(delivered).every(([id, n]) => n <= (needs[id] || 0)) && (!done || !Object.keys(needs).length), "bad deliveries");
   return { milestone: p.milestone, delivered };
+}
+
+// Production statistics: counting started no later than now, and counts of known items.
+function checkStats(s, tick) {
+  check(Number.isInteger(s?.since) && s.since >= 0 && s.since <= tick, "bad statistics");
+  const now = { made: checkItems(s.now?.made, "statistics"), used: checkItems(s.now?.used, "statistics") };
+  check(s.series && typeof s.series === "object", "bad statistics");
+  const series = {};
+  for (const [id, a] of Object.entries(s.series)) {
+    check(Object.hasOwn(ITEMS, id) && a instanceof Uint32Array && a.length === SERIES_LEN, "bad statistics");
+    series[id] = a.slice();
+  }
+  return { since: s.since, now, series };
 }
 
 // The hand-crafting queue: known recipes, whole counts.

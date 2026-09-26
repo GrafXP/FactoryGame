@@ -179,13 +179,32 @@ The target is the one at the top of this plan, checked on a real phone.
 - [ ] The benchmark factory runs at 60 UPS on a mid-range phone.
 - [ ] A loaded save still runs tick-for-tick like the saved one.
 
-### Phase 15: Production statistics
+### Phase 15: Production statistics ✅ (done)
 You can't balance what you can't see. A **Stats** panel lists each item's production
 and consumption per minute over the last minute, 10 minutes and hour, with a small
 graph each. A machine's panel shows how busy it has been (working % over the last
 minute) and what held it up (no input, full, no power). A line that's starved or
 backed up is then easy to find. The counters live in the sim and are saved, so
 graphs survive a reload.
+- Done as: `sim/stats.js`. Made is what miners dig, furnaces smelt, assemblers make
+  and the player mines or crafts by hand; used is a furnace's ore and the fuel it
+  lights, what assemblers and hand-crafts make things from, the coal generators burn
+  and what the HUB is given (by belt, inserter or its panel: `deliverToHub`). Moving
+  items between buildings is neither. Ingredients count when a craft is done, not when
+  it starts, since one called off gives them back. `world.stats` counts the second
+  under way, then puts it in three rings of 60 buckets per item (1 s, 10 s and 1 min,
+  so the last minute, 10 minutes and hour), each coarser one added up from the finer;
+  where each ring is up to follows from the clock. Rates are over the time counted,
+  so a young game isn't spread over an hour it hasn't had. Miners, furnaces and
+  assemblers count the ticks they spend in each status over the last minute (a tick
+  waiting for power on a network that's short counts as no power, though the status
+  still says working), counted only when the status changes so a tick costs one
+  comparison; that isn't saved, since it fills again in a minute. Every machine now
+  gets all its fields when it's built (`starved`, `activity`), which kept the
+  benchmark within about 6% of what it was. The Stats button sits between the clock
+  and Undo (G), and opens a panel with 1 min / 10 min / 1 hour, a row per item made or
+  used (made and used a minute) and a graph of both. Save format 8; an older save
+  starts counting when it's loaded.
 - [ ] Building a second furnace column shows plate production double in Stats within a minute.
 - [ ] A starved assembler's panel shows it idle most of the time, and why.
 

@@ -10,6 +10,7 @@ import { BUILDINGS } from "./buildings.js";
 import { RECIPES } from "./recipes.js";
 import { count, take, give } from "./inventory.js";
 import { usePower } from "./power.js";
+import { produced, consumedAll } from "./stats.js";
 
 const { stack: STACK } = BUILDINGS.assembler;
 
@@ -88,6 +89,7 @@ export function emptyAssembler(a, inv, item = null, max = Infinity) {
   return moved;
 }
 
+// Ingredients taken and items made count in world.stats.
 export function stepAssembler(world, a) {
   if (!a.crafting && !start(a)) return;
   if (!usePower(world, a)) return;
@@ -97,6 +99,8 @@ export function stepAssembler(world, a) {
   // start() made sure the output has room.
   if (a.output) a.output.n += r.n;
   else a.output = { item: a.recipe, n: r.n };
+  consumedAll(world.stats, r.in); // only now, since a craft called off gives them back
+  produced(world.stats, a.recipe, r.n);
   a.crafting = false;
   a.progress = 0;
   start(a); // straight on to the next, so a craft takes exactly r.time ticks

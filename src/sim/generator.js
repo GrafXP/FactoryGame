@@ -7,6 +7,7 @@
 import { BUILDINGS } from "./buildings.js";
 import { FUEL_ENERGY } from "./recipes.js";
 import { count, take, give } from "./inventory.js";
+import { consumed } from "./stats.js";
 
 const { power: POWER, stack: STACK, feed: FEED } = BUILDINGS.generator;
 
@@ -55,10 +56,12 @@ export function generatorAvailable(g) {
   return Math.min(POWER, g.burn);
 }
 
-// Burns `joules` (no more than generatorAvailable), lighting more fuel as needed.
-export function burnGenerator(g, joules) {
+// Burns `joules` (no more than generatorAvailable), lighting more fuel as needed,
+// which counts as used in `stats`.
+export function burnGenerator(g, joules, stats) {
   while (g.burn < joules) {
     g.burn += FUEL_ENERGY[g.fuel.item];
+    consumed(stats, g.fuel.item);
     if (--g.fuel.n === 0) g.fuel = null;
   }
   g.burn -= joules;

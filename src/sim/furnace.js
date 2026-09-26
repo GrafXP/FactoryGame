@@ -9,6 +9,7 @@
 import { BUILDINGS } from "./buildings.js";
 import { SMELTING, FUEL } from "./recipes.js";
 import { count, take, give } from "./inventory.js";
+import { produced, consumed } from "./stats.js";
 
 const { stack: STACK, feed: FEED } = BUILDINGS.furnace;
 
@@ -90,7 +91,9 @@ export function furnaceContents(f) {
   return items;
 }
 
-export function stepFurnace(f) {
+// Ore taken, fuel lit and plates made count in world.stats.
+export function stepFurnace(world, f) {
+  const stats = world.stats;
   if (!f.smelting && !start(f)) return;
   if (!f.burn) {
     if (!f.fuel) {
@@ -98,6 +101,7 @@ export function stepFurnace(f) {
       return;
     }
     f.burn = FUEL[f.fuel.item];
+    consumed(stats, f.fuel.item);
     takeFrom(f, "fuel");
   }
   f.burn--;
@@ -107,6 +111,8 @@ export function stepFurnace(f) {
   // start() made sure the output has room.
   if (f.output) f.output.n++;
   else f.output = { item: r.out, n: 1 };
+  consumed(stats, f.smelting, r.need); // only now, since removing the furnace gives the ore back
+  produced(stats, r.out);
   f.smelting = null;
   f.progress = 0;
   start(f); // straight on to the next one, so a plate takes exactly r.time ticks

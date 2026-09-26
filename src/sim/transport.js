@@ -28,6 +28,7 @@ import { furnaceCanTake, furnaceAdd, furnaceTakeOne } from "./furnace.js";
 import { assemblerCanTake, assemblerAdd, assemblerTakeOne } from "./assembler.js";
 import { generatorCanTake, generatorAdd } from "./generator.js";
 import { stillNeeded, deliver } from "./progress.js";
+import { consumed } from "./stats.js";
 
 export const BELT_LEN = 32;
 export const BELT_SPEED = 1;
@@ -74,7 +75,10 @@ export function put(e, item) {
   else if (e.type === "furnace") furnaceAdd(e, item);
   else if (e.type === "assembler") assemblerAdd(e, item);
   else if (e.type === "generator") generatorAdd(e, item);
-  else if (e.type === "hub") deliver(e.progress, item);
+  else if (e.type === "hub") {
+    deliver(e.progress, item);
+    consumed(e.stats, item);
+  }
   else add(e.inventory, item);
 }
 

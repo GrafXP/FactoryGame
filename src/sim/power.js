@@ -205,7 +205,7 @@ export function stepPower(world) {
     net.generators.forEach((g, i) => {
       const extra = Math.min(left, generatorAvailable(g) - shares[i]);
       left -= extra;
-      burnGenerator(g, shares[i] + extra);
+      burnGenerator(g, shares[i] + extra, world.stats);
     });
 
     net.demand = demand;
@@ -219,9 +219,11 @@ export function stepPower(world) {
 
 // Whether machine e has the energy to work this tick, without spending it. When it
 // hasn't, its status says "no-power" if its network made nothing for it (or it's
-// near no pole); with only some power it's still "working", just slower.
+// near no pole); with only some power it's still "working", just slower. Either
+// way `starved` notes the tick, for its activity (stats.js).
 export function hasPower(world, e) {
   if (e.energy >= drawOf(e)) return true;
+  e.starved = world.tick;
   e.status = (powerNetwork(world).netOf.get(e)?.supplied || 0) > 0 ? "working" : "no-power";
   return false;
 }

@@ -147,9 +147,10 @@ test("a version 1 save (before furnaces) still loads", () => {
   const { world } = factory();
   run(world, 300);
   const v1 = { ...asVersion6(serialize(world), world), version: 1 };
-  // Loading it as it was, apart from what came with power, milestones and the
-  // endless map (see power.test.js and progress.test.js, and the test above).
-  const withoutLater = ({ inventory, progress, entities, map, ...rest }) => ({ ...rest, entities: entities.map(({ energy, ...e }) => e) });
+  // Loading it as it was, apart from what came with power, milestones, the endless
+  // map and statistics (see power.test.js, progress.test.js, the test above and
+  // stats.test.js).
+  const withoutLater = ({ inventory, progress, entities, map, stats, ...rest }) => ({ ...rest, entities: entities.map(({ energy, ...e }) => e) });
   assert.deepEqual(withoutLater(serialize(deserialize(structuredClone(v1)))), withoutLater(serialize(world)));
 });
 
