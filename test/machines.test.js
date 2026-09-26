@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createWorld, step, place, removeAt, takeAll, refundOf, oreLeftUnder, entityAt } from "../src/sim/world.js";
 import { BUILDINGS, outputTile } from "../src/sim/buildings.js";
-import { count, total } from "../src/sim/inventory.js";
+import { add, count, total } from "../src/sim/inventory.js";
 import { ORE } from "../src/sim/map.js";
 import { chunkOf, tileIndex } from "../src/sim/chunks.js";
 import { charge, ALL, oreBlock } from "./helpers.js";
@@ -73,7 +73,8 @@ test("a miner with nothing in front waits, and starts once a chest is placed", (
 
 test("a miner stops when the chest is full and carries on when it's emptied", () => {
   const { world, miner, chest } = setup();
-  run(world, PERIOD * (CAPACITY + 5));
+  add(chest.inventory, "iron-ore", CAPACITY - 3); // a chest holds more than an ore patch
+  run(world, PERIOD * 8);
   assert.equal(total(chest.inventory), CAPACITY);
   assert.equal(miner.status, "full");
 

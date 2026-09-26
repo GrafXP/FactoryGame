@@ -17,7 +17,7 @@ export const ABOUT = {
   inserter: "Moves items from the building behind it to the one in front. Needs power.",
   miner: "Digs the ore under it, one piece a second. Needs power.",
   furnace: "Smelts ore into plates, burning coal.",
-  chest: "Stores up to 50 items.",
+  chest: "Stores up to 5000 items.",
   assembler: "Makes gears, cables or circuits from what it's given. Tap it to pick which. Needs power.",
   generator: "Burns coal to power the machines on its poles' network: 600 kW.",
   pole: "Carries power to machines within 3 tiles, and wires itself to poles up to 7 tiles away.",

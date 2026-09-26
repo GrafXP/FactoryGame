@@ -20,13 +20,13 @@ export const MILESTONES = [
     name: "Power and mining",
     about: "Smelt plates and bricks in a furnace, from ore you mine by hand.",
     needs: { "iron-plate": 20, "stone-brick": 10 },
-    unlocks: { buildings: ["miner", "belt", "generator", "pole"], recipes: [] },
+    unlocks: { buildings: ["miner", "belt", "generator", "pole", "inserter"], recipes: [] },
   },
   {
     name: "Logistics",
     about: "Let miners and furnaces do the work: miners need power from a generator and poles.",
     needs: { "iron-plate": 100, "copper-plate": 50, "iron-gear": 20 },
-    unlocks: { buildings: ["inserter", "underground", "splitter", "radar"], recipes: ["electronic-circuit"] },
+    unlocks: { buildings: ["underground", "splitter", "radar"], recipes: ["electronic-circuit"] },
   },
   {
     name: "Assembly",

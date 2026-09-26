@@ -82,7 +82,7 @@ test("delivering a milestone's items by hand unlocks what it promises, and moves
   assert.equal(currentMilestone(world), MILESTONES[1]);
   assert.deepEqual(world.progress.delivered, {});
   for (const type of first.unlocks.buildings) assert.ok(buildingUnlocked(world, type), type);
-  assert.equal(buildingUnlocked(world, "inserter"), false);
+  assert.equal(buildingUnlocked(world, "splitter"), false);
 });
 
 test("going through every milestone unlocks everything and ends the game's goals", () => {

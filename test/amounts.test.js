@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createWorld, place, chestRoom, takeFromChest, putInChest } from "../src/sim/world.js";
 import { BUILDINGS } from "../src/sim/buildings.js";
-import { count, total } from "../src/sim/inventory.js";
+import { add, count, total } from "../src/sim/inventory.js";
 import { fillFrom, emptySlot } from "../src/sim/furnace.js";
 import { setRecipe, fillAssembler, emptyAssembler } from "../src/sim/assembler.js";
 import { fuelGenerator, emptyGenerator } from "../src/sim/generator.js";
@@ -64,8 +64,9 @@ test("the HUB takes as many as asked, and no more than it needs", () => {
 test("items go into a chest from the inventory and come out a few at a time", () => {
   const world = setup();
   const chest = place(world, "chest", 20, 20, 0);
+  add(chest.inventory, "coal", BUILDINGS.chest.capacity - 110); // leaves room for less stone than there is
   assert.equal(putInChest(world, chest, "iron-ore", 10), 10);
-  assert.equal(putInChest(world, chest, "stone", 200), BUILDINGS.chest.capacity - 10, "as far as it has room");
+  assert.equal(putInChest(world, chest, "stone", 200), 100, "as far as it has room");
   assert.equal(chestRoom(chest), 0);
   assert.equal(putInChest(world, chest, "coal", 5), 0);
   assert.equal(takeFromChest(world, chest, "iron-ore", 4), 4);

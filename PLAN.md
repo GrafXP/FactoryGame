@@ -90,7 +90,7 @@ Miners placed on ore produce an item every N ticks into whatever sits on their
 output tile. Chests store items. Tap a chest to see its contents and take them.
 A miner digs the ore under its 2×2 footprint once a second and only while its
 output has room, so a stopped miner loses nothing. The output tile is in front of
-the chute (the yellow block on the miner's front). Chests hold 50 items. Tap a
+the chute (the yellow block on the miner's front). Chests hold 5000 items. Tap a
 miner or chest with no tool picked for its panel; removing a chest also gives back
 what's in it.
 - [ ] A miner on iron with a chest in front fills the chest over time.
@@ -213,8 +213,8 @@ A Satisfactory-style HUB: deliver batches of items to reach milestones that unlo
 buildings and recipes. There's a starting goal and a "you've automated circuits" end state.
 `sim/progress.js` has START (HUB, furnace, chest; gear and cable recipes) and
 MILESTONES, done one at a time in order: 1. Power and mining (20 iron plates, 10
-bricks → miner, belt, generator, pole), 2. Logistics (100 iron plates, 50 copper
-plates, 20 gears → inserter, hand-crafting circuits), 3. Assembly (20 circuits, 50
+bricks → miner, belt, generator, pole, inserter), 2. Logistics (100 iron plates, 50
+copper plates, 20 gears → hand-crafting circuits), 3. Assembly (20 circuits, 50
 gears, 30 bricks → assembler) and 4. Circuit production (150 circuits), the goal.
 `canPlace` refuses locked buildings and hand-crafting locked recipes; every building
 and recipe is unlocked by exactly one (tested). The HUB (4×4, one at most) takes what

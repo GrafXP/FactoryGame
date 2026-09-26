@@ -21,7 +21,7 @@ export const BUILDINGS = {
   splitter: { name: "Splitter", w: 1, h: 1, cost: { "iron-plate": 5, "iron-gear": 2, "electronic-circuit": 1 } },
   sorter: { name: "Sorter", w: 1, h: 1, cost: { "iron-plate": 5, "iron-gear": 2, "electronic-circuit": 3 } },
   miner: { name: "Miner", w: 2, h: 2, cost: { "iron-gear": 3, "iron-plate": 3, stone: 6 }, period: 60, draw: 1500 },
-  chest: { name: "Chest", w: 1, h: 1, cost: { "iron-plate": 4 }, capacity: 50 },
+  chest: { name: "Chest", w: 1, h: 1, cost: { "iron-plate": 4 }, capacity: 5000 },
   furnace: { name: "Furnace", w: 2, h: 2, cost: { stone: 10 }, stack: 50, feed: 5 },
   inserter: {
     name: "Inserter",
