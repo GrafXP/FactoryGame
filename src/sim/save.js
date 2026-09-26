@@ -25,7 +25,7 @@ import { ITEMS } from "./items.js";
 import { BELT_LEN, isConveyor, isSplitter } from "./transport.js";
 import { REACH } from "./underground.js";
 import { SMELTING, FUEL, FUEL_ENERGY, RECIPES } from "./recipes.js";
-import { SWING } from "./inserter.js";
+import { isInserter, swingOf } from "./inserter.js";
 import { usesPower } from "./power.js";
 import { MILESTONES } from "./progress.js";
 import { SERIES_LEN, NOT_ITEMS } from "./stats.js";
@@ -34,7 +34,7 @@ import { AMMO } from "./turret.js";
 import { maxHealth, REPAIR_AFTER } from "./health.js";
 
 export const SAVE_FORMAT = "factory-save";
-export const SAVE_VERSION = 12;
+export const SAVE_VERSION = 13;
 
 // What a save from before power gets, so its stopped machines can be started
 // again: the parts for a coal generator and ten poles, and coal to burn.
@@ -129,6 +129,9 @@ export const MIGRATIONS = {
       search: data.enemies.search && { ...data.enemies.search, solid: false },
     },
   }),
+  // 13 added long and sorting inserters. A version 12 save has none, so it loads as
+  // it is.
+  12: (data) => data,
 };
 
 // A save that can't be loaded. The message is written for the player.
@@ -217,7 +220,8 @@ function saveEntity(e) {
     Object.assign(out, { input: slot(e.input), fuel: slot(e.fuel), output: slot(e.output) });
     Object.assign(out, { smelting: e.smelting, progress: e.progress, burn: e.burn, status: e.status });
   }
-  if (e.type === "inserter") Object.assign(out, { hand: e.hand, swing: e.swing, status: e.status });
+  if (isInserter(e)) Object.assign(out, { hand: e.hand, swing: e.swing, status: e.status });
+  if (e.type === "sorting-inserter") out.filter = e.filter;
   if (e.type === "assembler") {
     Object.assign(out, { recipe: e.recipe, inputs: { ...e.inputs }, output: e.output && { item: e.output.item, n: e.output.n } });
     Object.assign(out, { progress: e.progress, crafting: e.crafting, status: e.status });
@@ -322,10 +326,14 @@ function load(data) {
     }
     if (s.type === "furnace") Object.assign(e, checkFurnace(s, where));
     if (s.type === "assembler") Object.assign(e, checkAssembler(s, where));
-    if (s.type === "inserter") {
+    if (isInserter(s)) {
       check(s.hand === null || Object.hasOwn(ITEMS, s.hand), `${where}: unknown item`);
-      check(Number.isInteger(s.swing) && s.swing >= 0 && s.swing <= SWING, `${where}: bad swing`);
+      check(Number.isInteger(s.swing) && s.swing >= 0 && s.swing <= swingOf(s.type), `${where}: bad swing`);
       Object.assign(e, { hand: s.hand, swing: s.swing, status: String(s.status) });
+    }
+    if (s.type === "sorting-inserter") {
+      check(s.filter === null || Object.hasOwn(ITEMS, s.filter), `${where}: bad filter`);
+      e.filter = s.filter;
     }
     if (s.type === "generator") Object.assign(e, checkGenerator(s, where));
     if (s.type === "turret") {
@@ -473,6 +481,7 @@ function loadHealth(world, damaged, ruins) {
     check(r.end === undefined || r.end === "in" || r.end === "out", "bad ruin");
     check(r.recipe === undefined || Object.hasOwn(RECIPES, r.recipe), "bad ruin");
     check(r.filters === undefined || (Array.isArray(r.filters) && r.filters.length === 3), "bad ruin");
+    check(r.filter === undefined || Object.hasOwn(ITEMS, r.filter), "bad ruin");
     world.ruins.push({ ...r, ...(r.filters && { filters: [...r.filters] }) });
   }
 }

@@ -5,7 +5,8 @@
 // A miner digs one item every `period` ticks; a chest holds up to `capacity` items.
 // A furnace's slots hold up to `stack` each, but belts, miners and inserters only
 // top them up to `feed` (see furnace.js). An inserter takes `swing` ticks to swing
-// across, and as long to swing back. An assembler's slots hold up to `stack` of
+// across, and as long to swing back, and drops `reach` tiles in front (1 if not
+// given; see inserter.js). An assembler's slots hold up to `stack` of
 // each ingredient; machines fill them to two crafts' worth (see assembler.js).
 //
 // Power (see power.js) is in joules per tick; 60 J/tick is 1 kW. Machines with a
@@ -38,6 +39,28 @@ export const BUILDINGS = {
     cost: { "iron-plate": 1, "iron-gear": 1, "electronic-circuit": 1 },
     swing: 24,
     draw: 250,
+    health: 100,
+  },
+  // Picks up from the tile behind it, like an inserter, but drops two tiles in
+  // front, over whatever is in between.
+  "long-inserter": {
+    name: "Long inserter",
+    w: 1,
+    h: 1,
+    cost: { "iron-plate": 2, "iron-gear": 2, "electronic-circuit": 1 },
+    swing: 30,
+    reach: 2,
+    draw: 300,
+    health: 100,
+  },
+  // Only moves the one item it's set to.
+  "sorting-inserter": {
+    name: "Sorting inserter",
+    w: 1,
+    h: 1,
+    cost: { "iron-plate": 2, "iron-gear": 2, "electronic-circuit": 4 },
+    swing: 24,
+    draw: 300,
     health: 100,
   },
   assembler: {

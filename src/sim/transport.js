@@ -88,22 +88,24 @@ export function put(e, item) {
 // Takes one item that building `target` can take right now out of building e, for
 // an inserter, and returns it (or null). Conveyors give up their frontmost such
 // item on their own tile (not one that's underground), chests any, furnaces and
-// assemblers only what they've made, generators and the HUB nothing.
-export function takeOne(e, target) {
+// assemblers only what they've made, generators and the HUB nothing. With `only`
+// (a sorting inserter's filter), it takes nothing but that item.
+export function takeOne(e, target, only) {
+  const ok = (item) => (!only || item === only) && canTake(target, item);
   if (isConveyor(e)) {
     const items = e.items;
     for (let i = 0; i < items.length; i++) {
-      if (items[i].pos <= BELT_LEN && canTake(target, items[i].item)) return items.splice(i, 1)[0].item;
+      if (items[i].pos <= BELT_LEN && ok(items[i].item)) return items.splice(i, 1)[0].item;
     }
     return null;
   }
   if (e.type === "furnace" || e.type === "assembler") {
-    if (!e.output || !canTake(target, e.output.item)) return null;
+    if (!e.output || !ok(e.output.item)) return null;
     return e.type === "furnace" ? furnaceTakeOne(e) : assemblerTakeOne(e);
   }
   if (!e.inventory) return null;
   for (const id in ITEMS) {
-    if (count(e.inventory, id) && canTake(target, id)) {
+    if (count(e.inventory, id) && ok(id)) {
       take(e.inventory, { [id]: 1 });
       return id;
     }

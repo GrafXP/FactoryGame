@@ -6,6 +6,7 @@ import { SMELTING, FUEL, FUEL_ENERGY, RECIPES } from "../sim/recipes.js";
 import { fillFrom, emptySlot, furnaceRoom } from "../sim/furnace.js";
 import { setRecipe, fillAssembler, emptyAssembler, assemblerRoom } from "../sim/assembler.js";
 import { AMMO, loadTurret, emptyTurret, turretRoom } from "../sim/turret.js";
+import { setInserterFilter } from "../sim/inserter.js";
 import { fuelGenerator, emptyGenerator, generatorRoom } from "../sim/generator.js";
 import { powerNetwork, satisfaction } from "../sim/power.js";
 import { MILESTONES, currentMilestone, recipeUnlocked, stillNeeded } from "../sim/progress.js";
@@ -43,12 +44,15 @@ const FURNACE_STATUS = {
   "no-fuel": () => "Stopped: no fuel. Give it coal.",
   full: () => "Stopped: the output is full. Take what it made, or put an inserter there to take it out.",
 };
+// Where each kind of inserter drops: "in front" or "two tiles in front".
+const FRONT = { inserter: "in front", "long-inserter": "two tiles in front", "sorting-inserter": "in front" };
 const INSERTER_STATUS = {
   working: (e) => (e.hand ? `Moving ${lower(e.hand)}` : "Swinging back"),
-  idle: () => "Waiting for something the building in front can use.",
-  waiting: (e) => `Holding ${lower(e.hand)} until there's room in front.`,
+  idle: (e) => `Waiting for ${e.filter ? lower(e.filter, 2) : "something"} the building ${FRONT[e.type]} can use.`,
+  waiting: (e) => `Holding ${lower(e.hand)} until there's room ${FRONT[e.type]}.`,
   "no-power": () => "Stopped: no power.",
-  "no-output": () => "Stopped: nothing in front takes items. It drops into belts, chests, furnaces and assemblers.",
+  "no-output": (e) => `Stopped: nothing ${FRONT[e.type]} takes items. It drops into belts, chests, furnaces and assemblers.`,
+  "no-filter": () => "Idle: pick what it moves.",
 };
 const ASSEMBLER_STATUS = {
   "no-recipe": () => "Idle: pick what it makes.",
@@ -222,7 +226,8 @@ const takeOutput = (out) => {
 
 // Each panel: the key its markup depends on, the markup, and the progress bar's fill.
 // `view` is the panel's own state: `picking` while choosing an assembler's recipe,
-// `exit` (0 front, 1 left, 2 right) while choosing a sorter's filter.
+// or a sorting inserter's item, `exit` (0 front, 1 left, 2 right) while choosing a
+// sorter's filter.
 const PANELS = {
   // What it holds, each with a Take button, and buttons to put in what the player carries.
   chest: {
@@ -317,6 +322,35 @@ const PANELS = {
       <p class="status" data-status="${e.status}">${INSERTER_STATUS[e.status](e)}</p>
       <div data-live="power"></div>
       <p class="meta">It takes from the building behind it and drops into the one in front (the arrow points that way), one item at a time and only what that building can use.</p>`,
+    live: (e, world) => ({ power: powerLine(e, world) }),
+  },
+  "long-inserter": {
+    key: (e) => `${e.status} ${e.hand}`,
+    html: (e) => `${heading("Long inserter")}
+      <p class="status" data-status="${e.status}">${INSERTER_STATUS[e.status](e)}</p>
+      <div data-live="power"></div>
+      <p class="meta">It takes from the building right behind it and drops into the one two tiles in front (the arrows point that way), reaching over whatever is in between: a belt, a pole, or nothing. One item at a time, and only what that building can use.</p>`,
+    live: (e, world) => ({ power: powerLine(e, world) }),
+  },
+  // Until it's set (or while changing it) the panel is an item picker.
+  "sorting-inserter": {
+    key: (e, world, view) => `${view.picking} ${e.status} ${e.hand} ${e.filter}`,
+    html: (e, world, view) => {
+      if (!e.filter || view.picking) {
+        const opts = Object.keys(ITEMS)
+          .map((id) => `<button class="recipe-pick" data-action="inserter-filter" data-value="${id}" aria-pressed="${e.filter === id}">${itemIcon(id)}<span>${ITEMS[id].name}</span></button>`)
+          .join("");
+        return `${heading("Sorting inserter")}
+          <p>${e.filter ? "Pick what it moves instead." : "Pick what it moves:"}</p>
+          <div class="recipe-picks filters">${opts}</div>
+          ${e.filter ? `<button class="wide secondary" data-action="keep">Keep moving ${lower(e.filter, 2)}</button>` : ""}`;
+      }
+      return `${heading("Sorting inserter")}
+        <p class="status" data-status="${e.status}">${INSERTER_STATUS[e.status](e)}</p>
+        <div data-live="power"></div>
+        <div class="makes">${itemIcon(e.filter)}<span>Moves only ${lower(e.filter, 2)}</span><button class="take" data-action="pick">Change</button></div>
+        <p class="meta">It moves ${lower(e.filter, 2)} from the building behind it to the one in front (the arrow points that way), one at a time and only while that building can use more. Everything else is left where it is.</p>`;
+    },
     live: (e, world) => ({ power: powerLine(e, world) }),
   },
   // Fuel in and out like a furnace's, and the network it powers.
@@ -534,7 +568,10 @@ export function createEntityPanel(el, { close, changed, toast }) {
         if (Object.keys(back).length) toast(`Got back ${describe(back)}`);
       }
     } else if (action === "pick" || action === "keep") view.picking = action === "pick";
-    else if (action === "filter-pick") view.exit = Number(btn.dataset.exit);
+    else if (action === "inserter-filter") {
+      setInserterFilter(shown, btn.dataset.value);
+      view.picking = false;
+    } else if (action === "filter-pick") view.exit = Number(btn.dataset.exit);
     else if (action === "filter") {
       setFilter(shown, view.exit, btn.dataset.value);
       view.exit = null;

@@ -3,7 +3,7 @@
 // category (test/catalog.test.js checks), so a new building has to be put here.
 export const CATEGORIES = [
   { id: "base", name: "Base", buildings: ["hub", "chest", "radar"] },
-  { id: "logistics", name: "Logistics", buildings: ["belt", "underground", "splitter", "sorter", "inserter"] },
+  { id: "logistics", name: "Logistics", buildings: ["belt", "underground", "splitter", "sorter", "inserter", "long-inserter", "sorting-inserter"] },
   { id: "production", name: "Production", buildings: ["miner", "furnace", "assembler"] },
   { id: "defense", name: "Defense", buildings: ["turret", "wall"] },
   { id: "power", name: "Power", buildings: ["generator", "pole"] },
@@ -18,6 +18,8 @@ export const ABOUT = {
   splitter: "Sends items out front, left and right in turn, skipping a way that's full or leads nowhere.",
   sorter: "A splitter you set: each way out takes any item, one kind, or the overflow. Tap it to set.",
   inserter: "Moves items from the building behind it to the one in front. Needs power.",
+  "long-inserter": "Takes from the building behind it and drops two tiles in front, reaching over a belt or pole in between. Needs power.",
+  "sorting-inserter": "An inserter that only moves the item you set. Tap it to set. Needs power.",
   miner: "Digs the ore under it, one piece a second. Needs power.",
   furnace: "Smelts ore into plates, burning coal.",
   chest: "Stores up to 5000 items.",

@@ -95,6 +95,7 @@ const ICON_FOR = {
   full: "blocked",
   "no-fuel": "no-fuel",
   "no-recipe": "no-recipe",
+  "no-filter": "no-recipe", // a sorting inserter that hasn't been set
   "no-power": "no-power",
   unconnected: "unconnected",
   "no-exit": "blocked", // a sorter holding an item no way out will take

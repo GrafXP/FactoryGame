@@ -49,6 +49,18 @@ function makeParts() {
     ];
   }
 
+  // The base and the pivot, in the arm's colour; the arm swings in
+  // render/machines.js. The arrow on the base points the way items go, and a long
+  // inserter's is doubled, for the two tiles it reaches.
+  const inserterParts = (arm, arrows = 1) => {
+    const small = (z) => new THREE.ShapeGeometry(chevron).scale(0.55, 0.55, 1).rotateX(-Math.PI / 2).translate(0, 0.105, z);
+    return [
+      { geometry: box(0.62, 0.1, 0.62, 0, 0.05, 0), color: "inserter" },
+      ...(arrows === 1 ? [-0.14] : [-0.08, -0.22]).map((z) => ({ geometry: small(z), color: arm })),
+      { geometry: new THREE.CylinderGeometry(0.06, 0.08, 0.4, 8).translate(0, 0.26, 0), color: arm },
+    ];
+  };
+
   const wall = mask => {
     const parts = [
       { geometry: box(0.7, 0.9, 0.7, 0, 0.45, 0), color: "furnace" },
@@ -162,13 +174,11 @@ function makeParts() {
       { geometry: box(0.9, 0.6, 0.9, 0, 0.5, 0), color: "radar" },
       { geometry: new THREE.CylinderGeometry(0.08, 0.1, 0.6, 8).translate(0, 1.1, 0), color: "radarDish" },
     ],
-    // The base and the pivot; the arm swings in render/machines.js. The arrow on the
-    // base points the way items go.
-    inserter: [
-      { geometry: box(0.62, 0.1, 0.62, 0, 0.05, 0), color: "inserter" },
-      { geometry: new THREE.ShapeGeometry(chevron).scale(0.55, 0.55, 1).rotateX(-Math.PI / 2).translate(0, 0.105, -0.14), color: "inserterArm" },
-      { geometry: new THREE.CylinderGeometry(0.06, 0.08, 0.4, 8).translate(0, 0.26, 0), color: "inserterArm" },
-    ],
+    // Each kind of inserter in its own colour: yellow, red for long ones and
+    // purple for sorting ones, which show their filter (render/recipe-icons.js).
+    inserter: inserterParts("inserterArm"),
+    "long-inserter": inserterParts("longInserterArm", 2),
+    "sorting-inserter": inserterParts("sortingInserterArm"),
   };
 }
 

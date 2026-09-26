@@ -5,14 +5,17 @@ import { facesOf } from "../ui/icons.js";
 // An icon of what each assembler makes, on the front-left corner of its roof (clear
 // of the turning cog), so a line of machines can be read at a glance, and small
 // ones by each way out of a sorter showing its filter (an item, or » for overflow;
-// nothing for "any"). Items are drawn from the same shapes as their icons in the UI
-// (ui/icons.js), in their colour for the current theme, on a dark disc, and painted
-// into the icon atlas (billboards.js) on first use.
+// nothing for "any") and over a sorting inserter showing what it moves. Items are
+// drawn from the same shapes as their icons in the UI (ui/icons.js), in their
+// colour for the current theme, on a dark disc, and painted into the icon atlas
+// (billboards.js) on first use.
 const Y = 1.55;
 const INSET = 0.6; // from the footprint's west and south edges
 const FILTER_Y = 0.42;
 const FILTER_OUT = 0.34; // from a sorter's centre towards each way out
 const FILTER_SIZE = 0.36;
+const INSERTER_FILTER_Y = 0.85; // over a sorting inserter's arm
+const INSERTER_FILTER_SIZE = 0.42;
 // Each way out of a sorter facing north, [front, left, right], as (x, y) offsets.
 const FILTER_AT = [
   [0, -1],
@@ -88,6 +91,8 @@ export function createRecipeIcons() {
             for (let r = 0; r < e.rot; r++) [dx, dy] = [-dy, dx]; // a quarter turn clockwise
             show(f, e.x + 0.5 + dx * FILTER_OUT, FILTER_Y, e.y + 0.5 + dy * FILTER_OUT, FILTER_SIZE);
           });
+        } else if (e.type === "sorting-inserter" && e.filter) {
+          show(e.filter, e.x + 0.5, INSERTER_FILTER_Y, e.y + 0.5, INSERTER_FILTER_SIZE);
         }
       }
     },

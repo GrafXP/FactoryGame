@@ -1,6 +1,6 @@
 import * as THREE from "three";
-import { SWING } from "../sim/inserter.js";
-import { footprint } from "../sim/buildings.js";
+import { isInserter, swingOf } from "../sim/inserter.js";
+import { BUILDINGS, footprint } from "../sim/buildings.js";
 import { RECIPES } from "../sim/recipes.js";
 import { gearGeometry } from "./shapes.js";
 import { powerNetwork } from "../sim/power.js";
@@ -19,6 +19,10 @@ const HELD_Y = ARM_Y - 0.13;
 const FLYWHEEL = new THREE.Vector3(1.38, 0.65, 0); // from a generator's centre, facing north
 const FLYWHEEL_SPEED = 0.25; // radians a tick at full load
 const DISH_SPEED = 0.03; // radians a tick while a radar scans
+// Each kind of inserter's arm, in its own colour (see buildings.js); they share the hand.
+const ARMS = { inserter: "arm", "long-inserter": "longArm", "sorting-inserter": "sortArm" };
+
+const armGeometry = () => new THREE.BoxGeometry(0.07, 0.06, ARM).translate(0, ARM_Y, ARM / 2);
 
 export function createMachineParts(parent) {
   // Modelled pointing south (+z) from the pivot: that's the pickup side of a
@@ -27,7 +31,9 @@ export function createMachineParts(parent) {
     gun: { geometry: new THREE.BoxGeometry(0.75, 0.4, 0.75).translate(0, 0.98, 0), color: "minerTop" },
     barrel: { geometry: new THREE.BoxGeometry(0.15, 0.15, 1.15).translate(0, 1.05, -0.7), color: "generatorBase" },
     flash: { geometry: new THREE.SphereGeometry(0.18, 6, 4).translate(0, 1.05, -1.35), color: null },
-    arm: { geometry: new THREE.BoxGeometry(0.07, 0.06, ARM).translate(0, ARM_Y, ARM / 2), color: "inserterArm" },
+    arm: { geometry: armGeometry(), color: "inserterArm" },
+    longArm: { geometry: armGeometry(), color: "longInserterArm" },
+    sortArm: { geometry: armGeometry(), color: "sortingInserterArm" },
     hand: { geometry: new THREE.BoxGeometry(0.2, 0.05, 0.08).translate(0, ARM_Y - 0.04, ARM), color: "inserter" },
     // Just in front of a furnace's mouth (see buildings.js). It stands on the
     // ground, so the flicker's stretch makes it leap upwards.
@@ -82,7 +88,7 @@ export function createMachineParts(parent) {
     // `items` is the item layer, for what the inserters hold, and `list` the
     // buildings in view (visible.js).
     update(world, items, list) {
-      let inserters = 0;
+      const arms = { arm: 0, longArm: 0, sortArm: 0 };
       let furnaces = 0;
       let assemblers = 0;
       let generators = 0;
@@ -90,15 +96,16 @@ export function createMachineParts(parent) {
       const turrets = list.filter(e => e.type === "turret");
       for (const k of [kinds.gun, kinds.barrel, kinds.flash]) ensure(k, turrets.length);
       for (const e of list) {
-        if (e.type === "inserter") inserters++;
+        if (isInserter(e)) arms[ARMS[e.type]]++;
         else if (e.type === "furnace") furnaces++;
         else if (e.type === "assembler") assemblers++;
         else if (e.type === "generator") generators++;
         else if (e.type === "radar") radars++;
       }
       ensure(kinds.dish, radars);
-      ensure(kinds.arm, inserters);
-      ensure(kinds.hand, inserters);
+      for (const k in arms) ensure(kinds[k], arms[k]);
+      ensure(kinds.hand, arms.arm + arms.longArm + arms.sortArm);
+      for (const k in arms) arms[k] = 0;
       ensure(kinds.fire, furnaces);
       ensure(kinds.cog, assemblers);
       ensure(kinds.genFire, generators);
@@ -120,14 +127,20 @@ export function createMachineParts(parent) {
           kinds.gun.mesh.setMatrixAt(guns, m);
           kinds.barrel.mesh.setMatrixAt(guns++, m);
           if (e.fired >= 0 && world.tick - e.fired < 4) kinds.flash.mesh.setMatrixAt(flashes++, m);
-        } else if (e.type === "inserter") {
-          // Round through the inserter's right-hand side, from pickup to drop.
-          const angle = (e.swing / SWING) * Math.PI - (e.rot * Math.PI) / 2;
-          m.compose(pos.set(e.x + 0.5, 0, e.y + 0.5), q.setFromAxisAngle(up, angle), one);
-          kinds.arm.mesh.setMatrixAt(a, m);
-          kinds.hand.mesh.setMatrixAt(a, m);
-          a++;
-          if (e.hand) items.add(e.hand, e.x + 0.5 + Math.sin(angle) * ARM, HELD_Y, e.y + 0.5 + Math.cos(angle) * ARM, angle);
+        } else if (isInserter(e)) {
+          // Round through the inserter's right-hand side, from pickup to drop. A
+          // long inserter's arm stretches as it goes, to reach two tiles out.
+          const t = e.swing / swingOf(e.type);
+          const angle = t * Math.PI - (e.rot * Math.PI) / 2;
+          const len = ARM + ((BUILDINGS[e.type].reach || 1) - 1) * t;
+          const dx = Math.sin(angle);
+          const dz = Math.cos(angle);
+          q.setFromAxisAngle(up, angle);
+          pos.set(e.x + 0.5, 0, e.y + 0.5);
+          const arm = ARMS[e.type];
+          kinds[arm].mesh.setMatrixAt(arms[arm]++, m.compose(pos, q, scale.set(1, 1, len / ARM)));
+          kinds.hand.mesh.setMatrixAt(a++, m.compose(offset.set(pos.x + dx * (len - ARM), 0, pos.z + dz * (len - ARM)), q, one));
+          if (e.hand) items.add(e.hand, pos.x + dx * len, HELD_Y, pos.z + dz * len, angle);
         } else if (e.type === "furnace" && e.status === "working") {
           const { w, h } = footprint(e.type, e.rot);
           const flicker = 0.75 + 0.25 * Math.sin(world.tick * 0.35 + e.id * 1.7);
@@ -174,7 +187,9 @@ export function createMachineParts(parent) {
         [kinds.gun, guns],
         [kinds.barrel, guns],
         [kinds.flash, flashes],
-        [kinds.arm, a],
+        [kinds.arm, arms.arm],
+        [kinds.longArm, arms.longArm],
+        [kinds.sortArm, arms.sortArm],
         [kinds.hand, a],
         [kinds.fire, f],
         [kinds.cog, c],

@@ -11,7 +11,7 @@ import { radarState, stepRadar } from "./radar.js";
 import { stepBelts, takesItems, canTake, put, splitterState, ANY_FILTERS } from "./transport.js";
 import { undergroundState, undergroundWhy, pairUp, unpair, buried } from "./underground.js";
 import { furnaceState, furnaceContents, stepFurnace } from "./furnace.js";
-import { inserterState, inserterEnds, stepInserter } from "./inserter.js";
+import { inserterState, inserterEnds, stepInserter, isInserter, INSERTERS } from "./inserter.js";
 import { assemblerState, assemblerContents, stepAssembler } from "./assembler.js";
 import { craftState, stepCraft } from "./crafting.js";
 import { generatorState } from "./generator.js";
@@ -77,7 +77,7 @@ export function step(world) {
     if (e.type === "miner") stepMiner(world, e, m);
     else if (e.type === "furnace") stepFurnace(world, e);
     else if (e.type === "assembler") stepAssembler(world, e);
-    else if (e.type === "inserter") stepInserter(world, e, m.from, m.to);
+    else if (isInserter(e)) stepInserter(world, e, m.from, m.to);
     else if (e.type === "radar") stepRadar(world, e);
     else if (e.type === "turret") stepTurret(world, e);
     if (m.tracked) {
@@ -109,7 +109,7 @@ export function step(world) {
 // gives off for each tick it works, into `chunk` (pollution.js). Worked out
 // from the layout and cached until it changes (world.version), like the belt
 // network; it isn't saved.
-const STEPPED = new Set(["miner", "furnace", "assembler", "inserter", "radar", "turret"]);
+const STEPPED = new Set(["miner", "furnace", "assembler", ...INSERTERS, "radar", "turret"]);
 function machines(world) {
   if (world.machines?.version === world.version) return world.machines.list;
   const list = [];
@@ -123,7 +123,7 @@ function machines(world) {
       m.ground = [];
       const { w, h } = footprint(e.type, e.rot);
       for (let y = e.y; y < e.y + h; y++) for (let x = e.x; x < e.x + w; x++) m.ground.push(chunkOf(world, x, y), tileIndex(x, y));
-    } else if (e.type === "inserter") {
+    } else if (isInserter(e)) {
       const { from, to } = inserterEnds(e);
       m.from = entityAt(world, from.x, from.y);
       m.to = entityAt(world, to.x, to.y);
@@ -339,7 +339,7 @@ function stateOf(type, opts) {
   if (type === "splitter") return splitterState();
   if (type === "sorter") return { ...splitterState(), filters: [...ANY_FILTERS] };
   if (type === "furnace") return furnaceState();
-  if (type === "inserter") return inserterState();
+  if (INSERTERS.has(type)) return inserterState(type);
   if (type === "assembler") return assemblerState();
   if (type === "generator") return generatorState();
   if (type === "radar") return radarState();

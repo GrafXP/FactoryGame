@@ -76,6 +76,8 @@ const PATHS = {
   chest: "M4 10h16v9H4zM4 10l2-4h12l2 4M10 14h4",
   furnace: "M4 20V9h16v11zM14 9V4h4v5M9 20v-4a3 3 0 0 1 6 0v4",
   inserter: "M7 20h10M12 20v-5M12 15l-5-6M7 9l5-4M10 4l3 2",
+  "long-inserter": "M3 20h10M8 20v-5M8 15l-4-5M4 10l14-6M17 2.5l3 2.5",
+  "sorting-inserter": "M3 20h10M8 20v-5M8 15l-5-6M3 9l5-4M6 4l3 2M14 9h7l-2.5 3.5V17l-2-1v-3.5z",
   assembler: "M3 8h18v12H3zM12 11.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 1 0 0-5M12 9.5v2M12 16.5v2M8 8V4h8v4",
   generator: "M3 9h18v11H3zM6 9V4h3v5M13.5 11l-3 4.5h3.5l-3 3",
   hub: "M3 20h18M5 20V10h10v10M15 20v-6h4v6M18 14V4M16 4h4M8 13h4",

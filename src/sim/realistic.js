@@ -8,6 +8,7 @@ import { chunkOf, tileIndex, chartArea } from "./chunks.js";
 import { give } from "./inventory.js";
 import { setRecipe } from "./assembler.js";
 import { generatorAdd } from "./generator.js";
+import { setInserterFilter } from "./inserter.js";
 import { MILESTONES } from "./progress.js";
 
 export function realisticWorld() {
@@ -55,14 +56,15 @@ export function realisticWorld() {
   build("chest", -22, 30);
 
   // Separate ore lines, shared coal service, and product conveyors crossing
-  // underneath that service. Bricks and surplus plates go into real storage.
+  // underneath that service. Bricks and surplus plates go into real storage. The
+  // fuel inserters are sorting ones set to coal, so nothing else goes in with it.
   for (const [y, ore] of [[0, ORE.IRON], [12, ORE.COPPER], [24, ORE.STONE]]) {
     patch(-34, y + 1, ore);
     build("miner", -34, y, 1);
     horizontal(-32, -29, y);
     build("furnace", -28, y);
     horizontal(-28, -23, y + 3, 3);
-    build("inserter", -28, y + 2, 0);
+    setInserterFilter(build("sorting-inserter", -28, y + 2, 0), "coal");
     build("inserter", -26, y, 1);
     build("belt", -25, y, 1);
     build("underground", -24, y, 1);
@@ -94,7 +96,7 @@ export function realisticWorld() {
   iron.filters = ["iron-plate", "overflow", "overflow"];
   build("chest", 12, 8);
   vertical(11, 9, 10);
-  build("inserter", 11, 11, 2);
+  build("long-inserter", 11, 11, 2); // drops two tiles on, into the assembler's middle row
   horizontal(-6, -1, 12);
   // Split cable between the circuit line and spares for building power poles.
   build("splitter", 0, 12, 1);

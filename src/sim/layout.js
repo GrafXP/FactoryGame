@@ -4,7 +4,8 @@
 // A layout is { x, y, w, h, parts }: the box its buildings cover, where that box
 // was, and a part per building with its type, facing, place (relative to the box's
 // top-left) and id, plus its settings: which end an underground belt is, an
-// assembler's recipe, a sorter's filters. What the buildings held isn't part of it.
+// assembler's recipe, a sorter's filters, a sorting inserter's filter. What the
+// buildings held isn't part of it.
 // Parts are in the order the buildings were built, which is the order the sim steps
 // them in.
 //
@@ -17,6 +18,7 @@ import { inMap, chunkOf, tileIndex, idAt } from "./chunks.js";
 import { missing } from "./inventory.js";
 import { partnerFor, REACH } from "./underground.js";
 import { setRecipe } from "./assembler.js";
+import { setInserterFilter } from "./inserter.js";
 import { lockedWhy, recipeUnlocked } from "./progress.js";
 
 // The buildings with a tile in rect { x, y, w, h }, in the order they were built.
@@ -51,6 +53,7 @@ export function layoutOf(entities) {
     if (e.type === "underground") p.end = e.end;
     if (e.type === "assembler" && e.recipe) p.recipe = e.recipe;
     if (e.type === "sorter") p.filters = [...e.filters];
+    if (e.type === "sorting-inserter" && e.filter) p.filter = e.filter;
     return p;
   });
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0, parts };
@@ -114,6 +117,7 @@ export function buildLayout(world, layout, x, y) {
     if (e) {
       if (p.recipe && recipeUnlocked(world, p.recipe)) setRecipe(e, p.recipe, world.inventory);
       if (p.filters) e.filters = [...p.filters];
+      if (p.filter) setInserterFilter(e, p.filter);
       built.push(e);
       ids.set(p.id, e.id);
     } else {
