@@ -115,7 +115,7 @@ function powerRows(world, w) {
   const note = u === null ? "" : short ? `Short of power: machines got ${Math.round((m / u) * 100)}% of what they asked for.` : "Enough for every machine.";
   return `<h3>Power</h3>
     <p class="meta">kW on average, over ${span(world, w)}. ${note}</p>
-    <ul class="items stats wide"><li class="head"><span></span><b class="made">Made</b><b class="used">Asked</b></li>
+    <ul class="items stats"><li class="head"><span></span><b class="made">Made</b><b class="used">Asked</b></li>
       <li>${icon("generator")}<span>Electricity</span><b class="made">${rate(m)}</b><b class="used">${rate(u)}</b>${spark(made, used)}</li></ul>`;
 }
 
@@ -132,7 +132,7 @@ function pollutionRows(world, w) {
   };
   return `<h3>Pollution</h3>
     <p class="meta">${Math.round(air).toLocaleString("en")} in the air now. Machines give it off while they work, and the ground takes it in, water more.</p>
-    <ul class="items stats wide"><li class="head"><span></span><b class="made">Made</b><b class="used">Absorbed</b></li>
+    <ul class="items stats"><li class="head"><span></span><b class="made">Made</b><b class="used">Taken</b></li>
       <li>${icon("pollution")}<span>Pollution</span><b class="made">${per(MADE)}</b><b class="used">${per(USED)}</b>${spark(made, used)}</li></ul>`;
 }
 

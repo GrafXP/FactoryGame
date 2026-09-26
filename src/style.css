@@ -1010,10 +1010,6 @@ body.playing nav {
   text-align: right;
 }
 
-.stats.wide b {
-  width: 4.8em;
-}
-
 .stats .made {
   color: var(--accent);
 }
