@@ -23,9 +23,9 @@ export const BUILDINGS = {
   underground: { name: "Underground belt", w: 1, h: 1, cost: { "iron-plate": 4, "iron-gear": 1 }, reach: 5 },
   splitter: { name: "Splitter", w: 1, h: 1, cost: { "iron-plate": 5, "iron-gear": 2, "electronic-circuit": 1 } },
   sorter: { name: "Sorter", w: 1, h: 1, cost: { "iron-plate": 5, "iron-gear": 2, "electronic-circuit": 3 } },
-  miner: { name: "Miner", w: 2, h: 2, cost: { "iron-gear": 3, "iron-plate": 3, stone: 6 }, period: 60, draw: 1500, pollution: 10 },
+  miner: { name: "Miner", w: 2, h: 2, cost: { "iron-gear": 3, "iron-plate": 3, stone: 6 }, period: 60, draw: 1500, pollution: 15 },
   chest: { name: "Chest", w: 1, h: 1, cost: { "iron-plate": 4 }, capacity: 5000 },
-  furnace: { name: "Furnace", w: 2, h: 2, cost: { stone: 10 }, stack: 50, feed: 5, pollution: 6 },
+  furnace: { name: "Furnace", w: 2, h: 2, cost: { stone: 10 }, stack: 50, feed: 5, pollution: 9 },
   inserter: {
     name: "Inserter",
     w: 1,
@@ -41,7 +41,7 @@ export const BUILDINGS = {
     cost: { "iron-plate": 9, "iron-gear": 5, "electronic-circuit": 3 },
     stack: 50,
     draw: 1250,
-    pollution: 2,
+    pollution: 3,
   },
   generator: {
     name: "Coal generator",
@@ -51,7 +51,7 @@ export const BUILDINGS = {
     power: 10000,
     stack: 50,
     feed: 5,
-    pollution: 30,
+    pollution: 45,
   },
   // Where milestones are delivered (see progress.js). There's only ever one.
   hub: { name: "HUB", w: 4, h: 4, cost: { "iron-plate": 10, stone: 10 } },

@@ -43,7 +43,7 @@ test("a working furnace gives off pollution into its chunk, and an idle one give
   fillFrom(idle, world.inventory, "coal", 10);
   run(world, TICK_RATE / 2);
   const c = homeChunk(world, busy);
-  assert.equal(c.pollution, 30 * 6, "6 units a minute is 6 for each tick it works");
+  assert.equal(c.pollution, 30 * 9, "9 units a minute is 9 for each tick it works");
   assert.ok(world.polluted.has(c));
   assert.equal(homeChunk(world, idle), c, "both in the same chunk, so all of it is the busy one's");
 });
@@ -61,8 +61,8 @@ test("a coal generator gives off its pollution as it lights each coal, and an id
   setRecipe(a, "iron-gear", world.inventory);
   fillAssembler(a, world.inventory, "iron-plate");
   for (let i = 0; i < 30; i++) step(world);
-  assert.equal(generatorEmits("coal"), 30 * 400, "30 units a minute, for the 400 ticks a coal lasts at full power");
-  assert.equal(world.stats.now.made[POLLUTION], generatorEmits("coal") + 30 * 2, "one coal lit, and the assembler's 2 a minute");
+  assert.equal(generatorEmits("coal"), 45 * 400, "45 units a minute, for the 400 ticks a coal lasts at full power");
+  assert.equal(world.stats.now.made[POLLUTION], generatorEmits("coal") + 30 * 3, "one coal lit, and the assembler's 3 a minute");
 });
 
 test("pollution spreads to the chunks round it and levels off where the ground takes in what reaches it", () => {

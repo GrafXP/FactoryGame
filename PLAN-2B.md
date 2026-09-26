@@ -78,14 +78,14 @@ before anything attacks.
 - Done as: `sim/pollution.js`. Amounts are whole numbers in 1/3600 of a unit, so a
   machine giving off P units a minute adds P for every tick it works (status working
   and not waiting for power), and the sim stays exact whatever order chunks are gone
-  through in. Miners give off 10 a minute, furnaces 6, assemblers 2; a coal generator
-  30 at full power, given off as it lights each coal, since it only burns what's
+  through in. Miners give off 15 a minute, furnaces 9, assemblers 3; a coal generator
+  45 at full power, given off as it lights each coal, since it only burns what's
   drawn. Once a second (before the stats roll), each polluted chunk loses what the
   ground takes in (1 a tile a second, water 5) and then passes 1% of the rest to each
   neighbour, if it holds at least a unit; shares are worked out before any moves.
-  Tuned so a furnace column (~150 a minute) levels off about 2 chunks out within a
-  few minutes, and a factory making ~1,100 a minute reaches about 5 chunks (160 tiles,
-  where nests start) after ~20 minutes. `world.polluted` holds the chunks with any;
+  Tuned so a furnace column (~220 a minute) levels off 2–3 chunks out within a few
+  minutes, and a factory making ~1,650 a minute reaches 5–6 chunks (160+ tiles,
+  where nests start) after ~20 minutes (emissions raised by half after trying it). `world.polluted` holds the chunks with any;
   polluted chunks aren't forgotten. Pollution is a non-item key in the stats
   (`POLLUTION`, a Float64Array series): made is what's given off, used what's taken
   in. The map view's overlay (`render/pollution.js`) is one plane with a texel per
