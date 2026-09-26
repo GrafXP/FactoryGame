@@ -8,6 +8,11 @@ big factory buildable with one thumb, a bigger world, a second production tier
 Phases carry on the MVP's numbering (11 onwards). Everything in PLAN.md's core
 decisions still holds.
 
+**Plan 2B goes in between.** After phase 15, [PLAN-2B.md](PLAN-2B.md) comes first
+(phases 16–21): enemies, defense and ammunition, then science packs and research.
+This plan's phases after 15 were renumbered 22–27 to follow it, and two of its core
+decisions below changed with it.
+
 ## Core decisions for this plan
 
 - **Belts stay single-lane (Satisfactory-style).** Splitters, sorters and
@@ -18,10 +23,11 @@ decisions still holds.
 - **Crossing is underground, not up.** The world stays one flat layer. Belts (and
   later pipes) cross by going under, which keeps the 2D grid, the camera and the
   tap targets as they are.
-- **Progression stays the HUB.** Each content phase adds its buildings and recipes
-  to new HUB milestones (phase 10) instead of adding research labs and science
-  packs. Feeding the HUB by belt becomes the late-game "automate this" goal.
-- **Peaceful.** No enemies in this plan.
+- **Progression: the HUB, then research.** Phases 11–15 added their buildings and
+  recipes to HUB milestones (phase 10). Plan 2B changes this: its research (phase 20)
+  takes over after the HUB's last milestone, and phases 22–27 unlock through
+  technologies, researched with science packs in labs.
+- **Peaceful.** No enemies in this plan. (Plan 2B adds them, with peaceful mode as a setting.)
 - **One thumb at scale.** Once factories reach hundreds of buildings, placing them
   one at a time on a phone is the bottleneck, so copy and paste come early.
 - **Performance target, raised:** 60 UPS on a mid-range phone with ~3,000 buildings
@@ -32,7 +38,8 @@ decisions still holds.
 - It ends with a build you can run on the phone and a short checklist to try by hand.
 - New sim logic gets `npm test` coverage.
 - A new building goes in `BUILDINGS`, gets a model, a panel if it has settings, a
-  place in `ui/catalog.js`, a key if there's room, and a HUB milestone that unlocks it.
+  place in `ui/catalog.js`, a key if there's room, and a HUB milestone that unlocks it
+  (a technology from phase 20 on).
 - Anything that changes the save bumps `SAVE_VERSION` and adds a step to `MIGRATIONS`.
 
 ## Phases
@@ -111,7 +118,7 @@ The 128×128 map gets cramped once there are sub-factories. The map becomes **en
 split into 32×32 chunks that are generated from the seed when first seen and
 rendered (ground texture, rocks) per chunk, so only what's on screen costs anything.
 Only chunks you've changed go in the save. New terrain: **water** (lakes you can't
-build on, needed by phase 16), ore patches further apart than before, and further
+build on, needed by phase 22), ore patches further apart than before, and further
 out, bigger and richer ore fields. Zooming far out turns into a **map view**: flat
 colours, ore patches with what's left, buildings as blocks. The map view has a **fog
 of war**, as in Factorio: it only shows charted land, which is what you've looked at
@@ -208,7 +215,7 @@ graphs survive a reload.
 - [ ] Building a second furnace column shows plate production double in Stats within a minute.
 - [ ] A starved assembler's panel shows it idle most of the time, and why.
 
-### Phase 16: Fluids and steam power
+### Phase 22: Fluids and steam power
 The first fluid chain. An **offshore pump** on the shore pumps water, which goes
 through **pipes** (joining their neighbours by themselves, like belts) and
 **underground pipes** to **boilers** that burn coal and turn it into steam for
@@ -223,8 +230,8 @@ refused with a reason.
 - [ ] Tapping a pipe shows what's in its run, how full it is, and what's drawing from it.
 - [ ] A pipe that would mix water and steam can't be placed, and says why.
 
-### Phase 17: Steel, oil and plastic
-The second production tier and the next HUB milestones:
+### Phase 23: Steel, oil and plastic
+The second production tier and the technologies that unlock it:
 - **Steel**: furnaces smelt 5 iron plates into 1 steel plate.
 - **Oil**: oil wells are spots on the map, not patches. A **pumpjack** on one pumps
   crude oil and slows as the well runs down, but never below a minimum.
@@ -237,9 +244,9 @@ Assemblers and chemical plants take fluid ingredients through pipes, and an
 assembler with a fluid recipe shows its pipe connections.
 - [ ] A fully automated line from oil well to advanced circuits runs unattended.
 - [ ] A drained well keeps producing at its minimum rate.
-- [ ] The HUB's tier 3 milestone asks for advanced circuits, and a new player can see how to get there.
+- [ ] The research tree leads to advanced circuits, and a new player can see how to get there.
 
-### Phase 18: Sound and feel
+### Phase 24: Sound and feel
 Sounds made in code with Web Audio, so there are no files to download:
 - clicks for the UI, a thunk for placing, a crunch for removing;
 - a ping when a craft finishes, a fanfare for a milestone;
@@ -250,7 +257,7 @@ placed, and a short puff when removed.
 - [ ] Building, removing and crafting all sound right, and nothing is annoying after 10 minutes.
 - [ ] Sound can be turned off in one tap, and stays off.
 
-### Phase 19: Onboarding and saves
+### Phase 25: Onboarding and saves
 - **Tutorial**: an optional guided first game (mine by hand, smelt, place a miner,
   belts, inserters, an assembler), each step checked against the sim, with an arrow
   at what to tap. After that, **hints** show up when something has been stuck a
@@ -260,7 +267,7 @@ placed, and a short puff when removed.
 - [ ] Someone who has never played gets to automated plates with the tutorial and no help.
 - [ ] Exporting a save on the phone and importing it on a computer continues the same game.
 
-### Phase 20: Blueprints and planned buildings
+### Phase 26: Blueprints and planned buildings
 Save a selection as a named **blueprint**. Blueprints are kept in the browser apart
 from the save, so they carry over to new games, and they can be exported and imported
 as a text string for sharing. Pasting what you can't afford yet leaves **planned
@@ -270,12 +277,13 @@ can pay, nearest first. The resource bar shows what the plans still need.
 - [ ] Exporting a blueprint and importing the text elsewhere gives the same layout.
 - [ ] Planned buildings get built by themselves as items come in, and can be removed like buildings.
 
-### Phase 21: Faster belts and inserters
+### Phase 27: Faster belts and inserters
 A second tier to grow into: **Mk2 belts** (3.75 tiles/s, 15 items/s, double the
 speed with the same item gap), underground belts and splitters to match, and a **fast
 inserter** (2.4 items/s, needs power). Building a faster belt over a slower one
 **upgrades it in place**: facing and items are kept, and the old one is refunded.
-Dragging a line of Mk2 belts over a Mk1 line upgrades the lot. Unlocked by a HUB milestone.
+Dragging a line of Mk2 belts over a Mk1 line upgrades the lot. Unlocked by plan 2B's
+*Logistics 2* technology (phase 20), which is written ahead of it.
 - [ ] Upgrading a busy belt line doesn't drop or move any items.
 - [ ] A Mk2 line fed by two full Mk1 lines carries both.
 - [ ] Tiers are told apart at a glance (arrow colour), in both themes.
@@ -286,14 +294,15 @@ Dragging a line of Mk2 belts over a Mk1 line upgrades the lot. Unlocked by a HUB
 |---|---|---|
 | 11 Underground, splitters, sorters | MVP phase 8 | The first thing bigger layouts need; independent of power and the HUB |
 | 12 Copy, paste, remove | 11 | Should copy splitter and sorter settings from day one |
-| 13 Bigger world | — | Water and far ore are needed by 16 and 17 |
+| 13 Bigger world | — | Water and far ore are needed by 22 and 23 |
 | 14 Performance | 13 | Measured on the big map, before fluids and oil add load |
 | 15 Stats | — | Anywhere; most useful once factories are big |
-| 16 Fluids, steam | 13 (water), 9 (power) | |
-| 17 Steel, oil, plastic | 16 | Oil is a fluid |
-| 18 Sound, 19 Onboarding | — | Near the end, when what they describe has settled |
-| 20 Blueprints, planned buildings | 12 | Built on the selection and paste code; moved late, since copy and paste cover most of it |
-| 21 Faster belts and inserters | 11, 9 (power) | Upgrading in place reuses paste's "build over"; moved late |
+| 16–21 (plan 2B) | 15 | Enemies, defense and research, asked for first |
+| 22 Fluids, steam | 13 (water), 9 (power) | |
+| 23 Steel, oil, plastic | 22, 20 (research) | Oil is a fluid |
+| 24 Sound, 25 Onboarding | — | Near the end, when what they describe has settled |
+| 26 Blueprints, planned buildings | 12 | Built on the selection and paste code; moved late, since copy and paste cover most of it |
+| 27 Faster belts and inserters | 11, 9 (power), 20 (research) | Upgrading in place reuses paste's "build over"; moved late |
 
 ## Open questions
 
@@ -307,4 +316,4 @@ Dragging a line of Mk2 belts over a Mk1 line upgrades the lot. Unlocked by a HUB
 ## Later (plan 3 candidates)
 
 Trains (they need the bigger map first), drones or bots for deliveries, a
-Space-Elevator-style end goal, enemies as an optional mode, and multiplayer.
+Space-Elevator-style end goal, and multiplayer. (Enemies moved up into plan 2B.)
