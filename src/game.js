@@ -13,7 +13,8 @@ const KEEP_CHUNKS = 256; // below this many chunks, nothing is let go of
 
 // Owns the world and the view and runs the sim at a fixed tick rate,
 // independent of the display's frame rate. Plays `world` (a loaded save) if given,
-// otherwise a new world from `seed`, starting over its HUB if it has one.
+// otherwise a new world from `seed` (with `enemies` on, or peaceful), starting over
+// its HUB if it has one.
 // `afterStep(world)` runs after every tick (the benchmark empties its chests).
 // onStats gets the frame and tick rates, how long a tick and drawing a frame took
 // on average, in ms, and the draw calls in the last frame.
@@ -24,9 +25,9 @@ const KEEP_CHUNKS = 256; // below this many chunks, nothing is let go of
 // when it goes in and out of the map view (and once at the start).
 export function createGame(
   container,
-  { theme = "dark", world = null, seed, afterStep, onTick, onStats, onInspect, onTileHover, onBuildChange, onMessage, onMapMode } = {},
+  { theme = "dark", world = null, seed, enemies = false, afterStep, onTick, onStats, onInspect, onTileHover, onBuildChange, onMessage, onMapMode } = {},
 ) {
-  world ||= createWorld({ seed });
+  world ||= createWorld({ seed, enemies });
   const view = createView(container, world, { theme });
   const builder = createBuilder(world, view, { onChange: onBuildChange, onMessage, onInspect });
   const centerOn = (e, zoom) => {
@@ -133,6 +134,10 @@ export function createGame(
     setTheme: view.setTheme,
     // Whether the map view shows pollution.
     setPollutionOverlay: view.setPollutionOverlay,
+    // Moves the camera to look at ground point (x, y), out of the map view if need be.
+    lookAt(x, y) {
+      view.cam.zoomTo(x, y, view.mapMode ? DEFAULT_ZOOM : view.cam.zoom);
+    },
     // Moves the camera to look at building e (out of the map view, if need be) and
     // shows its panel.
     focus(e) {

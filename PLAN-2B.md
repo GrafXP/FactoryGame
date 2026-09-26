@@ -99,7 +99,7 @@ before anything attacks.
 - [ ] Turning the machines off lets the cloud fade.
 - [ ] The overlay reads clearly in both themes, and costs nothing when it's off.
 
-### Phase 17: Enemies and nests
+### Phase 17: Enemies and nests ✅ (done)
 The enemies, what they attack, and what's left when they win. There's no defense yet,
 so until phase 18 new games default to peaceful, and this phase is tried with enemies on.
 - **Health.** Every building gets `health` (in `BUILDINGS`). A damaged building shows
@@ -134,6 +134,60 @@ so until phase 18 new games default to peaceful, and this phase is tried with en
   generator. A destroyed nest is saved like a dug-into chunk, and live units, groups,
   ruins and evolution are saved too. `render/enemies.js` draws units as instanced
   meshes, only those on screen.
+- Done as: `sim/enemies.js`, `sim/health.js`, `render/enemies.js`, `ui/alerts.js`.
+  - **Nests** come from `map.js` (`nestsNear`, `nestById`): per 96×96 square set half
+    a square off the ore patches' grid, 35% of squares near the safe zone to 80% at
+    1,200 tiles, 2–6 nests on a ring, never on water or within 160 tiles. When a chunk
+    is made (or loaded) its nest tiles get `NEST_ID` (-1) in `ids`, so nothing can be
+    built there and paths can't cross them; `world.nests` keeps each nest seen.
+    Destroyed nests are a saved set of ids and are never made again (`destroyNest`,
+    which also raises evolution; nothing can destroy one until phase 19).
+  - **Nest state** exists only for nests that have taken in pollution: each takes up
+    to 2 units a second from the chunk its middle is in (counted as absorbed in
+    Stats), and once a second hatches units from it (mite 4, brute 20, spitter 12) up
+    to 30 at home. Units at home, the guards included, are only a list of kinds, not
+    simulated, so the far map costs nothing. With enemies on, on the 10-second marks, a
+    nest with no group out and 3 + a group's worth at home (5 + 15 × evolution units)
+    sends the group at the building scoring highest on pollution a minute ÷ (distance +
+    32) within 320 tiles.
+  - **Paths**: A* on tiles, 8 ways without corner cutting, in a box 48 tiles round
+    start and goal; water and nests are impassable, conveyors and poles cost a tile,
+    other buildings a tile plus their health (so a 7-chest wall is gone round and a
+    61-chest one gone through, tested). One search at a time, 1,000 tiles a tick, saved
+    mid-search as the cells it has reached plus its heap, so a loaded game finishes it
+    on the same tick. After its target goes, a group takes the nearest building (not a
+    belt or pole) within 20 tiles of its path's end, extending the path, or walks the
+    path back and rejoins its nest.
+  - **Units** move in 1/256 of a tile, follow the group path with their own offset,
+    chew through whatever blocks the next tile, and attack the target once in reach
+    (1.5 tiles, brutes 1.6, spitters 12). Evolution (a float, saved) rises
+    0.000004 a second, 0.00001 per unit of pollution nests take in and 0.002 per nest
+    destroyed, each times (1 − evolution); it sets the mix (brutes from 0.2, spitters
+    from 0.4) and unit health (×(1 + 2 × evolution)). All randomness is a mulberry32
+    state in `world.enemies.rand`.
+  - **Health**: `health` per building; only damaged ones are in `world.damaged` (so the
+    benchmark's building objects are unchanged). Repair is 2% a second after 10 s
+    without a hit. At 0 `destroy` takes the building down with no refund and pushes a
+    ruin (its layout part, from `layoutOf`); ruins don't block anything and building
+    over one clears it. `rebuild` builds ruins with `buildLayout`, so settings and
+    underground pairs come back.
+  - **UI**: tapping a ruin rebuilds it (undoable), Remove clears one; the warning
+    button by the clock counts ruins plus groups that hit something in the last 10 s,
+    goes to the latest alert and opens the Alerts panel (recent alerts to jump to,
+    Rebuild all (N) with its cost). Toasts for losses, and attacks at most every 10 s.
+    Health bars (billboard icons, 12 steps) sit under damaged buildings, panels show
+    health, ruins are drawn see-through, nest ground is creep, and the map view shows
+    charted nests (pink), ruins (red) and attack groups (orange). Stats has
+    evolution. New games ask Peaceful / Enemies on (default peaceful until phase 18),
+    and the pause menu switches it either way (groups out go home). Save format 10;
+    older saves load peaceful.
+  - Not yet: units only fight buildings (nothing hits them before turrets), guards
+    never come out, and nests have no health (phase 19). Tuning of how soon and how
+    often attacks come waits for defences in phase 18.
+  - Performance: headless, the benchmark factory with enemies on is attacked within
+    2 minutes; ticks average 0.4–0.7 ms with up to ~75 units out. The spikes left are
+    the belt and power networks being worked out again after a destroyed belt, pole
+    or machine, the same as when the player builds one.
 - [ ] A factory that pollutes a nearby base gets attacked, and an undefended miner is destroyed.
 - [ ] The alert takes you to the attack, and Rebuild all puts the destroyed buildings back as they were.
 - [ ] A group walks round a lake, and round a short wall rather than through it.

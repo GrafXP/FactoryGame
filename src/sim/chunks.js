@@ -11,14 +11,22 @@
 // the seed made them, with nothing built and no pollution (pollution.js), can be
 // let go of (forgetChunks) and made again when they're next needed.
 //
+// Enemy nests (map.js, enemies.js) come with the land: when a chunk is made, the
+// tiles of every nest reaching into it that hasn't been destroyed get NEST_ID
+// instead of a building's id, so nothing can be built there, and the chunk lists
+// them in `nests`. world.nests keeps each nest seen so far ({ id, x, y }, by id).
+//
 // world.charted holds the chunks the map view shows (their keys, see chunkKey):
 // the ones the player has looked at, and the ones radars have scanned (radar.js).
 // Everything else is fog on the map view; the playfield always shows everything.
-import { CHUNK, generateChunk } from "./map.js";
+import { CHUNK, NEST, generateChunk, nestsNear } from "./map.js";
 
 export { CHUNK };
 const SHIFT = Math.log2(CHUNK);
 const MASK = CHUNK - 1;
+
+// What a nest's tiles hold in `ids`.
+export const NEST_ID = -1;
 
 // Tiles this far from the start are off the map, which keeps chunk keys whole and
 // positions precise enough to draw.
@@ -45,13 +53,32 @@ export const newChunk = (cx, cy, { ore, amount }, changed = false) => ({
   pollution: 0, // see pollution.js
   absorb: -1,
   out: 0,
+  nests: [], // the nests reaching into it, filled in by markNests
 });
+
+// Marks the tiles of the living nests reaching into chunk c, and lists them.
+export function markNests(world, c) {
+  const x0 = c.cx * CHUNK;
+  const y0 = c.cy * CHUNK;
+  for (const n of nestsNear(world.seed, x0, y0, x0 + CHUNK, y0 + CHUNK)) {
+    if (world.enemies.dead.has(n.id)) continue;
+    let nest = world.nests.get(n.id);
+    if (!nest) world.nests.set(n.id, (nest = n));
+    c.nests.push(nest);
+    for (let y = Math.max(n.y, y0); y < Math.min(n.y + NEST, y0 + CHUNK); y++) {
+      for (let x = Math.max(n.x, x0); x < Math.min(n.x + NEST, x0 + CHUNK); x++) c.ids[tileIndex(x, y)] = NEST_ID;
+    }
+  }
+}
 
 // Chunk (cx, cy), generated if it hasn't been yet.
 export function getChunk(world, cx, cy) {
   const key = chunkKey(cx, cy);
   let c = world.chunks.get(key);
-  if (!c) world.chunks.set(key, (c = newChunk(cx, cy, generateChunk(world.seed, cx, cy))));
+  if (!c) {
+    world.chunks.set(key, (c = newChunk(cx, cy, generateChunk(world.seed, cx, cy))));
+    markNests(world, c);
+  }
   return c;
 }
 
@@ -68,6 +95,7 @@ export function chunkOf(world, x, y) {
 export const kindAt = (world, x, y) => chunkOf(world, x, y).ore[tileIndex(x, y)];
 export const amountAt = (world, x, y) => chunkOf(world, x, y).amount[tileIndex(x, y)];
 export const idAt = (world, x, y) => chunkOf(world, x, y).ids[tileIndex(x, y)];
+export const isNestAt = (world, x, y) => idAt(world, x, y) === NEST_ID;
 
 export function setIdAt(world, x, y, id) {
   const c = chunkOf(world, x, y);

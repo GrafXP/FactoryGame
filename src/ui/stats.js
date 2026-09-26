@@ -72,7 +72,8 @@ export function createStatsPanel(el, { close }) {
           : none
       }
       ${powerRows(world, w)}
-      ${pollutionRows(world, w)}`;
+      ${pollutionRows(world, w)}
+      ${enemyRows(world)}`;
   };
 
   el.addEventListener("click", (e) => {
@@ -134,6 +135,17 @@ function pollutionRows(world, w) {
     <p class="meta">${Math.round(air).toLocaleString("en")} in the air now. Machines give it off while they work, and the ground takes it in, water more.</p>
     <ul class="items stats"><li class="head"><span></span><b class="made">Made</b><b class="used">Taken</b></li>
       <li>${icon("pollution")}<span>Pollution</span><b class="made">${per(MADE)}</b><b class="used">${per(USED)}</b>${spark(made, used)}</li></ul>`;
+}
+
+// Evolution, and whether the enemies are on.
+function enemyRows(world) {
+  const en = world.enemies;
+  const pct = en.evolution * 100;
+  const units = [...en.groups.values()].reduce((n, g) => n + g.units.length, 0);
+  return `<h3>Enemies</h3>
+    <p class="meta">Evolution ${pct < 10 ? pct.toFixed(1) : Math.round(pct)}%: it goes up with time, with the pollution nests take in, and when a nest is destroyed, and brings tougher units. ${
+      en.on ? `Enemies are on${units ? `, and ${units} unit${units === 1 ? " is" : "s are"} out attacking` : ""}.` : "Peaceful: nests don't attack."
+    }</p>`;
 }
 
 // A machine's panel line on the pollution it gives off: how much a minute at full

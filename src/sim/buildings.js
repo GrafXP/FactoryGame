@@ -14,18 +14,21 @@
 // pole joins every pole within `reach` tiles and powers buildings within `area`
 // tiles of it.
 //
+// Every building has `health`: how much damage it takes before it's destroyed (see
+// health.js).
+//
 // Machines with `pollution` give off that many units of it a minute while they work
 // (a generator at full power), into their chunk (see pollution.js).
 export const BUILDINGS = {
-  belt: { name: "Belt", w: 1, h: 1, cost: { "iron-plate": 1 } },
+  belt: { name: "Belt", w: 1, h: 1, cost: { "iron-plate": 1 }, health: 60 },
   // Each end of an underground belt is built on its own: the exit goes up to
   // `reach` tiles ahead of the entrance (see underground.js).
-  underground: { name: "Underground belt", w: 1, h: 1, cost: { "iron-plate": 4, "iron-gear": 1 }, reach: 5 },
-  splitter: { name: "Splitter", w: 1, h: 1, cost: { "iron-plate": 5, "iron-gear": 2, "electronic-circuit": 1 } },
-  sorter: { name: "Sorter", w: 1, h: 1, cost: { "iron-plate": 5, "iron-gear": 2, "electronic-circuit": 3 } },
-  miner: { name: "Miner", w: 2, h: 2, cost: { "iron-gear": 3, "iron-plate": 3, stone: 6 }, period: 60, draw: 1500, pollution: 15 },
-  chest: { name: "Chest", w: 1, h: 1, cost: { "iron-plate": 4 }, capacity: 5000 },
-  furnace: { name: "Furnace", w: 2, h: 2, cost: { stone: 10 }, stack: 50, feed: 5, pollution: 9 },
+  underground: { name: "Underground belt", w: 1, h: 1, cost: { "iron-plate": 4, "iron-gear": 1 }, reach: 5, health: 100 },
+  splitter: { name: "Splitter", w: 1, h: 1, cost: { "iron-plate": 5, "iron-gear": 2, "electronic-circuit": 1 }, health: 120 },
+  sorter: { name: "Sorter", w: 1, h: 1, cost: { "iron-plate": 5, "iron-gear": 2, "electronic-circuit": 3 }, health: 120 },
+  miner: { name: "Miner", w: 2, h: 2, cost: { "iron-gear": 3, "iron-plate": 3, stone: 6 }, period: 60, draw: 1500, pollution: 15, health: 300 },
+  chest: { name: "Chest", w: 1, h: 1, cost: { "iron-plate": 4 }, capacity: 5000, health: 200 },
+  furnace: { name: "Furnace", w: 2, h: 2, cost: { stone: 10 }, stack: 50, feed: 5, pollution: 9, health: 250 },
   inserter: {
     name: "Inserter",
     w: 1,
@@ -33,6 +36,7 @@ export const BUILDINGS = {
     cost: { "iron-plate": 1, "iron-gear": 1, "electronic-circuit": 1 },
     swing: 24,
     draw: 250,
+    health: 100,
   },
   assembler: {
     name: "Assembler",
@@ -42,6 +46,7 @@ export const BUILDINGS = {
     stack: 50,
     draw: 1250,
     pollution: 3,
+    health: 300,
   },
   generator: {
     name: "Coal generator",
@@ -52,13 +57,14 @@ export const BUILDINGS = {
     stack: 50,
     feed: 5,
     pollution: 45,
+    health: 400,
   },
   // Where milestones are delivered (see progress.js). There's only ever one.
-  hub: { name: "HUB", w: 4, h: 4, cost: { "iron-plate": 10, stone: 10 } },
-  pole: { name: "Power pole", w: 1, h: 1, cost: { "iron-plate": 1, "copper-cable": 2 }, reach: 7, area: 3 },
+  hub: { name: "HUB", w: 4, h: 4, cost: { "iron-plate": 10, stone: 10 }, health: 1000 },
+  pole: { name: "Power pole", w: 1, h: 1, cost: { "iron-plate": 1, "copper-cable": 2 }, reach: 7, area: 3, health: 80 },
   // Charts the map view (see radar.js): the chunks up to `range` chunks away, one
   // at a time, each taking `scan` ticks of work.
-  radar: { name: "Radar", w: 2, h: 2, cost: { "iron-plate": 10, "iron-gear": 5, "electronic-circuit": 3 }, draw: 2000, range: 12, scan: 240 },
+  radar: { name: "Radar", w: 2, h: 2, cost: { "iron-plate": 10, "iron-gear": 5, "electronic-circuit": 3 }, draw: 2000, range: 12, scan: 240, health: 250 },
 };
 
 // Power in J/tick → kW, for showing.

@@ -156,8 +156,9 @@ function makeParts() {
 }
 
 // A set of instanced meshes drawing a list of placements { type, x, y, rot, model? }.
-// A ghost layer is see-through and colours each placement by its `ok` flag.
-export function createBuildingLayer(parent, { ghost = false } = {}) {
+// A ghost layer is see-through and colours each placement by its `ok` flag, or all
+// of them in palette colour `tint` (ruins).
+export function createBuildingLayer(parent, { ghost = false, tint = null } = {}) {
   const group = new THREE.Group();
   parent.add(group);
   const parts = makeParts();
@@ -168,7 +169,7 @@ export function createBuildingLayer(parent, { ghost = false } = {}) {
   for (const type in parts) {
     for (const part of parts[type]) {
       const material = ghost
-        ? new THREE.MeshStandardMaterial({ transparent: true, opacity: 0.55, depthWrite: false })
+        ? new THREE.MeshStandardMaterial({ transparent: true, opacity: tint ? 0.5 : 0.55, depthWrite: false })
         : new THREE.MeshStandardMaterial({ roughness: 0.8, side: part.geometry.type === "ShapeGeometry" ? THREE.DoubleSide : THREE.FrontSide });
       slots.push({ type, part, material, mesh: null });
     }
@@ -208,7 +209,7 @@ export function createBuildingLayer(parent, { ghost = false } = {}) {
         pos.set(p.x + w / 2, ghost ? 0.02 : 0, p.y + h / 2);
         q.setFromAxisAngle(up, (-p.rot * Math.PI) / 2);
         slot.mesh.setMatrixAt(i, m.compose(pos, q, one));
-        if (ghost) slot.mesh.setColorAt(i, c.set(p.ok ? colors.ok : colors.bad));
+        if (ghost) slot.mesh.setColorAt(i, c.set(tint ? colors[tint] : p.ok ? colors.ok : colors.bad));
       });
       slot.mesh.count = list.length;
       slot.mesh.visible = list.length > 0; // three binds a mesh's shaders even to draw nothing

@@ -1,8 +1,9 @@
 // Pollution: machines give it off into their chunk while they work, and once a
-// second every polluted chunk loses some to the ground (more where there's water)
-// and passes a share of the rest to its four neighbours. So a factory has a cloud
-// round it that grows with it and levels off where the ground takes in as much as
-// reaches it. It's harmless for now; nests will take it in (plan 2B, phase 17).
+// second every polluted chunk loses some to the nests in it (enemies.js) and the
+// ground (more where there's water), and passes a share of the rest to its four
+// neighbours. So a factory has a cloud round it that grows with it and levels off
+// where the ground takes in as much as reaches it, and nests the cloud reaches
+// hatch units to attack it with.
 //
 // Amounts are whole numbers, in 1/3600 of a unit of pollution: a machine that gives
 // off `pollution` units a minute (BUILDINGS) adds that many for every tick it works,
@@ -13,12 +14,13 @@
 // burn only what their network draws.
 //
 // What's given off counts as made in the production statistics, and what the
-// ground takes in as used (POLLUTION, stats.js).
+// ground and nests take in as used (POLLUTION, stats.js).
 import { BUILDINGS, footprint } from "./buildings.js";
 import { CHUNK, WATER } from "./map.js";
 import { chunkOf, getChunk } from "./chunks.js";
 import { FUEL_ENERGY } from "./recipes.js";
 import { produced, consumed, POLLUTION } from "./stats.js";
+import { NEST_ABSORB, feedNest } from "./enemies.js";
 
 // Units of pollution → the whole numbers the sim keeps.
 export const UNIT = 3600;
@@ -69,13 +71,14 @@ export function absorption(c) {
   return c.absorb;
 }
 
-// Once a second: every polluted chunk loses what the ground takes in, then passes
-// its share to its neighbours. Each chunk's share is worked out before any moves,
+// Once a second: every polluted chunk loses what its nests and the ground take in,
+// then passes its share to its neighbours. Each chunk's share is worked out before any moves,
 // so the order they're gone through in doesn't matter.
 export function stepPollution(world) {
   const list = [...world.polluted];
   let absorbed = 0;
   for (const c of list) {
+    if (c.nests.length) absorbed += feedNests(world, c);
     const n = Math.min(c.pollution, absorption(c));
     c.pollution -= n;
     absorbed += n;
@@ -94,6 +97,21 @@ export function stepPollution(world) {
   for (const c of world.polluted) if (!c.pollution) world.polluted.delete(c);
   if (absorbed) consumed(world.stats, POLLUTION, absorbed);
   world.pollutionVersion++;
+}
+
+// Each nest whose middle is in chunk c takes in up to NEST_ABSORB of its
+// pollution, in the order the chunk lists them. Returns how much they took.
+function feedNests(world, c) {
+  let taken = 0;
+  for (const n of c.nests) {
+    if (!c.pollution) break;
+    if (Math.floor((n.x + 1) / CHUNK) !== c.cx || Math.floor((n.y + 1) / CHUNK) !== c.cy) continue;
+    const take = Math.min(c.pollution, NEST_ABSORB);
+    c.pollution -= take;
+    taken += take;
+    feedNest(world, n, take);
+  }
+  return taken;
 }
 
 // All the pollution in the air, in units.

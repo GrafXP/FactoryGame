@@ -117,6 +117,72 @@ function isLake(seed, x, y) {
   return fbm(x * LAKE_SCALE, y * LAKE_SCALE, seed + 7777) * fade > LAKE_LEVEL;
 }
 
+// Enemy bases (enemies.js): 2 to 6 nests, NEST × NEST tiles each, round the middle
+// of some of the BASE_CELL × BASE_CELL squares. Those squares sit half a square off
+// the ore patches' squares, so bases mostly fall between patches. No nest comes
+// nearer the start than SAFE tiles, and bases are more common and bigger further
+// out, up to BASE_FAR. A nest is never on water; ore under one is fine.
+export const NEST = 3;
+export const SAFE = 160;
+const BASE_CELL = 96;
+const BASE_OFFSET = BASE_CELL / 2;
+const BASE_JITTER = 20; // how far a base's middle wanders from its square's
+const BASE_FAR = 1200;
+const BASE_CHANCE = [0.35, 0.8]; // how many squares have a base, near and far
+const BASE_REACH = BASE_JITTER + 10; // how far a nest can be from its square's middle
+
+// Whether tile (x, y) is in a lake (it may be ore instead; see generateChunk).
+function lakeAt(seed, x, y) {
+  return inBlob(startFeatures(seed).lake, x, y) >= 0 || isLake(seed, x, y);
+}
+
+// The nests of the base in square (i, j): [{ id, x, y }] with x, y the top-left
+// tile, or [] if it has none. A nest's id is its square's key times 8, plus which
+// nest of the base it is, so it's the same whenever the square is worked out.
+function cellNests(seed, i, j) {
+  const h = (k) => hash2(i, j, seed * 16 + 8 + k);
+  const bx = i * BASE_CELL + BASE_OFFSET + BASE_CELL / 2 + (h(1) - 0.5) * 2 * BASE_JITTER;
+  const by = j * BASE_CELL + BASE_OFFSET + BASE_CELL / 2 + (h(2) - 0.5) * 2 * BASE_JITTER;
+  const far = Math.min(1, Math.max(0, Math.hypot(bx, by) - SAFE) / BASE_FAR);
+  if (Math.hypot(bx, by) < SAFE || h(0) >= BASE_CHANCE[0] + (BASE_CHANCE[1] - BASE_CHANCE[0]) * far) return [];
+  const n = Math.min(6, 2 + Math.floor(h(3) * (1 + 4 * far)));
+  // Round a ring wide enough that neighbours are a tile or more apart.
+  const r = n === 2 ? 2.5 : Math.ceil((NEST + 1) / 2 / Math.sin(Math.PI / n));
+  const turn = h(4) * Math.PI * 2;
+  const key = ((i + 0x8000) * 0x10000 + (j + 0x8000)) * 8;
+  const nests = [];
+  for (let k = 0; k < n; k++) {
+    const a = turn + (k * Math.PI * 2) / n;
+    const x = Math.round(bx + Math.cos(a) * r - NEST / 2);
+    const y = Math.round(by + Math.sin(a) * r - NEST / 2);
+    if (Math.hypot(x + NEST / 2, y + NEST / 2) < SAFE) continue;
+    let wet = false;
+    for (let ty = y; ty < y + NEST && !wet; ty++) for (let tx = x; tx < x + NEST && !wet; tx++) wet = lakeAt(seed, tx, ty);
+    if (!wet) nests.push({ id: key + k, x, y });
+  }
+  return nests;
+}
+
+// The nest with id `id` ({ id, x, y }), or null if there's no such nest.
+export function nestById(seed, id) {
+  const key = Math.floor(id / 8);
+  const i = Math.floor(key / 0x10000) - 0x8000;
+  const j = (key % 0x10000) - 0x8000;
+  return cellNests(seed, i, j).find((n) => n.id === id) || null;
+}
+
+// The nests that reach into the box from (x0, y0) to (x1, y1), not included.
+export function nestsNear(seed, x0, y0, x1, y1) {
+  const found = [];
+  const at = (v) => Math.floor((v - BASE_OFFSET) / BASE_CELL);
+  for (let j = at(y0 - BASE_REACH); j <= at(y1 + BASE_REACH); j++) {
+    for (let i = at(x0 - BASE_REACH); i <= at(x1 + BASE_REACH); i++) {
+      for (const n of cellNests(seed, i, j)) if (n.x + NEST > x0 && n.x < x1 && n.y + NEST > y0 && n.y < y1) found.push(n);
+    }
+  }
+  return found;
+}
+
 // Generates chunk (cx, cy): what each tile is (`ore`) and how much ore it holds
 // (`amount`), indexed (y % CHUNK) * CHUNK + (x % CHUNK). Ore patches are richest in
 // the middle; everything else that isn't ore may be lake.

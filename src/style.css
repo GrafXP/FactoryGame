@@ -115,8 +115,17 @@ button.card {
   font: inherit;
 }
 
-.confirm {
+/* New game: enemies on or peaceful, and a red edge when it replaces the save. */
+.confirm.replacing {
   border-color: #d63a3f;
+}
+
+.confirm .segmented {
+  margin: 10px 0 8px;
+}
+
+.confirm span + span {
+  margin-top: 6px;
 }
 
 .confirm .row {
@@ -293,6 +302,65 @@ body.playing nav {
 
 .icon-btn:disabled {
   opacity: 0.4;
+}
+
+/* The alert button by the clock: a warning sign with how many things need looking at. */
+.alert-btn {
+  position: relative;
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
+.alert-btn .badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 10px;
+  color: #fff;
+  background: var(--bad);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+}
+
+/* The alerts panel: a button per recent alert, which goes there. */
+.alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.alert-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.alert-row span {
+  display: flex;
+  flex-direction: column;
+}
+
+.alert-row small {
+  color: var(--muted);
+}
+
+.alert-row[data-kind="destroyed"] .icon {
+  color: var(--bad);
+}
+
+.alert-row[data-kind="attacked"] .icon {
+  color: var(--warn);
 }
 
 .icon-btn[aria-pressed="true"] {

@@ -6,6 +6,7 @@ import { usesPower } from "./sim/power.js";
 import { lockedWhy } from "./sim/progress.js";
 import { exitSpots } from "./sim/underground.js";
 import { entitiesIn, layoutOf, rotateLayout, layoutCost, planLayout, buildLayout, layoutFits, removeEntities } from "./sim/layout.js";
+import { ruinAt, dropRuin, rebuild } from "./sim/health.js";
 
 // Buildings that show which ground the poles power while you place them or look at them.
 const onPower = (type) => type === "pole" || type === "generator" || usesPower(type);
@@ -44,6 +45,10 @@ const skippedText = (r) =>
 // where each part fits and can be paid for; Rotate turns it. It stays picked, to
 // paste again. Undo takes back the last build, removal, cut, paste or turn, up to
 // UNDO_LIMIT of them. Neither the clipboard nor the undo history is saved.
+//
+// A destroyed building leaves a ruin (sim/health.js): with no tool, tapping it
+// builds it again as it was, paid from the inventory, and Remove clears it.
+// rebuildAll() does every ruin at once. Rebuilding can be undone like a paste.
 export function createBuilder(world, view, { onChange, onMessage, onInspect } = {}) {
   let tool = null;
   let rot = 0;
@@ -250,6 +255,19 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
     changed();
   };
 
+  // Rebuilds `list` (ruins), saying what came of it.
+  const rebuildRuins = (list) => {
+    const r = rebuild(world, list);
+    if (r.built.length) record(r.built);
+    const n = r.built.length;
+    const what = r.total === 1 ? BUILDINGS[list[0].type].name.toLowerCase() : plural(r.total, "building");
+    if (n === r.total) onMessage?.(`Rebuilt ${r.total === 1 ? `the ${what}` : what}`);
+    else if (n) onMessage?.(`Rebuilt ${n} of ${what}: ${skippedText(r)}`);
+    else onMessage?.(`Can't rebuild ${r.total === 1 ? `the ${what}` : "them"}: ${skippedText(r)}`);
+    changed();
+    return r;
+  };
+
   // Mines the tile under p, or stops if there's nothing there to mine.
   const mineAt = (p) => {
     const t = tileOf(p);
@@ -344,6 +362,11 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
       else onMessage?.("Nothing left to undo there");
       changed();
     },
+    // Rebuilds every ruin, as far as the inventory goes.
+    rebuildAll() {
+      if (!world.ruins.length) return onMessage?.("Nothing to rebuild");
+      return rebuildRuins(world.ruins);
+    },
     // Belts are dragged out in lines and selections in boxes; with no tool, holding
     // on bare ore mines it.
     canPaint(p) {
@@ -394,7 +417,12 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
         return refresh();
       }
       if (tool === "remove") {
-        if (!here) {
+        const ruin = !here && ruinAt(world, t.x, t.y);
+        if (ruin) {
+          dropRuin(world, ruin);
+          marked = null;
+          onMessage?.(`Cleared the ruin of a ${BUILDINGS[ruin.type].name.toLowerCase()}`);
+        } else if (!here) {
           marked = null;
           onMessage?.("Nothing to remove here");
         } else if (twoTap && here !== marked) {
@@ -428,9 +456,12 @@ export function createBuilder(world, view, { onChange, onMessage, onInspect } = 
             if (spots().length) hint("Tap a lit tile to place the exit");
           }
         }
+      } else if (!here && ruinAt(world, t.x, t.y)) {
+        return rebuildRuins([ruinAt(world, t.x, t.y)]);
       } else {
         inspected = tileAt(world, t.x, t.y);
         onInspect?.(inspected);
+        if (inspected?.nest) onMessage?.("A nest. It takes in the pollution that reaches it and hatches units that attack the factory.");
       }
       refresh();
     },

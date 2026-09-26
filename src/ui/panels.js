@@ -16,6 +16,7 @@ import { CHUNK } from "../sim/map.js";
 import { TICK_RATE } from "../sim/world.js";
 import { itemIcon, icon } from "./icons.js";
 import { activityLine, pollutionLine } from "./stats.js";
+import { maxHealth, REPAIR_AFTER } from "../sim/health.js";
 import { emission } from "../sim/pollution.js";
 import { lower } from "./format.js";
 
@@ -191,7 +192,19 @@ const takeButton = (item, have, attrs) => {
   return `<button class="take" data-action="empty" ${attrs} data-n="${n}" aria-label="Take ${n} ${lower(item, n)}">Take ${n}</button>`;
 };
 
-const heading = (title) => `<h3>${title}<button class="close" data-action="close" aria-label="Close">${icon("close")}</button></h3>`;
+// Every panel starts with its title and, under it, the building's health while
+// it's damaged (a [data-live] part, see healthLine).
+const heading = (title) =>
+  `<h3>${title}<button class="close" data-action="close" aria-label="Close">${icon("close")}</button></h3><div data-live="health"></div>`;
+
+// A damaged building's health, and whether it's mending.
+function healthLine(e, world) {
+  const d = world.damaged.get(e.id);
+  if (!d) return "";
+  const max = maxHealth(e.type);
+  const mending = world.tick - d.hit >= REPAIR_AFTER;
+  return `<p class="meta hp">Health ${d.hp} / ${max}${mending ? ", repairing itself" : `: under attack. It repairs itself ${REPAIR_AFTER / TICK_RATE} s after the last hit`}</p>`;
+}
 
 // A machine's slot, with a button to take back what's in it (`take` holds the
 // attribute saying which slot or item; the output has its own big button instead).
@@ -454,7 +467,7 @@ export function createEntityPanel(el, { close, changed, toast }) {
     }
     const bar = el.querySelector(".bar i");
     if (panel.progress && bar) bar.style.width = `${panel.progress(shown) * 100}%`;
-    for (const [name, html] of Object.entries(panel.live?.(shown, world) || {})) {
+    for (const [name, html] of Object.entries({ health: healthLine(shown, world), ...panel.live?.(shown, world) })) {
       const part = el.querySelector(`[data-live="${name}"]`);
       if (part && live.get(part) !== html) {
         live.set(part, html);

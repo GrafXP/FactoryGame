@@ -3,7 +3,7 @@ import { createGame } from "./game.js";
 import { TICK_RATE, MINE_TICKS } from "./sim/world.js";
 import { parseSeed } from "./sim/rng.js";
 import { BUILDINGS, kW } from "./sim/buildings.js";
-import { CHUNK } from "./sim/map.js";
+import { CHUNK, SAFE } from "./sim/map.js";
 import { count } from "./sim/inventory.js";
 import { serialize, deserialize } from "./sim/save.js";
 import { BENCHES, benchWorld, benchCounts, drain } from "./sim/bench.js";
@@ -17,6 +17,8 @@ import { createBuildMenu } from "./ui/build-menu.js";
 import { createResources } from "./ui/resources.js";
 import { createEntityPanel } from "./ui/panels.js";
 import { createStatsPanel } from "./ui/stats.js";
+import { createAlerts } from "./ui/alerts.js";
+import { setEnemies } from "./sim/enemies.js";
 import { createCrafting } from "./ui/crafting.js";
 import { createGoal, milestoneBanner } from "./ui/goal.js";
 import { queueItems } from "./sim/crafting.js";
@@ -106,9 +108,13 @@ function home(el) {
       <a class="card" id="continue" href="/play" data-link hidden><b>Continue</b><span id="save-info"></span></a>
       <button class="card" id="new-game"><b>New game</b><span>A fresh map and a starter kit</span></button>
       <div class="card confirm" id="confirm" hidden>
-        <b>Start a new game?</b>
-        <span>Your saved factory will be replaced. This can't be undone.</span>
-        <div class="row"><button class="danger" id="confirm-yes">Start new game</button><button id="confirm-no">Cancel</button></div>
+        <b>New game</b>
+        <div class="segmented" id="enemies-pick" role="group" aria-label="Enemies">
+          <button data-enemies="off" aria-pressed="true">Peaceful</button><button data-enemies="on" aria-pressed="false">Enemies on</button>
+        </div>
+        <span id="enemies-note"></span>
+        <span id="replace-note" hidden>Your saved factory will be replaced. This can't be undone.</span>
+        <div class="row"><button id="confirm-yes">Start new game</button><button id="confirm-no">Cancel</button></div>
       </div>
       <a class="card" href="/help" data-link><b>Help</b><span>Controls and tips</span></a>
     </div>
@@ -138,13 +144,30 @@ function home(el) {
       $("#save-note").textContent = `Saving isn't available here (${err.message}), so a game won't be kept after you close it.`;
     },
   );
+  // New game asks about enemies, and says the save will go if there is one.
+  let enemies = false;
+  const pickEnemies = (on) => {
+    enemies = on;
+    for (const b of $("#enemies-pick").querySelectorAll("button")) b.setAttribute("aria-pressed", (b.dataset.enemies === "on") === on);
+    $("#enemies-note").textContent = on
+      ? "Nests the factory's pollution reaches send units to attack it. You can make it peaceful from the pause menu."
+      : "Nests never attack. You can turn enemies on from the pause menu.";
+  };
+  pickEnemies(false);
+  $("#enemies-pick").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-enemies]");
+    if (b) pickEnemies(b.dataset.enemies === "on");
+  });
   const askNew = (on) => {
     $("#confirm").hidden = !on;
     $("#new-game").hidden = on;
+    $("#replace-note").hidden = !hasSave;
+    $("#confirm").classList.toggle("replacing", hasSave);
+    $("#confirm-yes").classList.toggle("danger", hasSave);
   };
-  $("#new-game").addEventListener("click", () => (hasSave ? askNew(true) : navigate("/play?new")));
+  $("#new-game").addEventListener("click", () => askNew(true));
   $("#confirm-no").addEventListener("click", () => askNew(false));
-  $("#confirm-yes").addEventListener("click", () => navigate("/play?new"));
+  $("#confirm-yes").addEventListener("click", () => navigate(`/play?new&enemies=${enemies ? "on" : "off"}`));
 
   return () => {
     gone = true;
@@ -174,7 +197,7 @@ function ago(time) {
 const AUTOSAVE_MS = 30000;
 
 // /play continues the saved game, or starts one if there's none. /play?new starts a
-// new game (home asks first), and ?seed=… picks its map; /play?seed=… with a save
+// new game (home asks first), peaceful unless ?enemies=on, and ?seed=… picks its map; /play?seed=… with a save
 // asks which to play. Once a game is running the address goes back to plain /play,
 // so reloading continues it.
 //
@@ -209,7 +232,11 @@ function play(el) {
     stop = playWorld(el, opts);
   };
   const startNew = () =>
-    start({ seed: seedParam ? parseSeed(seedParam) : 1 + Math.floor(Math.random() * 999999), isNew: true });
+    start({
+      seed: seedParam ? parseSeed(seedParam) : 1 + Math.floor(Math.random() * 999999),
+      enemies: params.get("enemies") === "on",
+      isNew: true,
+    });
   const load = (record) => {
     try {
       start({ world: deserialize(record.data) });
@@ -273,7 +300,7 @@ const POLLUTION_KEY = "factory:pollution-overlay";
 // the switch for the pollution overlay). Right: panels
 // for the tapped building, the inventory and production stats (ui/stats.js).
 // Pause holds the settings: theme, fullscreen, debug info.
-function playWorld(el, { world, seed, isNew = false, bench = null, sinks = [] }) {
+function playWorld(el, { world, seed, enemies = false, isNew = false, bench = null, sinks = [] }) {
   const $ = html(
     el,
     `<div class="game" id="game">
@@ -281,6 +308,7 @@ function playWorld(el, { world, seed, isNew = false, bench = null, sinks = [] })
         <div class="hud">
           <a href="/" data-link class="icon-btn" aria-label="Back">${icon("back")}</a>
           <div class="score"><b id="clock">0:00</b><span id="status">Running</span></div>
+          <button class="icon-btn alert-btn" id="alerts" aria-label="Alerts" aria-expanded="false" hidden>${icon("alert")}<span class="badge" id="alert-count" hidden></span></button>
           <button class="icon-btn" id="stats" aria-label="Production stats (G)" title="Production stats (G)" aria-pressed="false">${icon("stats")}</button>
           <button class="icon-btn" id="undo" aria-label="Undo (Z)" title="Undo (Z)" disabled>${icon("undo")}</button>
           <button class="icon-btn" id="pause" aria-label="Pause (P)">${icon("pause")}</button>
@@ -299,6 +327,7 @@ function playWorld(el, { world, seed, isNew = false, bench = null, sinks = [] })
           <div id="craft"></div>
         </div>
         <div class="panel" id="stats-panel" hidden></div>
+        <div class="panel" id="alerts-panel" hidden></div>
       </div>
       <div class="bottom-stack">
         <button class="map-toggle" id="pollution-toggle" aria-pressed="false" hidden>${icon("pollution")}Pollution</button>
@@ -318,6 +347,7 @@ function playWorld(el, { world, seed, isNew = false, bench = null, sinks = [] })
         <h2>Paused</h2>
         <button class="big" data-action="resume">Resume</button>
         <div class="settings">
+          <button data-action="enemies" id="enemies-toggle"></button>
           <button data-action="theme" id="theme-toggle"></button>
           <button id="fs"></button>
           <button data-action="debug" id="debug-toggle"></button>
@@ -336,7 +366,7 @@ function playWorld(el, { world, seed, isNew = false, bench = null, sinks = [] })
     const t = hovered || tapped;
     $("#dbg-tile").textContent = !t
       ? "Tap a tile"
-      : `${t.x}, ${t.y} · ${t.oreName}${t.amount ? ` ×${t.amount}` : ""}${t.entity ? ` · ${BUILDINGS[t.entity.type].name}` : ""}${smog(t)}`;
+      : `${t.x}, ${t.y} · ${t.oreName}${t.amount ? ` ×${t.amount}` : ""}${t.entity ? ` · ${BUILDINGS[t.entity.type].name}` : ""}${t.nest ? " · nest" : ""}${smog(t)}`;
   };
   // The pollution in a tile's chunk.
   const smog = ({ pollution: n }) => (n ? ` · pollution ${n < 10 ? n.toFixed(1) : Math.round(n)}` : "");
@@ -428,10 +458,12 @@ function playWorld(el, { world, seed, isNew = false, bench = null, sinks = [] })
 
   // Game clock in the HUD: ticks → m:ss.
   let shownSeconds = -1;
+  let alerts = null;
   const game = createGame($("#game"), {
     theme: getTheme(),
     world,
     seed,
+    enemies,
     afterStep: bench ? () => drain(sinks) : undefined,
     onStats: ({ fps, ups, tickMs, frameMs, drawCalls }) => {
       $("#dbg-perf").textContent = `${Math.round(fps)} fps · ${Math.round(ups)} ups · ${drawCalls} draws`;
@@ -459,6 +491,7 @@ function playWorld(el, { world, seed, isNew = false, bench = null, sinks = [] })
       crafting.sync(world);
       entityPanel.sync(world);
       statsPanel.sync(world);
+      alerts?.sync(world);
       const s = Math.floor(world.tick / TICK_RATE);
       if (s === shownSeconds) return;
       shownSeconds = s;
@@ -488,6 +521,18 @@ function playWorld(el, { world, seed, isNew = false, bench = null, sinks = [] })
   };
   setPollution(pollutionOn);
   $("#pollution-toggle").addEventListener("click", () => setPollution(!pollutionOn));
+
+  alerts = createAlerts(
+    { button: $("#alerts"), count: $("#alert-count"), panel: $("#alerts-panel") },
+    { go: (x, y) => game.lookAt(x, y), rebuildAll: () => game.builder.rebuildAll(), toast },
+  );
+  alerts.sync(game.world);
+
+  // Enemies on or peaceful, from the pause menu.
+  const syncEnemies = () => {
+    $("#enemies-toggle").textContent = game.world.enemies.on ? "Make it peaceful" : "Turn enemies on";
+  };
+  syncEnemies();
 
   menu = createBuildMenu({ bar: $("#buildbar"), info: $("#toolinfo"), sheet: $("#sheet") }, game.builder, { craft: craftParts });
   syncInventory(game.world);
@@ -529,6 +574,12 @@ function playWorld(el, { world, seed, isNew = false, bench = null, sinks = [] })
     if (action === "quit") navigate("/"); // leaving the page saves
     if (action === "theme") toggleTheme();
     if (action === "debug") setDebug($("#debug").hidden);
+    if (action === "enemies") {
+      const on = !game.world.enemies.on;
+      setEnemies(game.world, on);
+      syncEnemies();
+      toast(on ? "Enemies on: nests the pollution reaches will attack" : "Peaceful: nests won't attack, and units out go home");
+    }
   });
 
   // Autosave every AUTOSAVE_MS, when the app is hidden or the page closes, and on
@@ -682,6 +733,8 @@ function help(el) {
     <dl>
       <dt>Production</dt><dd>The bar chart button at the top (or G) lists every item made or used over the last minute, 10 minutes or hour: how many a minute, with a graph of both (green made, amber used). Made is what miners dig, furnaces smelt, assemblers make and you mine or craft by hand; used is what furnaces, assemblers and hand-crafts make things from, the coal furnaces and generators burn, and what the HUB is given. Items moved from one building to another count as neither. Under the items, Power shows how many kW the generators made and the machines on their networks asked for (when they ask for more than is made, every machine slows down), and Pollution how much was given off and taken in. The numbers are saved with the game.</dd>
       <dt>Machines</dt><dd>A miner's, furnace's or assembler's panel says how much of the last minute it spent working, and what held it up the rest of the time (no input, output full, no power…). A machine slowed by a network short of power counts the time it waits as no power. A line that's starved or backed up shows up there.</dd>
+      <dt>Enemies</dt><dd>Out on the map, from about ${SAFE} tiles from the start, are bases of 2 to 6 nests, more and bigger further out; the map view shows the charted ones in pink. A nest takes in the pollution that reaches it and hatches units with it: quick mites at first, then armoured brutes and spitters that attack from a distance as evolution goes up (Stats shows it). With enemies on, a nest with enough units sends a group at the building that pollutes most nearby, keeping a few at home. They go round water, walk over belts and poles, and chew through other buildings, going round a short line of them and through a long one. New games ask whether enemies are on; the pause menu changes it (a peaceful game's nests never attack).</dd>
+      <dt>Damage and ruins</dt><dd>A damaged building shows a health bar, and repairs itself for free once it hasn't been hit for 10 s. One that's destroyed is gone with everything in it, and leaves a ruin that remembers what stood there. Tap a ruin (no tool picked) to build it again as it was, paid from your inventory; Remove clears one. When anything is attacked or destroyed, a warning button shows by the clock with how many ruins and attacks there are: tap it to go to the latest and see the list, with Rebuild all.</dd>
       <dt>Pollution</dt><dd>Machines give off pollution while they work: a miner ${BUILDINGS.miner.pollution} a minute, a furnace ${BUILDINGS.furnace.pollution}, an assembler ${BUILDINGS.assembler.pollution}, and a coal generator ${BUILDINGS.generator.pollution} at full power. Belts, inserters, poles and radars give off none, and an idle machine none. It spreads out from chunk to chunk and the ground takes it in, a lake five times as fast, so a factory has a cloud round it that grows with it and then stops growing. In the map view, the Pollution switch above the build bar tints polluted land red. Stats shows how much is made and taken in a minute, and how much is in the air; machines' panels say how much they give off. It does no harm yet.</dd>
     </dl>
     <h2>Saving</h2>

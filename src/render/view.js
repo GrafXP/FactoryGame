@@ -13,6 +13,7 @@ import { createMachineParts } from "./machines.js";
 import { createRecipeIcons } from "./recipe-icons.js";
 import { createPowerLayer } from "./power.js";
 import { createPollutionLayer } from "./pollution.js";
+import { createEnemyLayer, createMapMarkers, drawHealthBars } from "./enemies.js";
 import { createBillboards } from "./billboards.js";
 import { createVisible } from "./visible.js";
 
@@ -66,6 +67,20 @@ const PALETTES = {
     mapBelt: 0xf2c94c,
     fog: 0x0b0c10,
     pollution: 0xff4a3d,
+    // Enemies: nests on their creep, the units, what's left of a destroyed building,
+    // and on the map, nests and attacks.
+    nest: 0x5a2d4a,
+    nestHole: 0x160a12,
+    nestSpike: 0xd8c7a8,
+    creep: 0x3a2436,
+    mite: 0xc0452c,
+    brute: 0x7a3d28,
+    bruteArmor: 0x8c8f99,
+    spitter: 0x7aa33a,
+    spitterSac: 0xc6e06a,
+    ruin: 0x7a6a5e,
+    mapNest: 0xd0357a,
+    attack: 0xff8a1f,
     items: {
       "iron-plate": 0xc8d4e3,
       "copper-plate": 0xf5a36c,
@@ -121,6 +136,18 @@ const PALETTES = {
     mapBelt: 0xc99700,
     fog: 0x7c8591,
     pollution: 0xd4201a,
+    nest: 0x6b3355,
+    nestHole: 0x1c0d17,
+    nestSpike: 0xf0e2c4,
+    creep: 0x9c7e92,
+    mite: 0xa8341e,
+    brute: 0x5d2c1d,
+    bruteArmor: 0x6d717c,
+    spitter: 0x5f8a26,
+    spitterSac: 0xa6c43c,
+    ruin: 0x4a3f38,
+    mapNest: 0xa0205a,
+    attack: 0xe06a00,
     items: {
       "iron-plate": 0x7d8ea3,
       "copper-plate": 0xd9793a,
@@ -184,6 +211,12 @@ export function createView(container, world, { theme = "dark" } = {}) {
   const recipeIcons = createRecipeIcons();
   const power = createPowerLayer(play);
   const ghosts = createBuildingLayer(play, { ghost: true });
+  // Enemies (enemies.js), and the ruins of destroyed buildings, see-through.
+  const enemies = createEnemyLayer(play);
+  const ruins = createBuildingLayer(play, { ghost: true, tint: "ruin" });
+  let shownRuins = null;
+  let shownRuinCount = -1;
+  const markers = createMapMarkers(scene);
 
   // Highlight for a tile or footprint: a translucent fill plus an outline.
   const selection = new THREE.Group();
@@ -271,6 +304,9 @@ export function createView(container, world, { theme = "dark" } = {}) {
     paintHighlight();
     buildings.setTheme(COLORS);
     ghosts.setTheme(COLORS);
+    ruins.setTheme(COLORS);
+    enemies.setTheme(COLORS);
+    markers.setTheme(COLORS);
     machines.setTheme(COLORS);
     power.setTheme(COLORS);
     const itemColors = { ...COLORS.items };
@@ -415,6 +451,7 @@ export function createView(container, world, { theme = "dark" } = {}) {
       const range = visibleChunks(mapMode ? 0 : 1);
       if (range) terrain.update(world, range, mapMode);
       pollution.update(world, mapMode && showPollution);
+      markers.update(world, mapMode);
       if (mapMode !== shownMap) {
         shownMap = mapMode;
         play.visible = !mapMode;
@@ -424,6 +461,12 @@ export function createView(container, world, { theme = "dark" } = {}) {
       const onGround = screenRect();
       if (mapMode || !onGround) return renderer.render(scene, camera);
       const { list, changed } = visible.update(world, onGround);
+      enemies.update(world, range, onGround);
+      if (world.ruins !== shownRuins || world.ruins.length !== shownRuinCount) {
+        shownRuins = world.ruins;
+        shownRuinCount = world.ruins.length;
+        ruins.set(world.ruins.map((r) => (r.type === "underground" ? { ...r, model: `underground-${r.end}` } : r)));
+      }
       if (changed) {
         // Belts are drawn straight or as a corner, depending on what feeds them, and
         // underground belts as an entrance or an exit.
@@ -444,6 +487,7 @@ export function createView(container, world, { theme = "dark" } = {}) {
       icons.begin();
       recipeIcons.update(list, icons);
       drawStatusIcons(world, list, icons);
+      drawHealthBars(world, list, icons);
       icons.end();
       const m = world.mining;
       mineMark.visible = !!m;
@@ -501,6 +545,8 @@ export function createView(container, world, { theme = "dark" } = {}) {
       ro.disconnect();
       terrain.dispose();
       pollution.dispose();
+      enemies.dispose();
+      markers.dispose();
       items.dispose();
       machines.dispose();
       icons.dispose();

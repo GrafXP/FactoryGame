@@ -9,12 +9,15 @@
 // saved either, since it only lasts while a finger is down. The hand-crafting queue
 // is, since a craft under way has taken its ingredients, and so are progress
 // towards the HUB's milestones and the production statistics (not the machines'
-// activity, which is only the last minute).
+// activity, which is only the last minute), and the enemies: whether they're on,
+// evolution, the nests that have taken in pollution or been destroyed, the units and
+// groups out and the paths they're waiting for, with the buildings they've damaged
+// and the ruins of those they've destroyed.
 //
 // SAVE_VERSION goes up whenever the format changes. Add a step to MIGRATIONS that
 // turns a save of the old version into the next one, so old saves keep loading.
 import { createWorld, addEntity, canFit, initialState } from "./world.js";
-import { CHUNK, LIMIT, chunkKey, keyChunk, newChunk, getChunk } from "./chunks.js";
+import { CHUNK, LIMIT, chunkKey, keyChunk, newChunk, getChunk, markNests } from "./chunks.js";
 import { WATER } from "./map.js";
 import { SCAN, SCAN_ORDER } from "./radar.js";
 import { BUILDINGS, DIRS } from "./buildings.js";
@@ -26,9 +29,11 @@ import { SWING } from "./inserter.js";
 import { usesPower } from "./power.js";
 import { MILESTONES } from "./progress.js";
 import { SERIES_LEN, NOT_ITEMS } from "./stats.js";
+import { enemyState, addUnit, nestOf, saveSearch, loadSearch, UNITS } from "./enemies.js";
+import { maxHealth } from "./health.js";
 
 export const SAVE_FORMAT = "factory-save";
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 
 // What a save from before power gets, so its stopped machines can be started
 // again: the parts for a coal generator and ten poles, and coal to burn.
@@ -101,6 +106,9 @@ export const MIGRATIONS = {
   7: (data) => ({ ...data, stats: { since: data.tick, now: { made: {}, used: {} }, series: {} } }),
   // 9 added pollution. A version 8 save has none yet.
   8: (data) => ({ ...data, pollution: { at: new Int32Array(0), amount: new Float64Array(0) } }),
+  // 10 added enemies, health and ruins. A version 9 save loads peaceful, with its
+  // buildings whole; the pause menu can turn the enemies on.
+  9: (data) => ({ ...data, enemies: saveEnemies(enemyState(data.seed)), damaged: [], ruins: [] }),
 };
 
 // A save that can't be loaded. The message is written for the player.
@@ -125,6 +133,9 @@ export function serialize(world) {
     charted: Int32Array.from([...world.charted].sort((a, b) => a - b).flatMap((k) => [keyChunk(k).cx, keyChunk(k).cy])),
     // The chunks with pollution in key order, as (cx, cy) pairs in `at` and how much in `amount`.
     pollution: savePollution(world),
+    enemies: saveEnemies(world.enemies),
+    damaged: [...world.damaged].map(([id, d]) => ({ id, hp: d.hp, hit: d.hit })),
+    ruins: world.ruins.map((r) => ({ ...r, ...(r.filters && { filters: [...r.filters] }) })),
     inventory: { ...world.inventory.items },
     craft: {
       queue: world.craft.queue.map(({ recipe, n }) => ({ recipe, n })),
@@ -140,6 +151,23 @@ export function serialize(world) {
     // In the order they were built: the sim steps them in that order, so keeping it
     // makes a loaded world carry on exactly as the saved one would have.
     entities: [...world.entities.values()].map(saveEntity),
+  };
+}
+
+// The enemies, with everything in the order the sim goes through it.
+function saveEnemies(en) {
+  return {
+    on: en.on,
+    evolution: en.evolution,
+    rand: en.rand,
+    nextId: en.nextId,
+    absorbed: en.absorbed,
+    nests: [...en.nests].map(([id, s]) => ({ id, points: s.points, home: Uint8Array.from(s.home), next: s.next, group: s.group })),
+    dead: Float64Array.from([...en.dead].sort((a, b) => a - b)),
+    units: [...en.units.values()].map(({ key, ...u }) => u),
+    groups: [...en.groups.values()].map((g) => ({ ...g, goal: { ...g.goal }, path: g.path && g.path.slice(), units: [...g.units] })),
+    queue: [...en.queue],
+    search: en.search && { group: en.search.group, ...saveSearch(en.search) },
   };
 }
 
@@ -208,7 +236,7 @@ function migrate(data, migrations, current) {
 }
 
 function load(data) {
-  const { seed, tick, nextId, map, charted, pollution, inventory, entities, craft, progress, stats } = data;
+  const { seed, tick, nextId, map, charted, pollution, inventory, entities, craft, progress, stats, enemies, damaged, ruins } = data;
   check(Number.isInteger(tick) && tick >= 0, "bad clock");
   check(Array.isArray(map?.chunks), "bad map");
   check(charted instanceof Int32Array && charted.length % 2 === 0, "bad charted map");
@@ -216,12 +244,16 @@ function load(data) {
 
   const world = createWorld({ seed, kit: checkItems(inventory, "inventory"), charted: false });
   world.tick = tick;
+  check(enemies?.dead instanceof Float64Array && enemies.dead.every((id) => Number.isSafeInteger(id)), "bad nests");
+  for (const id of enemies.dead) world.enemies.dead.add(id); // before any chunk is made, so they stay gone
   for (const c of map.chunks) {
     const key = checkChunkAt(c?.cx, c?.cy);
     check(!world.chunks.has(key), "a map chunk twice");
     check(c.ore instanceof Uint8Array && c.ore.length === CHUNK * CHUNK && c.ore.every((k) => k <= WATER), "bad ore map");
     check(c.amount instanceof Uint32Array && c.amount.length === CHUNK * CHUNK, "bad ore amounts");
-    world.chunks.set(key, newChunk(c.cx, c.cy, { ore: c.ore.slice(), amount: c.amount.slice() }, true));
+    const chunk = newChunk(c.cx, c.cy, { ore: c.ore.slice(), amount: c.amount.slice() }, true);
+    world.chunks.set(key, chunk);
+    markNests(world, chunk);
   }
   for (let i = 0; i < charted.length; i += 2) world.charted.add(checkChunkAt(charted[i], charted[i + 1]));
   loadPollution(world, pollution);
@@ -281,6 +313,8 @@ function load(data) {
   }
   world.nextId = Math.max(nextId | 0, maxId + 1);
   checkConveyors(world);
+  loadHealth(world, damaged, ruins);
+  loadEnemies(world, enemies);
   return world;
 }
 
@@ -382,6 +416,67 @@ function checkProgress(p) {
   const done = Object.keys(needs).every((id) => (delivered[id] || 0) >= needs[id]);
   check(Object.entries(delivered).every(([id, n]) => n <= (needs[id] || 0)) && (!done || !Object.keys(needs).length), "bad deliveries");
   return { milestone: p.milestone, delivered };
+}
+
+// Damaged buildings, with no more than their health left, and ruins that are parts
+// of a layout (layout.js) of known buildings.
+function loadHealth(world, damaged, ruins) {
+  check(Array.isArray(damaged) && Array.isArray(ruins), "bad damage");
+  for (const d of damaged) {
+    const e = world.entities.get(d?.id);
+    check(e && !world.damaged.has(d.id), "bad damage");
+    check(Number.isInteger(d.hp) && d.hp > 0 && d.hp <= maxHealth(e.type) && Number.isInteger(d.hit), "bad damage");
+    world.damaged.set(d.id, { hp: d.hp, hit: d.hit });
+  }
+  for (const r of ruins) {
+    check(Object.hasOwn(BUILDINGS, r?.type) && Number.isInteger(r.x) && Number.isInteger(r.y), "bad ruin");
+    check(Number.isInteger(r.rot) && r.rot >= 0 && r.rot < 4 && Number.isInteger(r.id) && Number.isInteger(r.tick), "bad ruin");
+    check(r.end === undefined || r.end === "in" || r.end === "out", "bad ruin");
+    check(r.recipe === undefined || Object.hasOwn(RECIPES, r.recipe), "bad ruin");
+    check(r.filters === undefined || (Array.isArray(r.filters) && r.filters.length === 3), "bad ruin");
+    world.ruins.push({ ...r, ...(r.filters && { filters: [...r.filters] }) });
+  }
+}
+
+// The enemies: nests with state, units and the groups they're in, all pointing at
+// each other the right way.
+function loadEnemies(world, s) {
+  const en = world.enemies;
+  check(typeof s.on === "boolean" && Number.isFinite(s.evolution) && s.evolution >= 0 && s.evolution < 1, "bad enemies");
+  check(Number.isInteger(s.rand) && s.rand >= 0 && Number.isInteger(s.nextId) && s.nextId > 0, "bad enemies");
+  check(Number.isSafeInteger(s.absorbed) && s.absorbed >= 0, "bad enemies");
+  Object.assign(en, { on: s.on, evolution: s.evolution, rand: s.rand >>> 0, nextId: s.nextId, absorbed: s.absorbed });
+  const kind = (k) => Number.isInteger(k) && k >= 0 && k < UNITS.length;
+  check(Array.isArray(s.nests) && Array.isArray(s.units) && Array.isArray(s.groups) && Array.isArray(s.queue), "bad enemies");
+  for (const n of s.nests) {
+    check(nestOf(world, n?.id) && !en.dead.has(n.id) && !en.nests.has(n.id), "bad nest");
+    check(Number.isSafeInteger(n.points) && n.points >= 0 && n.home instanceof Uint8Array && [...n.home].every(kind), "bad nest");
+    check((n.next === -1 || kind(n.next)) && Number.isInteger(n.group) && n.group >= 0, "bad nest");
+    en.nests.set(n.id, { points: n.points, home: [...n.home], next: n.next, group: n.group });
+  }
+  for (const g of s.groups) {
+    check(Number.isInteger(g?.id) && g.id > 0 && g.id < s.nextId && !en.groups.has(g.id) && nestOf(world, g.nest), "bad group");
+    check(["plan", "go", "home"].includes(g.mode) && Number.isInteger(g.target) && Number.isInteger(g.hit), "bad group");
+    check(g.path === null || (g.path instanceof Int32Array && g.path.length >= 2 && g.path.length % 2 === 0), "bad group");
+    check(["x", "y", "w", "h"].every((k) => Number.isInteger(g.goal?.[k])) && Array.isArray(g.units) && g.units.length, "bad group");
+    check(g.mode !== "go" || g.path, "bad group");
+    en.groups.set(g.id, { ...g, goal: { ...g.goal }, path: g.path && g.path.slice(), units: [...g.units] });
+  }
+  for (const u of s.units) {
+    const g = en.groups.get(u?.group);
+    check(Number.isInteger(u.id) && u.id > 0 && u.id < s.nextId && !en.units.has(u.id) && g?.units.includes(u.id) && kind(u.kind), "bad unit");
+    const ints = ["x", "y", "ox", "oy", "hp", "cool", "step", "target", "dx", "dy"];
+    check(ints.every((k) => Number.isInteger(u[k])) && u.hp > 0 && u.step >= 0 && (!g.path || u.step <= g.path.length / 2), "bad unit");
+    addUnit(world, { ...u, key: 0 });
+  }
+  for (const g of en.groups.values()) check(g.units.every((id) => en.units.get(id)?.group === g.id), "bad group");
+  for (const id of s.queue) check(en.groups.has(id), "bad path queue");
+  en.queue = [...s.queue];
+  if (s.search) {
+    en.search = loadSearch(s.search, en.cells);
+    check(en.search && en.queue[0] === s.search.group, "bad path search");
+    en.search.group = s.search.group;
+  }
 }
 
 // Each polluted chunk once, with a whole amount of pollution above 0.

@@ -1,14 +1,15 @@
 import * as THREE from "three";
 import { CHUNK, WATER, isOre } from "../sim/map.js";
-import { getChunk, chunkKey, isCharted } from "../sim/chunks.js";
+import { getChunk, chunkKey, isCharted, NEST_ID } from "../sim/chunks.js";
 import { isConveyor } from "../sim/transport.js";
 
 // The ground, drawn a chunk at a time for the chunks round the camera: a texture
 // with a texel per tile (ground, ore, water) and a rock on every ore tile, richer
 // tiles getting bigger rocks. Zoomed far out it's the map view instead: the same
 // textures in flat colours, with ore brighter the more is left and buildings as
-// blocks, for charted chunks only. Uncharted land isn't drawn at all, so the fog is
-// the background colour.
+// blocks, for charted chunks only. Uncharted land isn't drawn at all, so the fog
+// is the background colour. The ground under a nest is creep, and on the map it's
+// bright, so nests stand out.
 //
 // Chunks are generated (sim/chunks.js) as they come into view. That doesn't change
 // the world: a chunk is whatever the seed says it is, generated or not.
@@ -75,7 +76,8 @@ export function createTerrain(parent) {
       const kind = chunk.ore[i];
       const x = x0 + (i % CHUNK);
       const y = y0 + ((i / CHUNK) | 0);
-      if (kind === WATER) c.copy(tint.water).multiplyScalar(0.97 + jitter(x, y, 0) * 0.06);
+      if (chunk.ids[i] === NEST_ID) c.copy(tint.creep).multiplyScalar(0.92 + jitter(x, y, 0) * 0.16);
+      else if (kind === WATER) c.copy(tint.water).multiplyScalar(0.97 + jitter(x, y, 0) * 0.06);
       else {
         c.copy(tint.ground);
         if (kind) c.lerp(tint.ore[kind], ORE_TINT);
@@ -91,7 +93,8 @@ export function createTerrain(parent) {
     for (let i = 0; i < CHUNK * CHUNK; i++) {
       const kind = chunk.ore[i];
       const id = chunk.ids[i];
-      if (id) c.copy(isConveyor(world.entities.get(id) || {}) ? tint.mapBelt : tint.mapBuilding);
+      if (id === NEST_ID) c.copy(tint.mapNest);
+      else if (id) c.copy(isConveyor(world.entities.get(id) || {}) ? tint.mapBelt : tint.mapBuilding);
       else if (kind === WATER) c.copy(tint.water);
       else if (kind) c.copy(tint.mapGround).lerp(tint.ore[kind], 0.55 + 0.45 * Math.min(1, chunk.amount[i] / RICH));
       else c.copy(tint.mapGround);
@@ -184,6 +187,8 @@ export function createTerrain(parent) {
       tint.mapGround = new THREE.Color(palette.mapGround);
       tint.mapBuilding = new THREE.Color(palette.mapBuilding);
       tint.mapBelt = new THREE.Color(palette.mapBelt);
+      tint.mapNest = new THREE.Color(palette.mapNest);
+      tint.creep = new THREE.Color(palette.creep);
       tint.ore = {};
       for (const k in palette.ore) tint.ore[k] = new THREE.Color(palette.ore[k]);
       theme++;

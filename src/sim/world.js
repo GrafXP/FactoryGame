@@ -5,7 +5,7 @@ import { BUILDINGS, footprint, outputTile } from "./buildings.js";
 import { ORE_ITEM, START_KIT, describe } from "./items.js";
 import { createInventory, add, give, missing, take, move, moveAll, total } from "./inventory.js";
 import { inMap, entityAt } from "./grid.js";
-import { chunkOf, tileIndex, setIdAt, chartArea } from "./chunks.js";
+import { chunkOf, tileIndex, setIdAt, chartArea, NEST_ID } from "./chunks.js";
 import { radarState, stepRadar } from "./radar.js";
 import { stepBelts, takesItems, canTake, put, splitterState, ANY_FILTERS } from "./transport.js";
 import { undergroundState, undergroundWhy, pairUp, unpair, buried } from "./underground.js";
@@ -18,6 +18,8 @@ import { stepPower, usePower, usesPower } from "./power.js";
 import { progressState, lockedWhy, deliverFrom, deliverAll } from "./progress.js";
 import { statsState, produced, consumed, consumedAll, tally, rollStats, TRACKED, POLLUTION } from "./stats.js";
 import { UNIT, emission, homeChunk, stepPollution } from "./pollution.js";
+import { enemyState, stepEnemies } from "./enemies.js";
+import { stepRepair, ruinOf, clearRuins } from "./health.js";
 
 export { entityAt };
 
@@ -29,8 +31,9 @@ export const START_CHARTED = 2;
 // A new world, on the endless map for `seed` (chunks.js). The land round the start
 // is charted, unless `charted` is false (a save brings its own). `milestones`
 // starts it with that many milestones done (progress.js), e.g. all of them for tests
-// that build anything.
-export function createWorld({ seed = 1, kit = START_KIT, milestones = 0, charted = true } = {}) {
+// that build anything. `enemies` turns the enemies on; otherwise it's peaceful
+// (enemies.js).
+export function createWorld({ seed = 1, kit = START_KIT, milestones = 0, charted = true, enemies = false } = {}) {
   const world = {
     tick: 0,
     seed,
@@ -50,6 +53,12 @@ export function createWorld({ seed = 1, kit = START_KIT, milestones = 0, charted
     stats: statsState(), // what's been made and used (stats.js)
     polluted: new Set(), // the chunks with any pollution (pollution.js)
     pollutionVersion: 0, // bumped when pollution has spread, once a second
+    nests: new Map(), // every nest seen so far, by id (chunks.js)
+    enemies: enemyState(seed, enemies), // units, attack groups, evolution (enemies.js)
+    damaged: new Map(), // building id → { hp, hit } for buildings that have been hit (health.js)
+    ruins: [], // what's left of destroyed buildings, to rebuild (health.js)
+    alerts: [], // recent attacks and losses, newest last, for the UI; not saved
+    alertCount: 0, // alerts ever raised, so the UI can tell which are new
   };
   if (charted) chartArea(world, -START_CHARTED, -START_CHARTED, START_CHARTED - 1, START_CHARTED - 1);
   return world;
@@ -81,8 +90,10 @@ export function step(world) {
   }
   if (emitted) produced(world.stats, POLLUTION, emitted); // as emit() does, once for them all
   stepBelts(world);
+  stepEnemies(world);
   if (world.tick % TICK_RATE === 0) {
     stepPollution(world);
+    stepRepair(world);
     rollStats(world, list.filter((m) => m.tracked).map((m) => m.e));
   }
 }
@@ -122,8 +133,8 @@ function machines(world) {
 }
 
 // What's on tile (x, y), or null off the map: its ore (ORE.NONE for plain ground
-// or water), whether it's water, its name, how much ore is left, its building and
-// the pollution in its chunk (in units).
+// or water), whether it's water, its name, how much ore is left, its building,
+// whether a nest is on it and the pollution in its chunk (in units).
 export function tileAt(world, x, y) {
   if (!inMap(x, y)) return null;
   const c = chunkOf(world, x, y);
@@ -137,6 +148,7 @@ export function tileAt(world, x, y) {
     oreName: ORE_NAMES[kind],
     amount: c.amount[i],
     entity: entityAt(world, x, y),
+    nest: c.ids[i] === NEST_ID,
     pollution: c.pollution / UNIT,
   };
 }
@@ -152,6 +164,7 @@ export function canFit(world, type, x, y, rot) {
       const c = chunkOf(world, tx, ty);
       const i = tileIndex(tx, ty);
       if (c.ore[i] === WATER) return "Can't build on water";
+      if (c.ids[i] === NEST_ID) return "A nest is in the way";
       if (c.ids[i]) return "Something is in the way";
     }
   }
@@ -175,6 +188,7 @@ export function canPlace(world, type, x, y, rot, opts = {}) {
 export function place(world, type, x, y, rot = 0, opts = {}) {
   if (canPlace(world, type, x, y, rot, opts)) return null;
   take(world.inventory, BUILDINGS[type].cost);
+  clearRuins(world, type, x, y, rot);
   const e = addEntity(world, { id: world.nextId++, type, x, y, rot: rot & 3, ...initialState(type, opts) });
   if (type === "underground") pairUp(world, e);
   return e;
@@ -209,12 +223,38 @@ function changed(world, e) {
 export function removeAt(world, x, y) {
   const entity = entityAt(world, x, y);
   if (!entity) return null;
+  const refund = refundOf(entity);
+  const under = takeDown(world, entity);
+  give(world.inventory, refund);
+  for (const it of under) give(world.inventory, { [it.item]: 1 });
+  return entity;
+}
+
+// Destroys building e: it and everything in it are gone, and a ruin that remembers
+// it is left in its place (health.js).
+export function destroy(world, e) {
+  if (world.entities.get(e.id) !== e) return;
+  world.ruins.push(ruinOf(e, world.tick));
+  takeDown(world, e);
+  raise(world, "destroyed", e);
+}
+
+// Notes an alert about building e for the UI: "attacked" or "destroyed".
+export function raise(world, kind, e) {
+  const { w, h } = footprint(e.type, e.rot);
+  world.alerts.push({ kind, type: e.type, x: e.x + w / 2, y: e.y + h / 2, tick: world.tick });
+  if (world.alerts.length > 50) world.alerts.shift();
+  world.alertCount++;
+}
+
+// Takes building e off the map, empty, and returns what was underground behind it
+// (for an underground belt). It's no longer damaged either.
+function takeDown(world, entity) {
   const under = entity.type === "underground" ? unpair(world, entity) : [];
   world.entities.delete(entity.id);
+  world.damaged.delete(entity.id);
   fill(world, entity, 0);
   changed(world, entity);
-  give(world.inventory, refundOf(entity));
-  for (const it of under) give(world.inventory, { [it.item]: 1 });
   // Emptied, so a panel still showing it can't hand out its contents twice.
   if (entity.inventory) entity.inventory.items = {};
   if (entity.items) entity.items = [];
@@ -222,7 +262,7 @@ export function removeAt(world, x, y) {
   if (entity.type === "assembler") Object.assign(entity, assemblerState());
   if (entity.type === "generator") entity.fuel = null;
   if (entity.hand) entity.hand = null;
-  return entity;
+  return under;
 }
 
 // What removing a building gives back: its cost plus whatever it holds or carries.
@@ -366,6 +406,7 @@ export function startMining(world, x, y) {
   const tile = tileAt(world, x, y);
   if (!tile) return "Off the map";
   if (tile.entity) return "There's a building in the way";
+  if (tile.nest) return "There's a nest in the way";
   if (!tile.ore) return "Nothing to mine here";
   const m = world.mining;
   if (!m || m.x !== x || m.y !== y) world.mining = { x, y, item: ORE_ITEM[tile.ore], progress: 0 };
