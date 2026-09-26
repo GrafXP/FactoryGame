@@ -12,6 +12,7 @@ import { drawBeltItems, beltItemCount } from "./belt-items.js";
 import { createMachineParts } from "./machines.js";
 import { createRecipeIcons } from "./recipe-icons.js";
 import { createPowerLayer } from "./power.js";
+import { createPollutionLayer } from "./pollution.js";
 import { createBillboards } from "./billboards.js";
 import { createVisible } from "./visible.js";
 
@@ -64,6 +65,7 @@ const PALETTES = {
     mapBuilding: 0xe6e9ef,
     mapBelt: 0xf2c94c,
     fog: 0x0b0c10,
+    pollution: 0xff4a3d,
     items: {
       "iron-plate": 0xc8d4e3,
       "copper-plate": 0xf5a36c,
@@ -118,6 +120,7 @@ const PALETTES = {
     mapBuilding: 0x2a2f3a,
     mapBelt: 0xc99700,
     fog: 0x7c8591,
+    pollution: 0xd4201a,
     items: {
       "iron-plate": 0x7d8ea3,
       "copper-plate": 0xd9793a,
@@ -162,6 +165,9 @@ export function createView(container, world, { theme = "dark" } = {}) {
 
   // The ground, a chunk at a time (terrain.js), and grid lines over it.
   const terrain = createTerrain(scene);
+  // The map view's pollution overlay (pollution.js), when it's switched on.
+  const pollution = createPollutionLayer(scene);
+  let showPollution = false;
   const grid = new THREE.GridHelper(GRID, GRID);
   grid.material.transparent = true;
   scene.add(grid);
@@ -258,6 +264,7 @@ export function createView(container, world, { theme = "dark" } = {}) {
   const applyTheme = () => {
     shownMap = null; // sets the background again
     terrain.setTheme(COLORS);
+    pollution.setTheme(COLORS.pollution);
     hemi.color.set(COLORS.hemiSky);
     hemi.groundColor.set(COLORS.hemiGround);
     grid.material.color.set(COLORS.grid);
@@ -407,6 +414,7 @@ export function createView(container, world, { theme = "dark" } = {}) {
       const mapMode = isMap();
       const range = visibleChunks(mapMode ? 0 : 1);
       if (range) terrain.update(world, range, mapMode);
+      pollution.update(world, mapMode && showPollution);
       if (mapMode !== shownMap) {
         shownMap = mapMode;
         play.visible = !mapMode;
@@ -477,6 +485,10 @@ export function createView(container, world, { theme = "dark" } = {}) {
     setPowerOverlay(overlay) {
       power.set(overlay);
     },
+    // Whether the map view shows pollution.
+    setPollutionOverlay(on) {
+      showPollution = on;
+    },
     // Ghost previews: [{ type, x, y, rot, ok }], green where ok, red where not.
     setGhosts(list) {
       ghosts.set(list);
@@ -488,6 +500,7 @@ export function createView(container, world, { theme = "dark" } = {}) {
     dispose() {
       ro.disconnect();
       terrain.dispose();
+      pollution.dispose();
       items.dispose();
       machines.dispose();
       icons.dispose();

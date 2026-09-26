@@ -8,8 +8,8 @@
 // the rest come back from the seed. `built` counts its tiles with a building on
 // them. `version` goes up whenever one of its tiles changes (ore running out, a
 // building going up or coming down), so the view knows to repaint it. Chunks just as
-// the seed made them, with nothing built, can be let go of (forgetChunks) and made
-// again when they're next needed.
+// the seed made them, with nothing built and no pollution (pollution.js), can be
+// let go of (forgetChunks) and made again when they're next needed.
 //
 // world.charted holds the chunks the map view shows (their keys, see chunkKey):
 // the ones the player has looked at, and the ones radars have scanned (radar.js).
@@ -42,6 +42,9 @@ export const newChunk = (cx, cy, { ore, amount }, changed = false) => ({
   changed,
   built: 0,
   version: 0,
+  pollution: 0, // see pollution.js
+  absorb: -1,
+  out: 0,
 });
 
 // Chunk (cx, cy), generated if it hasn't been yet.
@@ -75,12 +78,13 @@ export function setIdAt(world, x, y, id) {
 }
 
 // Lets go of the chunks outside (cx0, cy0)–(cx1, cy1) that are just as the seed
-// made them and have nothing built on them, so exploring far doesn't fill memory.
+// made them, with nothing built on them and no pollution in them, so exploring far
+// doesn't fill memory.
 // Returns how many went.
 export function forgetChunks(world, cx0, cy0, cx1, cy1) {
   let n = 0;
   for (const [key, c] of world.chunks) {
-    if (c.changed || c.built || (c.cx >= cx0 && c.cx <= cx1 && c.cy >= cy0 && c.cy <= cy1)) continue;
+    if (c.changed || c.built || c.pollution || (c.cx >= cx0 && c.cx <= cx1 && c.cy >= cy0 && c.cy <= cy1)) continue;
     world.chunks.delete(key);
     n++;
   }

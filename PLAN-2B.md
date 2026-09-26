@@ -58,7 +58,7 @@ comes after the HUB.
 
 ## Phases
 
-### Phase 16: Pollution
+### Phase 16: Pollution ✅ (done)
 Pollution first, harmless for now, so the next phase's trigger can be seen and tuned
 before anything attacks.
 - Each chunk holds a pollution amount. Every second, machines add to their chunk
@@ -75,6 +75,26 @@ before anything attacks.
   lives next to each chunk's ore. Emission is a number per building type in
   `BUILDINGS` (`pollution`), and uses the machine's activity, so an idle machine is
   clean.
+- Done as: `sim/pollution.js`. Amounts are whole numbers in 1/3600 of a unit, so a
+  machine giving off P units a minute adds P for every tick it works (status working
+  and not waiting for power), and the sim stays exact whatever order chunks are gone
+  through in. Miners give off 10 a minute, furnaces 6, assemblers 2; a coal generator
+  30 at full power, given off as it lights each coal, since it only burns what's
+  drawn. Once a second (before the stats roll), each polluted chunk loses what the
+  ground takes in (1 a tile a second, water 5) and then passes 1% of the rest to each
+  neighbour, if it holds at least a unit; shares are worked out before any moves.
+  Tuned so a furnace column (~150 a minute) levels off about 2 chunks out within a
+  few minutes, and a factory making ~1,100 a minute reaches about 5 chunks (160 tiles,
+  where nests start) after ~20 minutes. `world.polluted` holds the chunks with any;
+  polluted chunks aren't forgotten. Pollution is a non-item key in the stats
+  (`POLLUTION`, a Float64Array series): made is what's given off, used what's taken
+  in. The map view's overlay (`render/pollution.js`) is one plane with a texel per
+  chunk, smoothed, repainted once a second, and skipped while off; its switch sits
+  above the build bar in the map view, on by default, remembered per device.
+  Machines' panels say what they give off (lately, and while working), Stats has a
+  Pollution row and how much is in the air, and the debug readout shows the tile's
+  chunk. Save format 9; an older save starts with clean air. The benchmark tick is
+  within ~2% of what it was.
 - [ ] A furnace column's cloud grows for a few minutes, then stops growing.
 - [ ] Turning the machines off lets the cloud fade.
 - [ ] The overlay reads clearly in both themes, and costs nothing when it's off.

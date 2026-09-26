@@ -1,15 +1,17 @@
 import { ITEMS } from "../sim/items.js";
 import { TICK_RATE } from "../sim/world.js";
-import { WINDOWS, MADE, USED, BUCKETS, covered, history, perMinute, itemsSeen, activityOf } from "../sim/stats.js";
+import { WINDOWS, MADE, USED, BUCKETS, POLLUTION, covered, history, perMinute, itemsSeen, activityOf } from "../sim/stats.js";
+import { UNIT, emission, pollutionTotal } from "../sim/pollution.js";
 import { itemIcon, icon } from "./icons.js";
 
 // The Stats panel: for every item made or used over the window picked (the last
 // minute, 10 minutes or hour), how many a minute, with a small graph of both over
-// the window. Redrawn when a new bucket of that window is in.
+// the window, and under them the same for pollution: given off and taken in by the
+// ground. Redrawn when a new bucket of that window is in.
 const WINDOW_KEY = "factory:stats-window";
 
 // A rate a minute, short: "0.5", "12", "1.2k".
-const rate = (n) => (n === null ? "–" : n < 10 ? String(+n.toFixed(1)) : n < 10000 ? String(Math.round(n)) : `${(n / 1000).toFixed(1)}k`);
+export const rate = (n) => (n === null ? "–" : n < 10 ? String(+n.toFixed(1)) : n < 10000 ? String(Math.round(n)) : `${(n / 1000).toFixed(1)}k`);
 
 // "the last minute", or "the last 23 s" while the game is younger than the window.
 const OVER = ["the last minute", "the last 10 minutes", "the last hour"];
@@ -68,7 +70,8 @@ export function createStatsPanel(el, { close }) {
           ? `<p class="meta">How many a minute, over ${span(world, w)}.</p>
              <ul class="items stats"><li class="head"><span></span><b class="made">Made</b><b class="used">Used</b></li>${rows}</ul>`
           : none
-      }`;
+      }
+      ${pollutionRows(world, w)}`;
   };
 
   el.addEventListener("click", (e) => {
@@ -92,6 +95,33 @@ export function createStatsPanel(el, { close }) {
       return show;
     },
   };
+}
+
+// Pollution given off and taken in over window w, a minute, and how much is in the
+// air now. Left out while there's never been any.
+function pollutionRows(world, w) {
+  const made = history(world, POLLUTION, w, MADE).map((v) => v && v / UNIT);
+  const used = history(world, POLLUTION, w, USED).map((v) => v && v / UNIT);
+  const air = pollutionTotal(world);
+  if (!air && !made.some((v) => v > 0) && !used.some((v) => v > 0)) return "";
+  const per = (kind) => {
+    const n = perMinute(world, POLLUTION, w, kind);
+    return rate(n === null ? null : n / UNIT);
+  };
+  return `<h3>Pollution</h3>
+    <p class="meta">${Math.round(air).toLocaleString("en")} in the air now. Machines give it off while they work, and the ground takes it in, water more.</p>
+    <ul class="items stats pollution"><li class="head"><span></span><b class="made">Made</b><b class="used">Absorbed</b></li>
+      <li>${icon("pollution")}<span>Pollution</span><b class="made">${per(MADE)}</b><b class="used">${per(USED)}</b>${spark(made, used)}</li></ul>`;
+}
+
+// A machine's panel line on the pollution it gives off: how much a minute at full
+// work and, from its activity, over the last minute.
+export function pollutionLine(world, e) {
+  const full = emission(e.type);
+  if (!full) return "";
+  const a = activityOf(world, e);
+  const now = a ? full * (a.share.working || 0) : null;
+  return `<p class="meta">Pollution: ${now === null ? "" : `${rate(now)} a minute lately, `}${full} a minute while working.</p>`;
 }
 
 // What held a machine up, as its panel puts it.

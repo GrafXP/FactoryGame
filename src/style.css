@@ -607,6 +607,26 @@ body.playing nav {
 }
 
 /* The picked tool: what it is and what it costs, stacked, then Rotate and Done. */
+/* The map view's switch for the pollution overlay. */
+.map-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px 6px 10px;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  pointer-events: auto;
+}
+
+.map-toggle[aria-pressed="true"] {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
 .toolinfo {
   display: flex;
   align-items: center;
@@ -988,6 +1008,10 @@ body.playing nav {
   width: 3.4em;
   font-size: 0.85rem;
   text-align: right;
+}
+
+.stats.pollution b {
+  width: 4.8em;
 }
 
 .stats .made {

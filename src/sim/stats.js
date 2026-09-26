@@ -19,6 +19,10 @@
 // at the tick it was loaded), so a young game's rates aren't spread over time it
 // didn't have. All of it is saved.
 //
+// Besides items, it counts pollution (POLLUTION, see pollution.js): what machines
+// give off as made and what the ground takes in as used, in the sim's whole
+// numbers. Those can outgrow a Uint32Array's hour, so its series is a Float64Array.
+//
 // Machines (miners, furnaces, assemblers) count the ticks they spend in each
 // status (ACTIVITY), in `activity`: what it's doing (`status`) and since which tick
 // (`from`), which is counted when that changes, so a tick costs one comparison;
@@ -39,6 +43,9 @@ export const MADE = 0;
 export const USED = 1;
 export const SERIES_LEN = WINDOWS.length * 2 * BUCKETS;
 const PER_BUCKET = WINDOWS.map((w, i) => (i ? w.ticks / WINDOWS[i - 1].ticks : 1)); // finer buckets in each
+
+export const POLLUTION = "pollution";
+const newSeries = (id) => (id === POLLUTION ? new Float64Array(SERIES_LEN) : new Uint32Array(SERIES_LEN));
 
 export const statsState = (since = 0) => ({ since, now: { made: {}, used: {} }, series: {} });
 
@@ -95,8 +102,8 @@ export function rollStats(world, machines) {
   if (t % TICK_RATE) return;
   const stats = world.stats;
   const { made, used } = stats.now;
-  for (const id in made) stats.series[id] ||= new Uint32Array(SERIES_LEN);
-  for (const id in used) stats.series[id] ||= new Uint32Array(SERIES_LEN);
+  for (const id in made) stats.series[id] ||= newSeries(id);
+  for (const id in used) stats.series[id] ||= newSeries(id);
   for (const id in stats.series) {
     const s = stats.series[id];
     s[slot(0, MADE, t)] = made[id] || 0;

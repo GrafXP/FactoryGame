@@ -260,6 +260,7 @@ const RADAR_KW = kW(BUILDINGS.radar.draw);
 
 const TOOL_KEYS = { ...BUILDING_KEYS, x: "remove", c: "select", v: "paste" };
 const DEBUG_KEY = "factory:debug";
+const POLLUTION_KEY = "factory:pollution-overlay";
 
 // The game page itself, playing a loaded `world` or a new one from `seed`, or with
 // `bench` (its name), the benchmark factory `world`, whose `sinks` are drained
@@ -268,7 +269,8 @@ const DEBUG_KEY = "factory:debug";
 // Top: Back, the clock, Stats, Undo and Pause, under them the resource bar (tap it
 // for the inventory), and under that the goal card (ui/goal.js; tap it for the
 // HUB). A banner drops in when a milestone is reached. Bottom: the build controls
-// (ui/build-menu.js), with toasts and readouts stacked above them. Right: panels
+// (ui/build-menu.js), with toasts and readouts stacked above them (in the map view,
+// the switch for the pollution overlay). Right: panels
 // for the tapped building, the inventory and production stats (ui/stats.js).
 // Pause holds the settings: theme, fullscreen, debug info.
 function playWorld(el, { world, seed, isNew = false, bench = null, sinks = [] }) {
@@ -299,6 +301,7 @@ function playWorld(el, { world, seed, isNew = false, bench = null, sinks = [] })
         <div class="panel" id="stats-panel" hidden></div>
       </div>
       <div class="bottom-stack">
+        <button class="map-toggle" id="pollution-toggle" aria-pressed="false" hidden>${icon("pollution")}Pollution</button>
         <div class="toast" id="toast" hidden></div>
         <div class="mining" id="mining" hidden><span id="mining-label"></span><span class="bar"><i id="mining-bar"></i></span></div>
         <div class="mining" id="crafting" hidden><span></span><span class="bar"><i></i></span></div>
@@ -333,8 +336,10 @@ function playWorld(el, { world, seed, isNew = false, bench = null, sinks = [] })
     const t = hovered || tapped;
     $("#dbg-tile").textContent = !t
       ? "Tap a tile"
-      : `${t.x}, ${t.y} · ${t.oreName}${t.amount ? ` ×${t.amount}` : ""}${t.entity ? ` · ${BUILDINGS[t.entity.type].name}` : ""}`;
+      : `${t.x}, ${t.y} · ${t.oreName}${t.amount ? ` ×${t.amount}` : ""}${t.entity ? ` · ${BUILDINGS[t.entity.type].name}` : ""}${smog(t)}`;
   };
+  // The pollution in a tile's chunk.
+  const smog = ({ pollution: n }) => (n ? ` · pollution ${n < 10 ? n.toFixed(1) : Math.round(n)}` : "");
   const setDebug = (on, remember = true) => {
     $("#debug").hidden = !on;
     $("#debug-toggle").textContent = on ? "Hide debug info" : "Show debug info";
@@ -447,6 +452,7 @@ function playWorld(el, { world, seed, isNew = false, bench = null, sinks = [] })
       hovered = t;
       showTile();
     },
+    onMapMode: (on) => ($("#pollution-toggle").hidden = !on),
     onTick: (world) => {
       syncInventory(world);
       syncMining(world);
@@ -467,6 +473,22 @@ function playWorld(el, { world, seed, isNew = false, bench = null, sinks = [] })
     else toast(`Crafting ${describe(Object.fromEntries(steps.map((s) => [s.recipe, s.n * RECIPES[s.recipe].n])))}`);
     crafting.sync(game.world);
   };
+  // The map view's pollution overlay: on unless it was switched off on this device.
+  let pollutionOn = true;
+  try {
+    pollutionOn = localStorage.getItem(POLLUTION_KEY) !== "0";
+  } catch {}
+  const setPollution = (on) => {
+    pollutionOn = on;
+    game.setPollutionOverlay(on);
+    $("#pollution-toggle").setAttribute("aria-pressed", on);
+    try {
+      localStorage.setItem(POLLUTION_KEY, on ? "1" : "0");
+    } catch {}
+  };
+  setPollution(pollutionOn);
+  $("#pollution-toggle").addEventListener("click", () => setPollution(!pollutionOn));
+
   menu = createBuildMenu({ bar: $("#buildbar"), info: $("#toolinfo"), sheet: $("#sheet") }, game.builder, { craft: craftParts });
   syncInventory(game.world);
   crafting.sync(game.world);
@@ -660,6 +682,7 @@ function help(el) {
     <dl>
       <dt>Production</dt><dd>The bar chart button at the top (or G) lists every item made or used over the last minute, 10 minutes or hour: how many a minute, with a graph of both (green made, amber used). Made is what miners dig, furnaces smelt, assemblers make and you mine or craft by hand; used is what furnaces, assemblers and hand-crafts make things from, the coal furnaces and generators burn, and what the HUB is given. Items moved from one building to another count as neither. The numbers are saved with the game.</dd>
       <dt>Machines</dt><dd>A miner's, furnace's or assembler's panel says how much of the last minute it spent working, and what held it up the rest of the time (no input, output full, no power…). A machine slowed by a network short of power counts the time it waits as no power. A line that's starved or backed up shows up there.</dd>
+      <dt>Pollution</dt><dd>Machines give off pollution while they work: a miner ${BUILDINGS.miner.pollution} a minute, a furnace ${BUILDINGS.furnace.pollution}, an assembler ${BUILDINGS.assembler.pollution}, and a coal generator ${BUILDINGS.generator.pollution} at full power. Belts, inserters, poles and radars give off none, and an idle machine none. It spreads out from chunk to chunk and the ground takes it in, a lake five times as fast, so a factory has a cloud round it that grows with it and then stops growing. In the map view, the Pollution switch above the build bar tints polluted land red. Stats shows how much is made and taken in a minute, and how much is in the air; machines' panels say how much they give off. It does no harm yet.</dd>
     </dl>
     <h2>Saving</h2>
     <dl>

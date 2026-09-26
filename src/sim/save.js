@@ -4,7 +4,8 @@
 // Only real state is saved. Anything worked out from it is rebuilt on load: the
 // buildings on each tile, the belt and power networks, the version counters the view
 // watches. Of the map, only the chunks that have been dug into are saved, since the
-// rest come back from the seed, and which chunks are charted. Hand-mining isn't
+// rest come back from the seed, which chunks are charted and how polluted each
+// chunk with any pollution is. Hand-mining isn't
 // saved either, since it only lasts while a finger is down. The hand-crafting queue
 // is, since a craft under way has taken its ingredients, and so are progress
 // towards the HUB's milestones and the production statistics (not the machines'
@@ -13,7 +14,7 @@
 // SAVE_VERSION goes up whenever the format changes. Add a step to MIGRATIONS that
 // turns a save of the old version into the next one, so old saves keep loading.
 import { createWorld, addEntity, canFit, initialState } from "./world.js";
-import { CHUNK, LIMIT, chunkKey, keyChunk, newChunk } from "./chunks.js";
+import { CHUNK, LIMIT, chunkKey, keyChunk, newChunk, getChunk } from "./chunks.js";
 import { WATER } from "./map.js";
 import { SCAN, SCAN_ORDER } from "./radar.js";
 import { BUILDINGS, DIRS } from "./buildings.js";
@@ -24,10 +25,10 @@ import { SMELTING, FUEL, FUEL_ENERGY, RECIPES } from "./recipes.js";
 import { SWING } from "./inserter.js";
 import { usesPower } from "./power.js";
 import { MILESTONES } from "./progress.js";
-import { SERIES_LEN } from "./stats.js";
+import { SERIES_LEN, POLLUTION } from "./stats.js";
 
 export const SAVE_FORMAT = "factory-save";
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
 
 // What a save from before power gets, so its stopped machines can be started
 // again: the parts for a coal generator and ten poles, and coal to burn.
@@ -98,6 +99,8 @@ export const MIGRATIONS = {
   },
   // 8 added production statistics. A version 7 save starts counting when it's loaded.
   7: (data) => ({ ...data, stats: { since: data.tick, now: { made: {}, used: {} }, series: {} } }),
+  // 9 added pollution. A version 8 save has none yet.
+  8: (data) => ({ ...data, pollution: { at: new Int32Array(0), amount: new Float64Array(0) } }),
 };
 
 // A save that can't be loaded. The message is written for the player.
@@ -120,6 +123,8 @@ export function serialize(world) {
         .map(([, c]) => ({ cx: c.cx, cy: c.cy, ore: c.ore.slice(), amount: c.amount.slice() })),
     },
     charted: Int32Array.from([...world.charted].sort((a, b) => a - b).flatMap((k) => [keyChunk(k).cx, keyChunk(k).cy])),
+    // The chunks with pollution in key order, as (cx, cy) pairs in `at` and how much in `amount`.
+    pollution: savePollution(world),
     inventory: { ...world.inventory.items },
     craft: {
       queue: world.craft.queue.map(({ recipe, n }) => ({ recipe, n })),
@@ -136,6 +141,11 @@ export function serialize(world) {
     // makes a loaded world carry on exactly as the saved one would have.
     entities: [...world.entities.values()].map(saveEntity),
   };
+}
+
+function savePollution(world) {
+  const list = [...world.polluted].sort((a, b) => chunkKey(a.cx, a.cy) - chunkKey(b.cx, b.cy));
+  return { at: Int32Array.from(list.flatMap((c) => [c.cx, c.cy])), amount: Float64Array.from(list, (c) => c.pollution) };
 }
 
 // The items in { item: n } with a count, since stats keep the rest at 0.
@@ -198,7 +208,7 @@ function migrate(data, migrations, current) {
 }
 
 function load(data) {
-  const { seed, tick, nextId, map, charted, inventory, entities, craft, progress, stats } = data;
+  const { seed, tick, nextId, map, charted, pollution, inventory, entities, craft, progress, stats } = data;
   check(Number.isInteger(tick) && tick >= 0, "bad clock");
   check(Array.isArray(map?.chunks), "bad map");
   check(charted instanceof Int32Array && charted.length % 2 === 0, "bad charted map");
@@ -214,6 +224,7 @@ function load(data) {
     world.chunks.set(key, newChunk(c.cx, c.cy, { ore: c.ore.slice(), amount: c.amount.slice() }, true));
   }
   for (let i = 0; i < charted.length; i += 2) world.charted.add(checkChunkAt(charted[i], charted[i + 1]));
+  loadPollution(world, pollution);
   Object.assign(world.craft, checkCraft(craft));
   Object.assign(world.progress, checkProgress(progress)); // before the HUB is added, which refers to it
   Object.assign(world.stats, checkStats(stats, tick)); // likewise
@@ -373,14 +384,34 @@ function checkProgress(p) {
   return { milestone: p.milestone, delivered };
 }
 
-// Production statistics: counting started no later than now, and counts of known items.
+// Each polluted chunk once, with a whole amount of pollution above 0.
+function loadPollution(world, p) {
+  check(p?.at instanceof Int32Array && p.amount instanceof Float64Array && p.at.length === 2 * p.amount.length, "bad pollution");
+  for (let i = 0; i < p.amount.length; i++) {
+    checkChunkAt(p.at[2 * i], p.at[2 * i + 1]);
+    const c = getChunk(world, p.at[2 * i], p.at[2 * i + 1]);
+    const n = p.amount[i];
+    check(Number.isSafeInteger(n) && n > 0 && !c.pollution, "bad pollution");
+    c.pollution = n;
+    world.polluted.add(c);
+  }
+}
+
+// Production statistics: counting started no later than now, and counts of known
+// items and pollution.
 function checkStats(s, tick) {
   check(Number.isInteger(s?.since) && s.since >= 0 && s.since <= tick, "bad statistics");
-  const now = { made: checkItems(s.now?.made, "statistics"), used: checkItems(s.now?.used, "statistics") };
+  const counts = (items) => {
+    const { [POLLUTION]: n, ...rest } = items || {};
+    check(n === undefined || (Number.isSafeInteger(n) && n > 0), "bad statistics");
+    return { ...checkItems(rest, "statistics"), ...(n && { [POLLUTION]: n }) };
+  };
+  const now = { made: counts(s.now?.made), used: counts(s.now?.used) };
   check(s.series && typeof s.series === "object", "bad statistics");
   const series = {};
   for (const [id, a] of Object.entries(s.series)) {
-    check(Object.hasOwn(ITEMS, id) && a instanceof Uint32Array && a.length === SERIES_LEN, "bad statistics");
+    const type = id === POLLUTION ? Float64Array : Uint32Array;
+    check((id === POLLUTION || Object.hasOwn(ITEMS, id)) && a instanceof type && a.length === SERIES_LEN, "bad statistics");
     series[id] = a.slice();
   }
   return { since: s.since, now, series };

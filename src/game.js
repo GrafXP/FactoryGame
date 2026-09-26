@@ -20,10 +20,11 @@ const KEEP_CHUNKS = 256; // below this many chunks, nothing is let go of
 //
 // What the player looks at on the playfield gets charted, as the land round a
 // Factorio character does, so the map view shows it. The map view is for looking:
-// a tap on it zooms in there, and nothing is built from it.
+// a tap on it zooms in there, and nothing is built from it. onMapMode(on) is told
+// when it goes in and out of the map view (and once at the start).
 export function createGame(
   container,
-  { theme = "dark", world = null, seed, afterStep, onTick, onStats, onInspect, onTileHover, onBuildChange, onMessage } = {},
+  { theme = "dark", world = null, seed, afterStep, onTick, onStats, onInspect, onTileHover, onBuildChange, onMessage, onMapMode } = {},
 ) {
   world ||= createWorld({ seed });
   const view = createView(container, world, { theme });
@@ -37,7 +38,9 @@ export function createGame(
 
   let chartedView = "";
   let toldMap = false;
+  let wasMap = null;
   const chartView = () => {
+    if (view.mapMode !== wasMap) onMapMode?.((wasMap = view.mapMode));
     if (view.mapMode) {
       if (!toldMap) onMessage?.("The map: only land you've seen or a radar has scanned shows. Tap it to zoom in there.");
       toldMap = true;
@@ -128,6 +131,8 @@ export function createGame(
       running = true;
     },
     setTheme: view.setTheme,
+    // Whether the map view shows pollution.
+    setPollutionOverlay: view.setPollutionOverlay,
     // Moves the camera to look at building e (out of the map view, if need be) and
     // shows its panel.
     focus(e) {

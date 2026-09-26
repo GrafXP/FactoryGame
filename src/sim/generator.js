@@ -2,12 +2,14 @@
 //
 // A generator has a `fuel` slot ({ item, n } or null) and `burn`, the joules left
 // in the fuel it lit last. It only burns what the network draws, so an idle one
-// keeps its coal. status says what it's doing: "working", "idle" (nothing on its
+// keeps its coal. It gives off its pollution as it lights each coal (pollution.js).
+// status says what it's doing: "working", "idle" (nothing on its
 // network needs power), "no-fuel" or "unconnected" (no pole near it).
 import { BUILDINGS } from "./buildings.js";
 import { FUEL_ENERGY } from "./recipes.js";
 import { count, take, give } from "./inventory.js";
 import { consumed } from "./stats.js";
+import { emit, homeChunk, generatorEmits } from "./pollution.js";
 
 const { power: POWER, stack: STACK, feed: FEED } = BUILDINGS.generator;
 
@@ -57,11 +59,12 @@ export function generatorAvailable(g) {
 }
 
 // Burns `joules` (no more than generatorAvailable), lighting more fuel as needed,
-// which counts as used in `stats`.
-export function burnGenerator(g, joules, stats) {
+// which counts as used, and gives off pollution.
+export function burnGenerator(world, g, joules) {
   while (g.burn < joules) {
     g.burn += FUEL_ENERGY[g.fuel.item];
-    consumed(stats, g.fuel.item);
+    consumed(world.stats, g.fuel.item);
+    emit(world, homeChunk(world, g), generatorEmits(g.fuel.item));
     if (--g.fuel.n === 0) g.fuel = null;
   }
   g.burn -= joules;

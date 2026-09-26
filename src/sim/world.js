@@ -16,7 +16,8 @@ import { craftState, stepCraft } from "./crafting.js";
 import { generatorState } from "./generator.js";
 import { stepPower, usePower, usesPower } from "./power.js";
 import { progressState, lockedWhy, deliverFrom, deliverAll } from "./progress.js";
-import { statsState, produced, consumed, consumedAll, tally, rollStats, TRACKED } from "./stats.js";
+import { statsState, produced, consumed, consumedAll, tally, rollStats, TRACKED, POLLUTION } from "./stats.js";
+import { UNIT, emission, homeChunk, stepPollution } from "./pollution.js";
 
 export { entityAt };
 
@@ -47,6 +48,8 @@ export function createWorld({ seed = 1, kit = START_KIT, milestones = 0, charted
     craft: craftState(), // the player's hand-crafting queue (crafting.js)
     progress: progressState(milestones), // milestones done and deliveries (progress.js)
     stats: statsState(), // what's been made and used (stats.js)
+    polluted: new Set(), // the chunks with any pollution (pollution.js)
+    pollutionVersion: 0, // bumped when pollution has spread, once a second
   };
   if (charted) chartArea(world, -START_CHARTED, -START_CHARTED, START_CHARTED - 1, START_CHARTED - 1);
   return world;
@@ -58,6 +61,7 @@ export function step(world) {
   stepCraft(world);
   stepPower(world);
   const list = machines(world);
+  let emitted = 0;
   for (const m of list) {
     const e = m.e;
     if (e.type === "miner") stepMiner(world, e, m);
@@ -65,10 +69,22 @@ export function step(world) {
     else if (e.type === "assembler") stepAssembler(world, e);
     else if (e.type === "inserter") stepInserter(world, e, m.from, m.to);
     else if (e.type === "radar") stepRadar(world, e);
-    if (m.tracked) tally(world, e);
+    if (m.tracked) {
+      tally(world, e);
+      if (m.emits && e.status === "working" && e.starved !== world.tick) {
+        const c = m.chunk;
+        if (!c.pollution) world.polluted.add(c);
+        c.pollution += m.emits;
+        emitted += m.emits;
+      }
+    }
   }
+  if (emitted) produced(world.stats, POLLUTION, emitted); // as emit() does, once for them all
   stepBelts(world);
-  if (world.tick % TICK_RATE === 0) rollStats(world, list.filter((m) => m.tracked).map((m) => m.e));
+  if (world.tick % TICK_RATE === 0) {
+    stepPollution(world);
+    rollStats(world, list.filter((m) => m.tracked).map((m) => m.e));
+  }
 }
 
 // The buildings that do something each tick, in the order they were built (the
@@ -76,7 +92,8 @@ export function step(world) {
 // what each one needs of its neighbours: the building on a miner's output tile and
 // the tiles under it, as [chunk, index, ...]; an inserter's source and target.
 // Belts move in stepBelts, and chests and poles do nothing on their own. `tracked`
-// says whether its activity is counted (stats.js). Worked out
+// says whether its activity is counted (stats.js); `emits` is how much pollution it
+// gives off for each tick it works, into `chunk` (pollution.js). Worked out
 // from the layout and cached until it changes (world.version), like the belt
 // network; it isn't saved.
 const STEPPED = new Set(["miner", "furnace", "assembler", "inserter", "radar"]);
@@ -85,7 +102,8 @@ function machines(world) {
   const list = [];
   for (const e of world.entities.values()) {
     if (!STEPPED.has(e.type)) continue;
-    const m = { e, from: null, to: null, ground: null, tracked: TRACKED.has(e.type) };
+    const m = { e, from: null, to: null, ground: null, tracked: TRACKED.has(e.type), emits: emission(e.type), chunk: null };
+    if (m.emits) m.chunk = homeChunk(world, e);
     if (e.type === "miner") {
       const out = outputTile(e);
       m.to = entityAt(world, out.x, out.y);
@@ -104,7 +122,8 @@ function machines(world) {
 }
 
 // What's on tile (x, y), or null off the map: its ore (ORE.NONE for plain ground
-// or water), whether it's water, its name, how much ore is left and its building.
+// or water), whether it's water, its name, how much ore is left, its building and
+// the pollution in its chunk (in units).
 export function tileAt(world, x, y) {
   if (!inMap(x, y)) return null;
   const c = chunkOf(world, x, y);
@@ -118,6 +137,7 @@ export function tileAt(world, x, y) {
     oreName: ORE_NAMES[kind],
     amount: c.amount[i],
     entity: entityAt(world, x, y),
+    pollution: c.pollution / UNIT,
   };
 }
 

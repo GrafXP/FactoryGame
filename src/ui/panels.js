@@ -15,7 +15,8 @@ import { RANGE, SCAN, radarTarget, radarCoverage } from "../sim/radar.js";
 import { CHUNK } from "../sim/map.js";
 import { TICK_RATE } from "../sim/world.js";
 import { itemIcon, icon } from "./icons.js";
-import { activityLine } from "./stats.js";
+import { activityLine, pollutionLine } from "./stats.js";
+import { emission } from "../sim/pollution.js";
 import { lower } from "./format.js";
 
 // The panel for the building tapped with no tool: what it holds and what it's
@@ -239,7 +240,7 @@ const PANELS = {
       <div data-live="power"></div>
       <div data-live="activity"></div>`,
     progress: (m) => m.progress / BUILDINGS.miner.period,
-    live: (m, world) => ({ power: powerLine(m, world), activity: activityLine(world, m) }),
+    live: (m, world) => ({ power: powerLine(m, world), activity: activityLine(world, m) + pollutionLine(world, m) }),
   },
   // The player can add ore and fuel from the inventory, take them back, and take what it made.
   furnace: {
@@ -256,7 +257,7 @@ const PANELS = {
         ${takeOutput(f.output)}`;
     },
     progress: (f) => (f.smelting ? f.progress / SMELTING[f.smelting].time : 0),
-    live: (f, world) => ({ activity: activityLine(world, f) }),
+    live: (f, world) => ({ activity: activityLine(world, f) + pollutionLine(world, f) }),
   },
   // Without a recipe (or when changing it) the panel is a recipe picker. Then it
   // works like a furnace's: add ingredients, take them back, take what it made.
@@ -294,7 +295,7 @@ const PANELS = {
         ${takeOutput(a.output)}`;
     },
     progress: (a) => (a.crafting ? a.progress / RECIPES[a.recipe].time : 0),
-    live: (a, world) => ({ power: powerLine(a, world), activity: activityLine(world, a) }),
+    live: (a, world) => ({ power: powerLine(a, world), activity: activityLine(world, a) + pollutionLine(world, a) }),
   },
   inserter: {
     key: (e) => `${e.status} ${e.hand}`,
@@ -316,6 +317,7 @@ const PANELS = {
         <ul class="items slots">${slotRow("Fuel", g.fuel, `data-slot="fuel"`)}</ul>
         ${adds ? `<div class="actions">${adds}</div>` : ""}
         <p class="meta">Makes up to ${kW(BUILDINGS.generator.power)} kW, and only burns what's used: a coal lasts ${secs} s at full power.</p>
+        <p class="meta">Pollution: ${emission("generator")} a minute at full power, given off as it lights each coal.</p>
         <h3>Its network</h3>
         <div data-live="net"></div>`;
     },

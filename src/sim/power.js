@@ -205,7 +205,7 @@ export function stepPower(world) {
     net.generators.forEach((g, i) => {
       const extra = Math.min(left, generatorAvailable(g) - shares[i]);
       left -= extra;
-      burnGenerator(g, shares[i] + extra, world.stats);
+      burnGenerator(world, g, shares[i] + extra);
     });
 
     net.demand = demand;
