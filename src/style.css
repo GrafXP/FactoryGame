@@ -1374,6 +1374,23 @@ body.playing nav {
   padding: 12px;
 }
 
+/* The game speed picker, labelled above. */
+.speed-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+}
+
+.speed-pick > span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.settings .segmented button {
+  padding: 10px 4px;
+}
+
 .overlay {
   position: absolute;
   inset: 0;

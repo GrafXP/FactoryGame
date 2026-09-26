@@ -7,13 +7,17 @@ import { createBuilder } from "./build.js";
 import { footprint } from "./sim/buildings.js";
 
 const TICK_MS = 1000 / TICK_RATE;
-const MAX_TICKS_PER_FRAME = 10; // after a long stall, drop time instead of freezing to catch up
+const MAX_TICKS_PER_FRAME = 10; // at 1×: after a long stall, drop time instead of freezing to catch up
+const FAST_BUDGET_MS = 10; // how long the ticks a speed above 1× adds may take in a frame
 const STATS_MS = 500; // how often FPS/UPS and the timings are reported
 const FORGET_MS = 10000; // how often land far from the camera is let go of
 const KEEP_CHUNKS = 256; // below this many chunks, nothing is let go of
 
-// Owns the world and the view and runs the sim at a fixed tick rate,
-// independent of the display's frame rate. Plays `world` (a loaded save) if given,
+// The game speeds the player can pick: how many times TICK_RATE the sim runs at.
+export const SPEEDS = [0.5, 1, 2, 4, 8];
+
+// Owns the world and the view and runs the sim at a fixed tick rate times `speed`
+// (one of SPEEDS), independent of the display's frame rate. Plays `world` (a loaded save) if given,
 // otherwise a new world from `seed` (with `enemies` on, or peaceful), starting over
 // its HUB if it has one.
 // `afterStep(world)` runs after every tick (the benchmark empties its chests).
@@ -27,7 +31,7 @@ const KEEP_CHUNKS = 256; // below this many chunks, nothing is let go of
 // told when it goes in and out of the map view (and once at the start).
 export function createGame(
   container,
-  { theme = "dark", world = null, seed, enemies = true, afterStep, onTick, onStats, onInspect, onTileHover, onBuildChange, onMessage, onMapMode, onBase } = {},
+  { theme = "dark", world = null, seed, enemies = true, speed = 1, afterStep, onTick, onStats, onInspect, onTileHover, onBuildChange, onMessage, onMapMode, onBase } = {},
 ) {
   world ||= createWorld({ seed, enemies });
   const view = createView(container, world, { theme });
@@ -85,17 +89,22 @@ export function createGame(
   const frame = (now) => {
     raf = requestAnimationFrame(frame);
     if (running) {
-      acc += now - last;
+      const dt = now - last;
+      acc += dt * speed;
       let n = 0;
       const from = performance.now();
-      while (acc >= TICK_MS && n < MAX_TICKS_PER_FRAME) {
+      while (acc >= TICK_MS && n < MAX_TICKS_PER_FRAME * Math.max(1, speed)) {
+        // Once it's kept up with real time, a faster speed only gets its share of the
+        // frame, so one the computer can't keep up with runs as fast as it can and
+        // still draws smoothly.
+        if (n * TICK_MS >= dt && performance.now() - from > FAST_BUDGET_MS) break;
         step(world);
         afterStep?.(world);
         acc -= TICK_MS;
         n++;
       }
       if (n) simMs += performance.now() - from;
-      if (n === MAX_TICKS_PER_FRAME) acc = 0;
+      if (acc >= TICK_MS) acc = 0;
       ticks += n;
       if (n) onTick?.(world);
     }
@@ -134,6 +143,12 @@ export function createGame(
     },
     resume() {
       running = true;
+    },
+    get speed() {
+      return speed;
+    },
+    setSpeed(s) {
+      speed = s;
     },
     setTheme: view.setTheme,
     // Whether the map view shows pollution.

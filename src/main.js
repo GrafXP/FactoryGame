@@ -1,5 +1,5 @@
 import "./style.css";
-import { createGame } from "./game.js";
+import { createGame, SPEEDS } from "./game.js";
 import { TICK_RATE, MINE_TICKS } from "./sim/world.js";
 import { parseSeed } from "./sim/rng.js";
 import { BUILDINGS, kW } from "./sim/buildings.js";
@@ -290,6 +290,10 @@ const RADAR_KW = kW(BUILDINGS.radar.draw);
 const TOOL_KEYS = { ...BUILDING_KEYS, x: "remove", c: "select", v: "paste" };
 const DEBUG_KEY = "factory:debug";
 const POLLUTION_KEY = "factory:pollution-overlay";
+const SPEED_KEY = "factory:speed";
+
+// A speed → "½×", "1×", "2×"…
+const speedLabel = (s) => `${s === 0.5 ? "½" : s}×`;
 
 // The game page itself, playing a loaded `world` or a new one from `seed`, or with
 // `bench` (its name), the benchmark factory `world`, whose `sinks` are drained
@@ -302,7 +306,7 @@ const POLLUTION_KEY = "factory:pollution-overlay";
 // the switch for the pollution overlay). Right: panels
 // for the tapped building, the inventory, production stats (ui/stats.js), alerts
 // (ui/alerts.js) and a tapped enemy base (ui/base.js).
-// Pause holds the settings: theme, fullscreen, debug info.
+// Pause holds the settings: game speed, enemies, theme, fullscreen, debug info.
 function playWorld(el, { world, seed, enemies = true, isNew = false, bench = null, sinks = [] }) {
   const $ = html(
     el,
@@ -351,6 +355,9 @@ function playWorld(el, { world, seed, enemies = true, isNew = false, bench = nul
         <h2>Paused</h2>
         <button class="big" data-action="resume">Resume</button>
         <div class="settings">
+          <div class="speed-pick"><span id="speed-label">Game speed</span><div class="segmented" id="speed" role="group" aria-labelledby="speed-label">
+            ${SPEEDS.map((s) => `<button data-speed="${s}">${speedLabel(s)}</button>`).join("")}
+          </div></div>
           <button data-action="enemies" id="enemies-toggle"></button>
           <button data-action="theme" id="theme-toggle"></button>
           <button id="fs"></button>
@@ -464,6 +471,13 @@ function playWorld(el, { world, seed, enemies = true, isNew = false, bench = nul
     close: () => basePanel.show(null),
   });
 
+  // The game speed: whatever was picked last on this device.
+  let speed = 1;
+  try {
+    speed = Number(localStorage.getItem(SPEED_KEY)) || 1;
+  } catch {}
+  if (!SPEEDS.includes(speed)) speed = 1;
+
   // Game clock in the HUD: ticks → m:ss.
   let shownSeconds = -1;
   let alerts = null;
@@ -472,6 +486,7 @@ function playWorld(el, { world, seed, enemies = true, isNew = false, bench = nul
     world,
     seed,
     enemies,
+    speed,
     afterStep: bench ? () => drain(sinks) : undefined,
     onStats: ({ fps, ups, tickMs, frameMs, drawCalls }) => {
       $("#dbg-perf").textContent = `${Math.round(fps)} fps · ${Math.round(ups)} ups · ${drawCalls} draws`;
@@ -558,12 +573,35 @@ function playWorld(el, { world, seed, enemies = true, isNew = false, bench = nul
   if (bench) showBench();
   else $("#dbg-seed").textContent = `seed ${game.world.seed}`;
 
-  // The line under the clock: Running or Paused, or briefly "Saved".
+  // The line under the clock: Running (with the speed, when it isn't 1×) or Paused,
+  // or briefly "Saved".
   let statusTimer = 0;
   const showStatus = (flash) => {
     clearTimeout(statusTimer);
-    $("#status").textContent = flash || (game.running ? "Running" : "Paused");
+    const running = game.speed === 1 ? "Running" : `Running · ${speedLabel(game.speed)}`;
+    $("#status").textContent = flash || (game.running ? running : "Paused");
     if (flash) statusTimer = setTimeout(() => showStatus(), 1500);
+  };
+
+  // The game speed, from the pause menu or , and . on the keyboard; remembered on
+  // this device.
+  const setSpeed = (s) => {
+    game.setSpeed(s);
+    for (const b of $("#speed").querySelectorAll("[data-speed]")) b.setAttribute("aria-pressed", Number(b.dataset.speed) === s);
+    showStatus();
+    try {
+      localStorage.setItem(SPEED_KEY, String(s));
+    } catch {}
+  };
+  setSpeed(game.speed);
+  $("#speed").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-speed]");
+    if (b) setSpeed(Number(b.dataset.speed));
+  });
+  const stepSpeed = (by) => {
+    const s = SPEEDS[SPEEDS.indexOf(game.speed) + by];
+    if (s) setSpeed(s);
+    toast(`Game speed ${speedLabel(game.speed)}`);
   };
 
   const overlay = $("#overlay");
@@ -664,6 +702,8 @@ function playWorld(el, { world, seed, enemies = true, isNew = false, bench = nul
     else if (k === "f") toggleFullscreen();
     else if (k === "t") toggleTheme();
     else if (k === "`") setDebug($("#debug").hidden);
+    else if (k === ",") stepSpeed(-1);
+    else if (k === ".") stepSpeed(1);
     else return;
     e.preventDefault();
   };
@@ -699,13 +739,13 @@ function help(el) {
     <dl>
       <dt>Touch</dt><dd>Drag to move the map, pinch to zoom, tap a tile to inspect it.</dd>
       <dt>Mouse</dt><dd>Drag to move the map, scroll to zoom, click a tile to inspect it.</dd>
-      <dt>Keyboard</dt><dd>Arrows / WASD move, + / − zoom, P / Esc pause, F fullscreen, T light/dark, \` debug info.</dd>
+      <dt>Keyboard</dt><dd>Arrows / WASD move, + / − zoom, P / Esc pause, comma / full stop slower / faster, F fullscreen, T light/dark, \` debug info.</dd>
     </dl>
     <h2>The screen</h2>
     <dl>
       <dt>Top</dt><dd>Back to the menu, the game clock, Stats, Undo and Pause. Under them, the resource bar shows everything you carry; tap it (or press I) for the inventory with full names.</dd>
       <dt>Bottom</dt><dd>Build opens every building, sorted into tabs, with what each one does, what it costs and how many you can afford. Next to it are quick slots for the buildings you picked last, then Select and Remove. The small number on a building is how many you can afford.</dd>
-      <dt>Pause</dt><dd>Resume, light/dark mode, fullscreen, debug info (how fast the game runs, and the tapped tile), and Save and quit.</dd>
+      <dt>Pause</dt><dd>Resume, the game speed (½× to 8×; the line under the clock shows it when it isn't 1×), enemies on or peaceful, light/dark mode, fullscreen, debug info (how fast the game runs, and the tapped tile), and Save and quit.</dd>
     </dl>
     <h2>Building</h2>
     <dl>
