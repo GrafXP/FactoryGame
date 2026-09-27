@@ -1,6 +1,6 @@
 import { ITEMS } from "../sim/items.js";
 import { TICK_RATE } from "../sim/world.js";
-import { WINDOWS, MADE, USED, BUCKETS, POLLUTION, POWER, covered, history, perMinute, itemsSeen, activityOf } from "../sim/stats.js";
+import { WINDOWS, MADE, USED, BUCKETS, POLLUTION, POWER, KILLS, covered, history, perMinute, itemsSeen, activityOf } from "../sim/stats.js";
 import { UNIT, emission, pollutionTotal } from "../sim/pollution.js";
 import { itemIcon, icon } from "./icons.js";
 
@@ -73,7 +73,7 @@ export function createStatsPanel(el, { close }) {
       }
       ${powerRows(world, w)}
       ${pollutionRows(world, w)}
-      ${enemyRows(world)}`;
+      ${enemyRows(world, w)}`;
   };
 
   el.addEventListener("click", (e) => {
@@ -138,14 +138,16 @@ function pollutionRows(world, w) {
 }
 
 // Evolution, and whether the enemies are on.
-function enemyRows(world) {
+function enemyRows(world, w) {
   const en = world.enemies;
   const pct = en.evolution * 100;
   const units = [...en.groups.values()].reduce((n, g) => n + g.units.length, 0);
   return `<h3>Enemies</h3>
     <p class="meta">Evolution ${pct < 10 ? pct.toFixed(1) : Math.round(pct)}%: it goes up with time, with the pollution nests take in, and when a nest is destroyed, and brings tougher units. ${
       en.on ? `Enemies are on${units ? `, and ${units} unit${units === 1 ? " is" : "s are"} out attacking` : ""}.` : "Peaceful: nests don't attack."
-    }</p>`;
+    }</p>
+    <p class="meta">${rate(perMinute(world, KILLS, w, MADE))} kills a minute over ${span(world, w)} (units and nests).</p>
+    <div class="kill-trend">${spark(history(world, KILLS, w, MADE), [])}</div>`;
 }
 
 // A machine's panel line on the pollution it gives off: how much a minute at full

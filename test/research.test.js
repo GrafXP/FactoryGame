@@ -197,7 +197,7 @@ test("research's numbers: stronger walls, faster shooting, and the right lock te
   const world = setup();
   assert.equal(maxHealth(world, "wall"), BUILDINGS.wall.health);
   const up = upgradesOf(new Set(["weapon-damage-1", "shooting-speed-1", "stronger-walls", "green-science", "weapon-damage-2", "shooting-speed-2"]));
-  assert.deepEqual(up.bonus, { damage: 50, rate: 50, walls: 50 });
+  assert.deepEqual(up.bonus, { damage: 50, rate: 50, walls: 50, laserDamage: 0, laserRate: 0, range: 0 });
   assert.equal(up.health.wall, 1500);
   assert.equal(up.rate, 8, "12 ticks between shots at +50%");
   assert.deepEqual(up.damage, { "firearm-magazine": 9, "piercing-magazine": 12 });

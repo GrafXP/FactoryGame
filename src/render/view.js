@@ -4,6 +4,7 @@ import { MINE_TICKS } from "../sim/world.js";
 import { ORE_ITEM } from "../sim/items.js";
 import { entityAt } from "../sim/grid.js";
 import { BUILDINGS, DIRS } from "../sim/buildings.js";
+import { isTurret, turretRange as rangeOf } from "../sim/turret.js";
 import { beltNetwork } from "../sim/transport.js";
 import { CHUNK, LIMIT } from "../sim/chunks.js";
 import { createTerrain } from "./terrain.js";
@@ -101,6 +102,7 @@ const PALETTES = {
       "electronic-circuit": 0x3fbf6a,
       "red-pack": 0xff5a4f,
       "green-pack": 0x8fe04a,
+      "military-pack": 0xb6bbc5,
     },
     ok: 0x5be38a,
     bad: 0xff5a5a,
@@ -178,6 +180,7 @@ const PALETTES = {
       "electronic-circuit": 0x1f9a4a,
       "red-pack": 0xd42a26,
       "green-pack": 0x4f9a12,
+      "military-pack": 0x626b7a,
     },
     ok: 0x10a84f,
     bad: 0xe0282e,
@@ -573,9 +576,13 @@ export function createView(container, world, { theme = "dark" } = {}) {
     // Ghost previews: [{ type, x, y, rot, ok }], green where ok, red where not.
     setGhosts(list) {
       ghosts.set(list);
-      const turret = list.find(e => e.type === "turret");
+      const turret = list.find(isTurret);
       turretRange.visible = !!turret;
-      if (turret) turretRange.position.set(turret.x + 1, 0.06, turret.y + 1);
+      if (turret) {
+        turretRange.position.set(turret.x + 1, 0.06, turret.y + 1);
+        const scale = rangeOf(world, turret) / BUILDINGS.turret.range;
+        turretRange.scale.set(scale, scale, 1);
+      }
     },
     setTheme(name) {
       COLORS = PALETTES[name] || PALETTES.dark;

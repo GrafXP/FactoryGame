@@ -34,6 +34,8 @@ export const RECIPES = {
   // are made of, since buildings aren't items.
   "red-pack": { in: { "copper-plate": 1, "iron-gear": 1 }, n: 1, time: 300 },
   "green-pack": { in: { "iron-plate": 2, "iron-gear": 1, "electronic-circuit": 1 }, n: 1, time: 360 },
+  // Two walls' worth of bricks: buildings aren't inventory items.
+  "military-pack": { in: { "piercing-magazine": 1, "stone-brick": 10 }, n: 2, time: 600 },
 };
 
 export const HAND_SPEED = 2;

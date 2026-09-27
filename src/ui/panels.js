@@ -5,7 +5,7 @@ import { takeAll, oreLeftUnder, chestRoom, takeFromChest, putInChest, deliverToH
 import { SMELTING, FUEL, FUEL_ENERGY, RECIPES } from "../sim/recipes.js";
 import { fillFrom, emptySlot, furnaceRoom } from "../sim/furnace.js";
 import { setRecipe, fillAssembler, emptyAssembler, assemblerRoom } from "../sim/assembler.js";
-import { AMMO, loadTurret, emptyTurret, turretRoom } from "../sim/turret.js";
+import { AMMO, loadTurret, emptyTurret, turretRoom, turretRange } from "../sim/turret.js";
 import { setInserterFilter } from "../sim/inserter.js";
 import { fillLab, emptyLab, labRoom } from "../sim/lab.js";
 import { TECHS, PACKS } from "../sim/tech.js";
@@ -376,7 +376,7 @@ const PANELS = {
     },
   },
   turret: {
-    key: (t, world) => `${t.status} ${!!t.nest} ${JSON.stringify(t.ammo)} ${t.shots} ${t.kills} ${t.damage} ${world.inventory.version} ${world.upgrades.rate}`,
+    key: (t, world) => `${t.status} ${!!t.nest} ${JSON.stringify(t.ammo)} ${t.shots} ${t.kills} ${t.damage} ${world.inventory.version} ${JSON.stringify(world.upgrades.bonus)}`,
     html: (t, world) => {
       const adds = addButtons(Object.keys(AMMO), world.inventory, id => turretRoom(t, id));
       const { damage, rate } = world.upgrades.bonus;
@@ -387,8 +387,18 @@ const PANELS = {
         ${adds ? `<div class="actions">${adds}</div>` : ""}
         <p class="meta">${t.shots} shots loaded · ${t.kills} kills · ${t.damage} damage dealt</p>
         ${research}
-        <p class="meta">Range ${BUILDINGS.turret.range} tiles. Needs no power. It shoots the nearest enemy, and a nest in range once no enemies are. Each magazine has 10 shots, piercing ones harder and through armour; it holds one kind at a time. Belts and inserters stock up to 5 magazines, or load 10 by hand. The loaded magazine stays here; dismantling loses its remaining shots.</p>`;
+        <p class="meta">Range ${turretRange(world, t)} tiles. Needs no power. It shoots the nearest enemy, and a nest in range once no enemies are. Each magazine has 10 shots, piercing ones harder and through armour; it holds one kind at a time. Belts and inserters stock up to 5 magazines, or load 10 by hand. The loaded magazine stays here; dismantling loses its remaining shots.</p>`;
     },
+  },
+  "laser-turret": {
+    key: (t, world) => `${t.status} ${!!t.nest} ${t.kills} ${t.damage} ${JSON.stringify(world.upgrades.bonus)}`,
+    html: (t, world) => `${heading("Laser turret")}
+      <p class="status" data-status="${t.status}">${t.status === "no-power" ? "Stopped: no power" : t.status === "idle" ? "Watching for enemies" : t.nest ? "Firing at a nest" : "Firing at enemies"}</p>
+      <div data-live="power"></div>
+      <p class="meta">${t.kills} kills · ${t.damage} damage dealt</p>
+      <p class="meta">Range ${turretRange(world, t)} tiles. ${world.upgrades.laserDamage} damage per shot, ignoring armour; ${(TICK_RATE / world.upgrades.laserRate).toFixed(1)} shots a second at full power.</p>
+      <p class="meta">Needs no ammunition. Uses ${kW(BUILDINGS["laser-turret"].draw)} kW in combat and ${kW(BUILDINGS["laser-turret"].drain)} kW on standby. Brownouts slow its shooting. A separate generator network keeps the factory from competing with your defenses. With no enemies in range it shoots nests.</p>`,
+    live: (t, world) => ({ power: powerLine(t, world) }),
   },
   generator: {
     key: (g, world) => `${g.status} ${JSON.stringify(g.fuel)} ${world.inventory.version}`,

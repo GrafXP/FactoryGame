@@ -15,9 +15,9 @@ import { MILESTONES } from "./progress.js";
 
 export function realisticWorld() {
   // Its last milestone, the circuit goal, is still to do, but it's built as if it
-  // were done, labs and all (see the end). Green packs and sorting inserters are
-  // researched.
-  const world = createWorld({ seed: 42, kit: {}, enemies: false, milestones: MILESTONES.length, research: ["green-science", "logistics-2"] });
+  // were done, labs and all (see the end). The three packs, sorting inserters and
+  // lasers are researched so every chain can be demonstrated.
+  const world = createWorld({ seed: 42, kit: {}, enemies: false, milestones: MILESTONES.length, research: ["green-science", "logistics-2", "military-science", "laser-turrets"] });
   const terrain = (x, y, ore = ORE.NONE, amount = 0) => {
     const c = chunkOf(world, x, y);
     const i = tileIndex(x, y);
@@ -47,8 +47,8 @@ export function realisticWorld() {
   };
 
   // Power yard: each generator has its own coal mine, so a stopped production
-  // line cannot starve the power supply. Four generators leave expansion room.
-  for (const x of [-30, -20, -10, 0]) {
+  // line cannot starve the power supply. Six generators cover the laser as well.
+  for (const x of [-30, -20, -10, 0, 10, 20]) {
     patch(x + 4, -17, ORE.COAL);
     generatorAdd(build("generator", x, -18), "coal", 10);
     build("miner", x + 3, -18, 3);
@@ -79,7 +79,9 @@ export function realisticWorld() {
   build("splitter", -17, 0, 1);
   const copper = build("sorter", -17, 12, 1);
   copper.filters = ["copper-plate", "overflow", "overflow"];
-  horizontal(-17, -5, 24);
+  horizontal(-17, -7, 24);
+  build("splitter", -6, 24, 1);
+  build("belt", -5, 24, 1);
   build("chest", -4, 24);
   // Copper the cable line has no room for goes south, then east to the science wing.
   vertical(-17, 13, 17);
@@ -138,6 +140,7 @@ export function realisticWorld() {
   build("chest", 24, 7);
   build("belt", 25, 6, 1);
   build("turret", 26, 6);
+  build("laser-turret", 28, 6);
   for (let x = 24; x <= 29; x++) build("wall", x, 1);
 
   // The armoury: piercing magazines from half the magazines on the ammunition belt,
@@ -152,7 +155,32 @@ export function realisticWorld() {
   build("inserter", -4, 1, 2);
   build("belt", -4, 5, 0);
   build("inserter", -2, 3, 1);
-  build("chest", -1, 3);
+  build("splitter", -1, 3, 1);
+  build("chest", -1, 4);
+
+  // Half the piercing magazines and bricks feed military science; the other
+  // halves stay in storage. The new line crosses the existing belts underground.
+  build("belt", 0, 3, 1);
+  vertical(1, 3, 4);
+  build("underground", 1, 5, 2);
+  build("underground", 1, 8, 2, { end: "out" });
+  vertical(1, 9, 10);
+  build("underground", 1, 11, 2);
+  build("underground", 1, 15, 2, { end: "out" });
+  build("belt", 1, 16, 2);
+  build("underground", 1, 17, 2);
+  build("underground", 1, 19, 2, { end: "out" });
+  vertical(1, 20, 21);
+  build("inserter", 1, 22, 2);
+  setRecipe(build("assembler", 0, 23), "military-pack", world.inventory);
+  build("belt", -6, 25, 2);
+  horizontal(-6, -3, 26);
+  build("belt", -2, 26, 0);
+  build("belt", -2, 25, 0);
+  build("inserter", -1, 25, 1);
+  build("inserter", 3, 24, 1);
+  vertical(4, 24, 26);
+  horizontal(4, 9, 27);
 
   // The science wing. A gear assembler between a red pack and a green pack
   // assembler feeds both; iron comes along the top from a smelter of its own (a
@@ -195,11 +223,12 @@ export function realisticWorld() {
   // Poles follow service corridors beside the machines and the power yard.
   // The intermediate poles tie the smelters, fabrication and radar together.
   const poles = [];
-  for (let x = -33; x <= 9; x += 6) poles.push([x, -15]);
+  for (let x = -33; x <= 27; x += 6) poles.push([x, -15]);
   for (const y of [-3, 9]) for (let x = -31; x <= 29; x += 6) poles.push([x === 11 ? 12 : x, y]);
   for (const x of [-31, -13, 5, 29]) poles.push([x, 3]);
   poles.push([-31, -9], [-25, -9], [-31, 15], [-25, 16], [-31, 21], [-25, 21], [-31, 27], [-2, 1]);
   poles.push([16, 15], [16, 22], [11, 21], [17, 28], [22, 24], [12, 26], [28, 24]); // the science wing
+  poles.push([9, -9], [5, 15], [5, 21], [0, 21], [0, 27]); // military science
   for (const [x, y] of poles) build("pole", x, y);
   world.inventory.items = {};
   give(world.inventory, { "iron-plate": 200, "copper-plate": 100, "iron-gear": 50, "copper-cable": 100, "electronic-circuit": 30, stone: 100, coal: 50 });

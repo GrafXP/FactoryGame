@@ -72,6 +72,11 @@ function makeParts() {
     return parts;
   };
   return {
+    "laser-turret": [
+      { geometry: box(1.8, 0.25, 1.8, 0, 0.125, 0), color: "generatorBase" },
+      { geometry: new THREE.CylinderGeometry(0.4, 0.65, 0.75, 8).translate(0, 0.62, 0), color: "sorter" },
+      { geometry: new THREE.TorusGeometry(0.48, 0.08, 6, 16).rotateX(Math.PI / 2).translate(0, 0.85, 0), color: "labRing" },
+    ],
     wall: wall(0),
     ...Object.fromEntries(Array.from({ length: 16 }, (_, mask) => [`wall-${mask}`, wall(mask)])),
     turret: [

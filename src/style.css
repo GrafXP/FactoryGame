@@ -24,6 +24,7 @@
   --item-electronic-circuit: #3fbf6a;
   --item-red-pack: #ff5a4f;
   --item-green-pack: #8fe04a;
+  --item-military-pack: #b6bbc5;
   /* Enemy bases by strength, as their rings on the map (src/render/view.js). */
   --tier-0: #c9a7f0;
   --tier-1: #e0487f;
@@ -55,6 +56,7 @@
   --item-electronic-circuit: #1f9a4a;
   --item-red-pack: #d42a26;
   --item-green-pack: #4f9a12;
+  --item-military-pack: #626b7a;
   --tier-0: #7b52c4;
   --tier-1: #c0206a;
   --tier-2: #9a0a1e;
@@ -1165,6 +1167,11 @@ body.playing nav {
   height: 22px;
 }
 
+.kill-trend .spark {
+  display: block;
+  width: 100%;
+  height: 36px;
+}
 .spark polyline {
   fill: none;
   stroke-width: 1.5;

@@ -18,6 +18,7 @@ export const ITEMS = {
   "electronic-circuit": { name: "Circuit", plural: "Circuits", shape: "circuit" },
   "red-pack": { name: "Red science pack", plural: "Red science packs", shape: "pack" },
   "green-pack": { name: "Green science pack", plural: "Green science packs", shape: "pack" },
+  "military-pack": { name: "Military science pack", plural: "Military science packs", shape: "pack" },
 };
 
 // The item you get from mining each kind of ore tile.

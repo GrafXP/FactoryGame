@@ -413,7 +413,7 @@ last one now unlocks labs.
 - [ ] A lab missing a pack, or power, says so.
 - [ ] Every building and recipe is unlocked by exactly one milestone or technology (tested), and the Research panel shows what each one unlocks.
 
-### Phase 21: Military science and the laser turret
+### Phase 21: Military science and the laser turret ✅ (done)
 The defense side of the tree, and the end of this plan.
 - **Military science pack** (grey): a piercing magazine and two walls make two. It's
   needed for the military technologies from here on.
@@ -428,6 +428,46 @@ The defense side of the tree, and the end of this plan.
   - *Turret range*, which adds 2 tiles to every turret.
 - Stats: the military packs and ammunition used show up where the player expects them,
   and the Stats panel can show kills a minute.
+- Done as: military packs and twelve more technologies in `sim/tech.js`, lasers
+  sharing targeting and retaliation with guns in `sim/turret.js`, and kill history
+  in `sim/stats.js`.
+  - **Military packs** are grey flasks: one piercing magazine and ten bricks (two
+    walls' worth, since buildings aren't items) make two packs in 10 s, or 5 s by
+    hand. *Military science* costs 30 red-and-green units, 10 s each; it unlocks
+    their recipe. Labs accept and pass them along like the other packs.
+  - **Laser turrets** cost 30 iron plates, 20 copper plates and 20 circuits, with
+    400 health and 20-tile range. They do 7 damage every 12 powered ticks, ignoring
+    physical armour. They use 900 kW in combat and 6 kW on standby; the existing
+    two-tick energy store smooths supply, and their firing cooldown only advances
+    on powered ticks. One 600 kW generator gives two-thirds firing speed. Their
+    research costs 50 red, green and military units, 15 s each.
+  - **Upgrades** add +40% then +50% gun damage and shooting speed (60 × 15 s and
+    100 × 20 s); +30% then +50% laser damage and speed (50 × 15 s and 100 × 20 s);
+    +100% wall health (60 × 15 s); and +2 tiles to both turret ranges (100 × 20 s).
+    All need military packs. With all research: piercing shots do 19 damage every
+    5 ticks, lasers 13 every 7 powered ticks, walls have 2500 health, and ranges
+    are 20 / 22 tiles. Range research also invalidates cached misses when looking
+    for nests, so existing turrets immediately find newly reachable nests.
+  - **UI**: a blue laser head and short cyan beam, a Defense card and icon, a power
+    panel with damage, kills, upgraded range and firing rate, and placement rings
+    matching research. Research has a third pack tier. Stats shows kills per minute
+    and a graph over its selected window, including both units and nests; magazines
+    used for shooting or pack production and packs used by labs remain item stats.
+  - The example factory now makes all three packs, splitting bricks and piercing
+    magazines between science and storage. Six coal generators power it, including
+    its laser turret. Its full production and save/load tests pass.
+  - **Save format 15** saves laser energy, cooldown, aim, beam and combat counters,
+    and kill history. Older games keep all their research and start counting kills
+    from here. Derived research bonuses are rebuilt on load.
+  - Automated checks cover the entire tree in one game, pack crafting and transfer,
+    standby drain, brownouts, armour, peaceful mode, unit and nest range upgrades,
+    kill counts, combat saves and malformed laser saves. A four-laser line on its
+    own generators holds a mixed attack at evolution 0.5; upgraded lasers and
+    walls hold an evolution 0.9 wave that destroys buildings defended by unupgraded
+    guns. Full suite: 260 tests. Production build, CPU-side render geometry and UI
+    markup checks pass. The big factory benchmark averages ~0.45 ms/tick here
+    (9,408 buildings and 14,752 belt items); this is not a phone rendering measure.
+    Browser appearance and touch checks below remain manual.
 - [ ] A laser turret line on its own generators holds off attacks at mid evolution, and brownouts show up as slower shooting.
 - [ ] The whole tree can be researched in order in one game, and nothing locked is left without a way to unlock it.
 - [ ] At high evolution, a base close to a big factory is dangerous with gun turrets alone and fine with upgrades and lasers.

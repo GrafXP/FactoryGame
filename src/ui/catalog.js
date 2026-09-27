@@ -5,12 +5,13 @@ export const CATEGORIES = [
   { id: "base", name: "Base", buildings: ["hub", "chest", "lab", "radar"] },
   { id: "logistics", name: "Logistics", buildings: ["belt", "underground", "splitter", "sorter", "inserter", "long-inserter", "sorting-inserter"] },
   { id: "production", name: "Production", buildings: ["miner", "furnace", "assembler"] },
-  { id: "defense", name: "Defense", buildings: ["turret", "wall"] },
+  { id: "defense", name: "Defense", buildings: ["turret", "laser-turret", "wall"] },
   { id: "power", name: "Power", buildings: ["generator", "pole"] },
 ];
 
 export const ABOUT = {
   turret: "Shoots enemies, and nests, within 18 tiles. Feed it magazines by belt, inserter or hand. Needs no power.",
+  "laser-turret": "Shoots armour-piercing beams within 20 tiles. Uses 900 kW in combat, 6 kW on standby. Brownouts slow its shooting.",
   wall: "Protects the factory with stone bricks. Drag to build a connected line.",
   hub: "Where you deliver items to reach milestones, which unlock new buildings. You can only have one.",
   belt: "Carries items the way it points. Drag to lay a line.",

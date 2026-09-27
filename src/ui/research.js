@@ -15,6 +15,9 @@ const BONUS = {
   damage: (n) => `Gun turrets do ${n}% more damage`,
   rate: (n) => `Gun turrets shoot ${n}% faster`,
   walls: (n) => `Walls get ${n}% more health`,
+  laserDamage: (n) => `Lasers do ${n}% more damage`,
+  laserRate: (n) => `Lasers shoot ${n}% faster`,
+  range: (n) => `Every turret gains ${n} tiles of range`,
 };
 
 // What technology `id` does, as a list of lines.
@@ -35,7 +38,7 @@ function costOf(id) {
   return `<span class="tech-cost" title="${t.units} units, each taking one of each pack and ${+(t.time / TICK_RATE).toFixed(1)} s in a lab">${t.units} × ${packs} · ${+(t.time / TICK_RATE).toFixed(1)} s each</span>`;
 }
 
-const TIERS = ["", "Red packs", "Red and green packs"];
+const TIERS = ["", "Red packs", "Red and green packs", "Red, green and military packs"];
 
 export function createResearchPanel(el, { close, toast }) {
   let shownKey = "";
@@ -80,7 +83,7 @@ export function createResearchPanel(el, { close, toast }) {
       : "";
     const left = Object.keys(TECHS).filter((id) => !r.done.has(id) && id !== r.current && !r.queue.includes(id));
     const verb = r.current ? "Queue" : "Research";
-    const tiers = [1, 2]
+    const tiers = [1, 2, 3]
       .map((tier) => {
         const ids = left.filter((id) => tierOf(id) === tier);
         if (!ids.length) return "";

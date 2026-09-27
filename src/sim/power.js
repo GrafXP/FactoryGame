@@ -15,8 +15,9 @@
 // gets the same share of what it asked for. A machine spends its draw for each tick
 // it works (usePower) and waits when its store is short, so with 60% of the power
 // the network needs, every machine on it works 60% of the time. Idle machines have
-// full stores and ask for nothing, so they cost nothing, and the generators burn
-// only what was handed out.
+// full stores and ask for nothing, so they cost nothing, except lasers, whose
+// small standby drain is replenished the same way. Generators burn only what was
+// handed out. Lasers also recharge their firing cooldown only on powered ticks.
 import { BUILDINGS, footprint } from "./buildings.js";
 import { entityAt } from "./grid.js";
 import { generatorAvailable, burnGenerator } from "./generator.js";
@@ -229,17 +230,17 @@ export function stepPower(world) {
 // hasn't, its status says "no-power" if its network made nothing for it (or it's
 // near no pole); with only some power it's still "working", just slower. Either
 // way `starved` notes the tick, for its activity (stats.js).
-export function hasPower(world, e) {
-  if (e.energy >= drawOf(e)) return true;
+export function hasPower(world, e, draw = drawOf(e)) {
+  if (e.energy >= draw) return true;
   e.starved = world.tick;
   e.status = (powerNetwork(world).netOf.get(e)?.supplied || 0) > 0 ? "working" : "no-power";
   return false;
 }
 
 // Spends a tick's work of energy, if machine e has it (see hasPower).
-export function usePower(world, e) {
-  if (!hasPower(world, e)) return false;
-  e.energy -= drawOf(e);
+export function usePower(world, e, draw = drawOf(e)) {
+  if (!hasPower(world, e, draw)) return false;
+  e.energy -= draw;
   return true;
 }
 

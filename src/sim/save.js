@@ -36,7 +36,7 @@ import { TECHS, PACKS, upgradesOf } from "./tech.js";
 import { maxHealth, REPAIR_AFTER } from "./health.js";
 
 export const SAVE_FORMAT = "factory-save";
-export const SAVE_VERSION = 14;
+export const SAVE_VERSION = 15;
 
 // What a save from before power gets, so its stopped machines can be started
 // again: the parts for a coal generator and ten poles, and coal to burn.
@@ -137,6 +137,9 @@ export const MIGRATIONS = {
   // 14 added science packs, labs and research. A version 13 save has researched
   // nothing. (Sorting inserters now need research; ones already built stay.)
   13: (data) => ({ ...data, research: { done: [], current: null, progress: {}, queue: [] } }),
+  // 15 adds military research, lasers and kill statistics. Older games retain
+  // their research and begin counting kills from here.
+  14: (data) => data,
 };
 
 // A save that can't be loaded. The message is written for the player.
@@ -217,6 +220,7 @@ const counted = (items) => Object.fromEntries(Object.entries(items).filter(([, n
 
 // What's saved of a turret besides its magazines.
 const TURRET_KEYS = ["loaded", "shots", "cool", "target", "nest", "aim", "fired", "kills", "damage", "warned", "status"];
+const LASER_KEYS = ["cool", "target", "nest", "aim", "fired", "kills", "damage", "status", "beam", "beamAim"];
 
 function saveEntity(e) {
   const out = { id: e.id, type: e.type, x: e.x, y: e.y, rot: e.rot };
@@ -243,6 +247,7 @@ function saveEntity(e) {
     out.ammo = e.ammo && { ...e.ammo };
   }
   if (e.type === "radar") Object.assign(out, { next: e.next, progress: e.progress, status: e.status });
+  if (e.type === "laser-turret") for (const key of LASER_KEYS) out[key] = e[key];
   if (e.type === "lab") Object.assign(out, { packs: { ...e.packs }, unit: e.unit, progress: e.progress, status: e.status });
   if (usesPower(e.type)) out.energy = e.energy;
   return out;
@@ -358,6 +363,13 @@ function load(data) {
       check(["working", "idle", "no-ammo"].includes(s.status), `${where}: bad turret status`);
       for (const key of TURRET_KEYS) e[key] = s[key];
       e.ammo = s.ammo && { ...s.ammo };
+    }
+    if (s.type === "laser-turret") {
+      check(["cool", "target", "nest", "kills", "damage"].every(k => Number.isSafeInteger(s[k]) && s[k] >= 0) && s.cool <= BUILDINGS[s.type].rate, `${where}: bad laser turret`);
+      check(Number.isFinite(s.aim) && Number.isSafeInteger(s.fired) && s.fired >= -1 && s.fired <= tick, `${where}: bad laser timing`);
+      check(Number.isFinite(s.beamAim) && Number.isFinite(s.beam) && s.beam >= 0 && s.beam <= BUILDINGS[s.type].range + world.upgrades.bonus.range + NEST, `${where}: bad laser beam`);
+      check(["working", "idle", "no-power"].includes(s.status), `${where}: bad laser status`);
+      for (const key of LASER_KEYS) e[key] = s[key];
     }
     if (s.type === "lab") {
       const packs = checkItems(s.packs, where);

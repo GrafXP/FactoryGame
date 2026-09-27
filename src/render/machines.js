@@ -33,6 +33,8 @@ export function createMachineParts(parent) {
     gun: { geometry: new THREE.BoxGeometry(0.75, 0.4, 0.75).translate(0, 0.98, 0), color: "minerTop" },
     barrel: { geometry: new THREE.BoxGeometry(0.15, 0.15, 1.15).translate(0, 1.05, -0.7), color: "generatorBase" },
     flash: { geometry: new THREE.SphereGeometry(0.18, 6, 4).translate(0, 1.05, -1.35), color: null },
+    laser: { geometry: new THREE.BoxGeometry(0.42, 0.35, 0.85).translate(0, 1.15, -0.15), color: "sorter" },
+    beam: { geometry: new THREE.BoxGeometry(0.055, 0.055, 1).translate(0, 0, -0.5), color: null, glow: 0x5ce8ff },
     arm: { geometry: armGeometry(), color: "inserterArm" },
     longArm: { geometry: armGeometry(), color: "longInserterArm" },
     sortArm: { geometry: armGeometry(), color: "sortingInserterArm" },
@@ -57,7 +59,7 @@ export function createMachineParts(parent) {
   for (const k of Object.values(kinds)) {
     k.material = k.color
       ? new THREE.MeshStandardMaterial({ roughness: 0.7, side: k.side ?? THREE.FrontSide })
-      : new THREE.MeshBasicMaterial({ color: 0xff8a1f }); // unlit, so it glows
+      : new THREE.MeshBasicMaterial({ color: k.glow ?? 0xff8a1f }); // unlit, so it glows
     k.mesh = null;
   }
 
@@ -100,6 +102,8 @@ export function createMachineParts(parent) {
       let radars = 0;
       let labs = 0;
       const turrets = list.filter(e => e.type === "turret");
+      const lasers = list.filter(e => e.type === "laser-turret");
+      for (const k of [kinds.laser, kinds.beam]) ensure(k, lasers.length);
       for (const k of [kinds.gun, kinds.barrel, kinds.flash]) ensure(k, turrets.length);
       for (const e of list) {
         if (isInserter(e)) arms[ARMS[e.type]]++;
@@ -128,6 +132,8 @@ export function createMachineParts(parent) {
       let rg = 0;
       let guns = 0;
       let flashes = 0;
+      let laserHeads = 0;
+      let beams = 0;
       const net = powerNetwork(world);
       for (const e of list) {
         if (e.type === "turret") {
@@ -136,6 +142,13 @@ export function createMachineParts(parent) {
           kinds.gun.mesh.setMatrixAt(guns, m);
           kinds.barrel.mesh.setMatrixAt(guns++, m);
           if (e.fired >= 0 && world.tick - e.fired < 4) kinds.flash.mesh.setMatrixAt(flashes++, m);
+        } else if (e.type === "laser-turret") {
+          q.setFromAxisAngle(up, -e.aim);
+          kinds.laser.mesh.setMatrixAt(laserHeads++, m.compose(pos.set(e.x + 1, 0, e.y + 1), q, one));
+          if (e.fired >= 0 && world.tick - e.fired < 4) {
+            q.setFromAxisAngle(up, -e.beamAim);
+            kinds.beam.mesh.setMatrixAt(beams++, m.compose(pos.set(e.x + 1, 1.15, e.y + 1), q, scale.set(1, 1, e.beam)));
+          }
         } else if (isInserter(e)) {
           // Round through the inserter's right-hand side, from pickup to drop. A
           // long inserter's arm stretches as it goes, to reach two tiles out.
@@ -204,6 +217,8 @@ export function createMachineParts(parent) {
         [kinds.gun, guns],
         [kinds.barrel, guns],
         [kinds.flash, flashes],
+        [kinds.laser, laserHeads],
+        [kinds.beam, beams],
         [kinds.arm, arms.arm],
         [kinds.longArm, arms.longArm],
         [kinds.sortArm, arms.sortArm],

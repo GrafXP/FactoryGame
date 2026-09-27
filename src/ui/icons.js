@@ -72,6 +72,7 @@ export const itemIcon = (id) =>
 
 // Line icons for buildings and buttons, drawn in the current text colour.
 const PATHS = {
+  "laser-turret": "M3 21h18M6 21v-6h12v6M9 15V9h6v6M12 9V2M7 4l2 2M17 4l-2 2M5 10h2M17 10h2",
   turret: "M3 21h18M5 21v-7h14v7M8 14V9h8v5M12 9V2M10 2h4",
   wall: "M3 20V6h5v4h3V6h4v4h3V6h3v14zM3 15h18M8 15v5M15 15v5",
   belt: "M3 7h18v10H3zM8 12h7M12 9l3 3-3 3",

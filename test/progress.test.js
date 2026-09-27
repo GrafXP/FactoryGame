@@ -164,7 +164,7 @@ test("a save from before milestones gets every building and only the goal left",
   const loaded = deserialize(structuredClone(v4));
   assert.equal(currentMilestone(loaded), MILESTONES.at(-1));
   // Everything but the lab, which comes with the goal, and what research unlocks.
-  for (const type in BUILDINGS) assert.equal(buildingUnlocked(loaded, type), !["lab", "sorting-inserter"].includes(type), type);
+  for (const type in BUILDINGS) assert.equal(buildingUnlocked(loaded, type), !["lab", "sorting-inserter", "laser-turret"].includes(type), type);
   assert.equal(buildingMilestone("hub"), -1);
 });
 

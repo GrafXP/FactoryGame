@@ -22,6 +22,7 @@
 // (a generator at full power), into their chunk (see pollution.js).
 export const BUILDINGS = {
   turret: { name: "Gun turret", w: 2, h: 2, cost: { "iron-plate": 20, "iron-gear": 10, "copper-plate": 10 }, range: 18, rate: 12, stack: 10, feed: 5, health: 400 },
+  "laser-turret": { name: "Laser turret", w: 2, h: 2, cost: { "iron-plate": 30, "copper-plate": 20, "electronic-circuit": 20 }, range: 20, rate: 12, damage: 7, draw: 15000, drain: 100, health: 400 },
   wall: { name: "Wall", w: 1, h: 1, cost: { "stone-brick": 5 }, health: 1000 },
   belt: { name: "Belt", w: 1, h: 1, cost: { "iron-plate": 1 }, health: 60 },
   // Each end of an underground belt is built on its own: the exit goes up to

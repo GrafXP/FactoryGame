@@ -88,9 +88,10 @@ test("queueing a building's missing parts crafts just those", () => {
   assert.equal(affordable(world.inventory, BUILDINGS.miner.cost), 1);
 });
 
-test("machinery can be hand-crafted from the kit; walls need smelted bricks", () => {
+test("early machinery can be hand-crafted from the kit; walls need bricks and lasers more copper", () => {
   for (const type in BUILDINGS) {
-    assert.deepEqual(planItems(createInventory(START_KIT), BUILDINGS[type].cost).missing, type === "wall" ? { "stone-brick": 5 } : null, type);
+    const short = type === "wall" ? { "stone-brick": 5 } : type === "laser-turret" ? { "copper-plate": 29 } : null;
+    assert.deepEqual(planItems(createInventory(START_KIT), BUILDINGS[type].cost).missing, short, type);
   }
 });
 

@@ -4,7 +4,7 @@
 // `units` of research it takes, the science packs each unit uses (`packs`, one of
 // each), how many ticks a lab works on a unit (`time`), and what it does: it
 // unlocks buildings and recipes, as a milestone does (progress.js), or changes
-// numbers (`bonus`, percentages that add up across technologies). Its tier is how
+// numbers (`bonus`, additive percentages, except range in tiles). Its tier is how
 // many kinds of pack it takes.
 //
 // world.research is { done, current, progress, queue }: the technologies done (a
@@ -20,10 +20,11 @@ import { BUILDINGS } from "./buildings.js";
 import { AMMO } from "./turret.js";
 
 // The science packs, in the order labs and panels list them.
-export const PACKS = ["red-pack", "green-pack"];
+export const PACKS = ["red-pack", "green-pack", "military-pack"];
 
 const RED = ["red-pack"];
 const RED_GREEN = ["red-pack", "green-pack"];
+const MILITARY = [...RED_GREEN, "military-pack"];
 
 export const TECHS = {
   "green-science": { name: "Green science", needs: [], packs: RED, units: 10, time: 300, unlocks: { recipes: ["green-pack"] } },
@@ -33,6 +34,18 @@ export const TECHS = {
   "weapon-damage-2": { name: "Weapon damage 2", needs: ["weapon-damage-1", "green-science"], packs: RED_GREEN, units: 40, time: 900, bonus: { damage: 30 } },
   "shooting-speed-2": { name: "Shooting speed 2", needs: ["shooting-speed-1", "green-science"], packs: RED_GREEN, units: 40, time: 900, bonus: { rate: 30 } },
   "logistics-2": { name: "Logistics 2", needs: ["green-science"], packs: RED_GREEN, units: 40, time: 900, unlocks: { buildings: ["sorting-inserter"] } },
+  "military-science": { name: "Military science", needs: ["green-science"], packs: RED_GREEN, units: 30, time: 600, unlocks: { recipes: ["military-pack"] } },
+  "laser-turrets": { name: "Laser turrets", needs: ["military-science"], packs: MILITARY, units: 50, time: 900, unlocks: { buildings: ["laser-turret"] } },
+  "weapon-damage-3": { name: "Weapon damage 3", needs: ["weapon-damage-2", "military-science"], packs: MILITARY, units: 60, time: 900, bonus: { damage: 40 } },
+  "weapon-damage-4": { name: "Weapon damage 4", needs: ["weapon-damage-3"], packs: MILITARY, units: 100, time: 1200, bonus: { damage: 50 } },
+  "shooting-speed-3": { name: "Shooting speed 3", needs: ["shooting-speed-2", "military-science"], packs: MILITARY, units: 60, time: 900, bonus: { rate: 40 } },
+  "shooting-speed-4": { name: "Shooting speed 4", needs: ["shooting-speed-3"], packs: MILITARY, units: 100, time: 1200, bonus: { rate: 50 } },
+  "laser-damage-1": { name: "Laser damage 1", needs: ["laser-turrets"], packs: MILITARY, units: 50, time: 900, bonus: { laserDamage: 30 } },
+  "laser-damage-2": { name: "Laser damage 2", needs: ["laser-damage-1"], packs: MILITARY, units: 100, time: 1200, bonus: { laserDamage: 50 } },
+  "laser-speed-1": { name: "Laser shooting speed 1", needs: ["laser-turrets"], packs: MILITARY, units: 50, time: 900, bonus: { laserRate: 30 } },
+  "laser-speed-2": { name: "Laser shooting speed 2", needs: ["laser-speed-1"], packs: MILITARY, units: 100, time: 1200, bonus: { laserRate: 50 } },
+  "stronger-walls-2": { name: "Stronger walls 2", needs: ["stronger-walls", "military-science"], packs: MILITARY, units: 60, time: 900, bonus: { walls: 100 } },
+  "turret-range": { name: "Turret range", needs: ["laser-turrets"], packs: MILITARY, units: 100, time: 1200, bonus: { range: 2 } },
 };
 for (const t of Object.values(TECHS)) {
   t.unlocks = { buildings: [], recipes: [], ...t.unlocks };
@@ -105,13 +118,15 @@ export function finishUnit(world) {
 // The numbers the bonuses of technologies `done` make (see world.upgrades), with
 // `bonus`, the percentages they add up to.
 export function upgradesOf(done) {
-  const bonus = { damage: 0, rate: 0, walls: 0 };
+  const bonus = { damage: 0, rate: 0, walls: 0, laserDamage: 0, laserRate: 0, range: 0 };
   for (const id of done) for (const [k, n] of Object.entries(TECHS[id].bonus)) bonus[k] += n;
   const more = (n, pct) => Math.round((n * (100 + pct)) / 100);
   return {
     bonus,
     damage: Object.fromEntries(Object.entries(AMMO).map(([id, a]) => [id, more(a.damage, bonus.damage)])),
     rate: Math.max(1, Math.round((BUILDINGS.turret.rate * 100) / (100 + bonus.rate))),
+    laserDamage: more(BUILDINGS["laser-turret"].damage, bonus.laserDamage),
+    laserRate: Math.max(1, Math.round((BUILDINGS["laser-turret"].rate * 100) / (100 + bonus.laserRate))),
     health: { wall: more(BUILDINGS.wall.health, bonus.walls) },
   };
 }

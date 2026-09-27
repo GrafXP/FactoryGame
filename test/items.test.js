@@ -44,11 +44,11 @@ test("describe lists items in words", () => {
   assert.equal(describe({ "iron-plate": 2, "copper-plate": 1 }), "2 iron plates, 1 copper plate");
 });
 
-test("the starter kit builds machinery, while walls require smelted bricks and a lab more circuits", () => {
+test("the starter kit builds early machinery; walls, labs and lasers need more supplies", () => {
   const world = createWorld({ milestones: ALL, seed: 1 });
   assert.deepEqual(world.inventory.items, START_KIT);
   for (const type in BUILDINGS) {
-    assert.equal(affordable(world.inventory, BUILDINGS[type].cost) >= 1, type !== "wall" && type !== "lab", type);
+    assert.equal(affordable(world.inventory, BUILDINGS[type].cost) >= 1, !["wall", "lab", "laser-turret"].includes(type), type);
   }
 });
 

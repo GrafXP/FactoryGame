@@ -6,7 +6,7 @@ import { ORE_ITEM, START_KIT, describe } from "./items.js";
 import { createInventory, add, give, missing, take, move, moveAll, total } from "./inventory.js";
 import { inMap, entityAt } from "./grid.js";
 import { chunkOf, tileIndex, setIdAt, chartArea, NEST_ID } from "./chunks.js";
-import { turretState, stepTurret } from "./turret.js";
+import { turretState, laserState, isTurret, stepTurret } from "./turret.js";
 import { radarState, stepRadar } from "./radar.js";
 import { stepBelts, takesItems, canTake, put, splitterState, ANY_FILTERS } from "./transport.js";
 import { undergroundState, undergroundWhy, pairUp, unpair, buried } from "./underground.js";
@@ -84,7 +84,7 @@ export function step(world) {
     else if (isInserter(e)) stepInserter(world, e, m.from, m.to);
     else if (e.type === "lab") stepLab(world, e);
     else if (e.type === "radar") stepRadar(world, e);
-    else if (e.type === "turret") stepTurret(world, e);
+    else if (isTurret(e)) stepTurret(world, e);
     if (m.tracked) {
       tally(world, e);
       if (m.emits && e.status === "working" && e.starved !== world.tick) {
@@ -114,7 +114,7 @@ export function step(world) {
 // gives off for each tick it works, into `chunk` (pollution.js). Worked out
 // from the layout and cached until it changes (world.version), like the belt
 // network; it isn't saved.
-const STEPPED = new Set(["miner", "furnace", "assembler", ...INSERTERS, "lab", "radar", "turret"]);
+const STEPPED = new Set(["miner", "furnace", "assembler", ...INSERTERS, "lab", "radar", "turret", "laser-turret"]);
 function machines(world) {
   if (world.machines?.version === world.version) return world.machines.list;
   const list = [];
@@ -275,6 +275,7 @@ function takeDown(world, entity) {
   if (entity.type === "assembler") Object.assign(entity, assemblerState());
   if (entity.type === "generator") entity.fuel = null;
   if (entity.type === "turret") Object.assign(entity, turretState());
+  if (entity.type === "laser-turret") Object.assign(entity, laserState());
   if (entity.type === "lab") Object.assign(entity, labState());
   if (entity.hand) entity.hand = null;
   return under;
@@ -352,6 +353,7 @@ function stateOf(type, opts) {
   if (type === "lab") return labState();
   if (type === "radar") return radarState();
   if (type === "turret") return turretState();
+  if (type === "laser-turret") return laserState();
   return {};
 }
 
